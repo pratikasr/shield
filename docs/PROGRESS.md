@@ -2,6 +2,15 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 5 Oct 2026, M1 Scaffold and M2 Contracts
+
+- M1 done (`28869ba`): Foundry project on 1.8.4 with `network = "monad"`, pinned submodules, pnpm workspace (keeper, web, indexer), ABI export script, CI. CI green on main.
+- M2 done: PositionRegistry (page-aligned packed records), Repricer (per-block premium, one-page Pyth volatility window), Executor (vault funding, flash-loan fallback with bounded swap, HF post-check), ShieldVault (ERC-4626, NAV includes seized aTokens), UniswapV3Swapper. 97 tests pass: unit (premium math and k calibration, packing, accrual, volatility window, vault), fork tests against real Aave V3 on a Monad mainnet fork (every exit path and refusal), a fuzzed HF check, an accounting invariant (5,120 calls) and an exit HF invariant on the fork. Gas snapshot in `contracts/.gas-snapshot` and `contracts/snapshots/`.
+- Found while testing: WETH's LTV (80.5%) is below its liquidation threshold (84%), so borrowing alone stops at HF 1.0435. A 1.04 trigger is reached by a price move; triggers above 1.0435 can be reached by a real extra borrow (`test_exit_afterExtraBorrow_noPriceChange`).
+- Found while testing: a fully flash-funded exit cannot budget 3% slippage inside a 1% discount, so the swap input is capped at the seized amount and the oracle bound still applies.
+- Next: M3 keeper (code written, tests next), then Slither and Aderyn.
+- Blocked: as before (testnet MON, Hermes key, Envio token and bounty text, repo visibility).
+
 ## 5 Oct 2026, M0 Verify
 
 - Done: every VERIFY box in docs/SPEC.md is ticked with its result; Pyth mainnet address, Aave Monad flash-loan premium (5 bp), Monad EVM target (Prague shape, Foundry 1.8 `network = "monad"`), MIP-8 page size and costs, block time and block tags are recorded under Verified facts in docs/TECH-DECISIONS.md.

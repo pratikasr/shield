@@ -40,6 +40,21 @@ flowchart TB
 
 Premium per block: `p = k * sigma * V / max(d, d_min) * dt`, where V is the debt covered, sigma is realised collateral volatility from Pyth over the last N blocks, d is the distance between current HF and the trigger, d_min bounds the premium, and dt is one block. The borrower prepays a balance; when it runs out, cover lapses and the UI shows "unprotected".
 
+### Pricing parameters
+
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| `k` (WETH) | 0.00125 | Calibrated so a position at distance d = 0.05 with 80% annualised volatility pays 2% of covered debt a year: 0.02 = k x 0.80 / 0.05 |
+| `k` (cbBTC) | 0.00125 | Same calibration. The formula already carries each asset's own volatility, so the same target gives the same k |
+| `d_min` | 0.01 | Floor on the HF distance; caps the premium at 5x the d = 0.05 rate |
+| `N` | 200 | Pyth observations in the realised-volatility window |
+| sigma fallback | 80% | Used until a feed has 10 observations; realised sigma is clamped to [10%, 500%] |
+| Default trigger | 1.04 | Borrower's choice, between 1.01 and 2.00 |
+| Exit discount | 1% | Borrower's max discount must be at least this (default 1%, at most 5%) |
+| Exit target | trigger + 0.06 | The exit repays enough debt to bring HF back to this |
+
+The calibration is a Foundry test: `test_calibration_kGivesTwoPercentAtD5Sigma80` in [contracts/test/unit/PremiumMath.t.sol](contracts/test/unit/PremiumMath.t.sol).
+
 Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECISIONS.md](docs/TECH-DECISIONS.md).
 
 ## Contracts
@@ -80,7 +95,7 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 | --- | --- |
 | M0 Verify external facts | done |
 | M1 Scaffold contracts, keeper, web, indexer | done |
-| M2 Contracts and Foundry tests | not started |
+| M2 Contracts and Foundry tests | done |
 | M3 Keeper | not started |
 | M4 Web | not started |
 | M5 Envio indexer | not started |
@@ -105,7 +120,7 @@ Filled during M6. Every item opens on [monadvision.com](https://monadvision.com)
 | Opt-in tx | pending M6 |
 | Three consecutive repricing txs | pending M6 |
 | Exit tx (`Exited` event) | pending M6 |
-| Executor gas (forge snapshot) | pending M2 |
+| Executor gas (forge snapshot, Monad execution, cold state) | `exit` funded by the vault: 1,109,278; `exit` through the flash-loan fallback: 1,714,904; `reprice` (one borrower): 618,956; `repriceMany` (three borrowers): 827,870. Source: [contracts/snapshots/](contracts/snapshots/) and [contracts/.gas-snapshot](contracts/.gas-snapshot) |
 | Envio indexer endpoint | pending M5 |
 | Demo video | pending M6 |
 

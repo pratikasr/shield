@@ -85,12 +85,12 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
 
     /// @notice Withdrawals are capped by idle USDC.
     function maxWithdraw(address owner) public view override returns (uint256) {
-        return Math.min(super.maxWithdraw(owner), availableLiquidity());
+        return Math.min(previewRedeem(balanceOf(owner)), availableLiquidity());
     }
 
     /// @notice Redemptions are capped by idle USDC.
     function maxRedeem(address owner) public view override returns (uint256) {
-        return Math.min(super.maxRedeem(owner), _convertToShares(availableLiquidity(), Math.Rounding.Floor));
+        return Math.min(balanceOf(owner), _convertToShares(availableLiquidity(), Math.Rounding.Floor));
     }
 
     function _decimalsOffset() internal pure override returns (uint8) {

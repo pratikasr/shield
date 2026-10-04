@@ -64,6 +64,24 @@ contract ExitForkTest is ForkBase {
         _assertExitedEvent(vm.getRecordedLogs(), repaid, seized, hfBefore, hfAfter);
     }
 
+    function test_exit_raisesNavByTheDiscount_andUnwinds() public {
+        _dropPriceToHf(borrower, 10_380);
+        _nextBlock();
+        uint256 navBefore = d.vault.totalAssets();
+        (uint256 repaid, uint256 seized) = d.executor.exit(borrower, _none());
+        uint256 gain = d.vault.totalAssets() - navBefore;
+        assertApproxEqRel(gain, repaid / 100, 0.01e18, "NAV rises by about 1% of the repaid debt");
+
+        // Unwind half the seized collateral through Uniswap V3, bounded by oracle value less 3%.
+        uint256 usdcBefore = usdc.balanceOf(address(d.vault));
+        vm.prank(keeper);
+        uint256 out = d.vault.unwind(M.WETH, seized / 2, 0);
+        vm.snapshotGasLastCall("vault_unwind");
+        assertEq(usdc.balanceOf(address(d.vault)) - usdcBefore, out);
+        uint256 fair = (seized / 2) * oracle.getAssetPrice(M.WETH) / 1e18 * 1e6 / oracle.getAssetPrice(M.USDC);
+        assertGe(out, fair * 97 / 100);
+    }
+
     function test_exit_isPermissionless() public {
         _dropPriceToHf(borrower, 10_390);
         _nextBlock();
