@@ -1,0 +1,8 @@
+type Position {
+  id: ID!
+  borrower: String!
+  collateral: String!
+  trigger: Int!
+  maxDiscountBps: Int!
+  optedInAt: BigInt!
+}

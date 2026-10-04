@@ -1,0 +1,13 @@
+packages:
+  - keeper
+  - web
+  - indexer
+allowBuilds:
+  bufferutil: false
+  esbuild: true
+  keccak: false
+  sharp: true
+  unrs-resolver: true
+  utf-8-validate: false
+minimumReleaseAgeExclude:
+  - viem@2.57.3

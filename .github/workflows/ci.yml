@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.4
+      - name: forge fmt
+        run: forge fmt --check
+      - name: forge build
+        run: forge build --sizes
+      - name: forge test
+        env:
+          # Fork tests read MONAD_RPC_URL and skip themselves when it is empty.
+          MONAD_RPC_URL: ${{ secrets.MONAD_RPC_URL }}
+        run: forge test -vvv
+
+  typescript:
+    name: keeper, web, indexer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+      - name: pnpm lint
+        run: pnpm lint
+      - name: pnpm test
+        run: pnpm test
+      - name: pnpm build
+        run: pnpm build

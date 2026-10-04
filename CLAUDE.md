@@ -28,11 +28,14 @@ You are building Shield, an opt-in early exit for Aave V3 borrowers on Monad, fo
 - Node 22 and `pnpm` (workspace at repo root for `keeper`, `web`, `indexer`).
 - Envio CLI (`pnpx envio`).
 
-Commands once scaffolds exist (M1 creates them and updates this section):
+Foundry must be 1.8 or later (`foundryup`); earlier releases have no Monad execution (ADR-019). Commands:
 
 ```
-cd contracts && forge build && forge test
+git submodule update --init                # contracts/lib dependencies
+cd contracts && forge build && forge test  # MONAD_RPC_URL set enables the fork tests
 pnpm install && pnpm -r build
+pnpm lint && pnpm test
+bash scripts/export-abi.sh                 # after any contract ABI change
 pnpm --filter keeper dev
 pnpm --filter web dev
 ```

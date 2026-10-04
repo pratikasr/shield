@@ -1,0 +1,13 @@
+[
+  {
+    "type": "event",
+    "name": "OptedIn",
+    "anonymous": false,
+    "inputs": [
+      { "name": "borrower", "type": "address", "indexed": true },
+      { "name": "collateral", "type": "address", "indexed": true },
+      { "name": "trigger", "type": "uint32", "indexed": false },
+      { "name": "maxDiscountBps", "type": "uint16", "indexed": false }
+    ]
+  }
+]

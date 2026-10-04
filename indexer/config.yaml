@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+# Shield indexer on Monad mainnet (chain 143). M1 scaffold: M5 adds every Shield event.
+name: shield-indexer
+description: Shield positions, repricing, exits and vault flows on Monad
+contracts:
+  - name: PositionRegistry
+    abi_file_path: ./abis/PositionRegistry.json
+    events:
+      - event: OptedIn
+chains:
+  - id: 143
+    start_block: 0
+    contracts:
+      - name: PositionRegistry
+        address: "${ENVIO_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000001}"

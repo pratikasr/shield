@@ -79,7 +79,7 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 | Milestone | State |
 | --- | --- |
 | M0 Verify external facts | done |
-| M1 Scaffold contracts, keeper, web, indexer | not started |
+| M1 Scaffold contracts, keeper, web, indexer | done |
 | M2 Contracts and Foundry tests | not started |
 | M3 Keeper | not started |
 | M4 Web | not started |
@@ -111,7 +111,21 @@ Filled during M6. Every item opens on [monadvision.com](https://monadvision.com)
 
 ## Quick start
 
-Scaffolds land in M1. Until then see [CLAUDE.md](CLAUDE.md) for the toolchain and the milestone plan.
+Requirements: git, [Foundry](https://getfoundry.sh) 1.8 or later (Monad execution), Node 22 or later, pnpm 11.
+
+```bash
+git clone --recurse-submodules https://github.com/pratikasr/shield.git
+cd shield
+
+# contracts
+cd contracts && forge build && forge test && cd ..
+
+# keeper, web, indexer
+pnpm install
+pnpm -r build
+```
+
+If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
 
 ## Bounties
 

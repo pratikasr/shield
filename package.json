@@ -1,0 +1,16 @@
+{
+  "name": "shield",
+  "private": true,
+  "description": "Opt-in early exit for Aave V3 borrowers on Monad",
+  "license": "MIT",
+  "packageManager": "pnpm@11.3.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "abi": "bash scripts/export-abi.sh",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build"
+  }
+}

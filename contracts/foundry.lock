@@ -1,0 +1,26 @@
+{
+  "lib/aave-v3-origin": {
+    "tag": {
+      "name": "v3.7.0",
+      "rev": "cff15de6d1271b0c800fc001f4aea4c263e8a597"
+    }
+  },
+  "lib/forge-std": {
+    "tag": {
+      "name": "v1.17.0",
+      "rev": "f3dae6e6ee381f25eb6a246f7da9b85c91a68219"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.7.0",
+      "rev": "cab19933c33c2ad1d4c7a84864a3601dddfd16f3"
+    }
+  },
+  "lib/pyth-sdk-solidity": {
+    "tag": {
+      "name": "v2.2.0",
+      "rev": "11d6bcfc2e56885535a9a8e3c8417847cb20be14"
+    }
+  }
+}

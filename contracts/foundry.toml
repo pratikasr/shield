@@ -1,0 +1,46 @@
+# Shield contracts. Foundry 1.8 or later is required for Monad execution (ADR-019).
+
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+solc_version = "0.8.37"
+evm_version = "prague"
+# Monad gas model, opcode pricing and MIP-8 page accounting for tests, scripts and snapshots.
+network = "monad"
+optimizer = true
+optimizer_runs = 10000
+bytecode_hash = "none"
+cbor_metadata = false
+auto_detect_remappings = false
+remappings = [
+  "forge-std/=lib/forge-std/src/",
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "@pythnetwork/pyth-sdk-solidity/=lib/pyth-sdk-solidity/",
+  "aave-v3-origin/=lib/aave-v3-origin/src/",
+]
+fs_permissions = [{ access = "read", path = "./" }, { access = "read-write", path = "./deployments" }]
+
+[profile.default.fuzz]
+runs = 512
+seed = "0x5348494c44"
+
+[profile.default.invariant]
+runs = 128
+depth = 40
+fail_on_revert = false
+
+[profile.ci.fuzz]
+runs = 1024
+
+[rpc_endpoints]
+monad = "${MONAD_RPC_URL}"
+monad_testnet = "${MONAD_TESTNET_RPC_URL}"
+local = "http://127.0.0.1:8545"
+
+[fmt]
+line_length = 110
+number_underscore = "thousands"
+sort_imports = true
