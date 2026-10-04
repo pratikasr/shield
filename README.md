@@ -1,12 +1,12 @@
 # Shield
 
-Opt-in early exit for borrowers on Aave V3 Monad. Set a trigger a little above the liquidation line. When your position reaches it, a vault repays part of your debt and takes collateral at a 1% discount instead of the protocol's 5% liquidation penalty. The price of that protection is recomputed every 300 ms block.
+Opt-in early exit for borrowers on Aave V3 Monad. Set a trigger a little above the liquidation line. When your position reaches it, a vault repays part of your debt and takes collateral at a 1% discount instead of Aave's 5.5% liquidation bonus on WETH. The price of that protection is recomputed every 300 ms block.
 
 Built for Track 01 (Onchain Finance and Trading) of [Monad Metropolis](https://www.monad.xyz/developers/hackathons/metropolis). Submission closes 13 Oct 2026, 11:59pm ET.
 
 ## What it is, what it is not
 
-Borrowers with large or illiquid collateral (MON, LST loops, PT tokens) cannot deleverage by swapping without paying more than 1% in slippage. Today they hold extra buffer, set alerts, or eat the 5% penalty. Shield gives them a priced, opt-in exit at 1%.
+Borrowers with large or illiquid collateral cannot deleverage by swapping without paying more than 1% in slippage. On Aave V3 Monad that is bridged WETH and cbBTC borrowed against stablecoins: on 5 Oct 2026, selling 1 WETH on Uniswap V3 Monad quoted 3.8% under the oracle price. Today these borrowers hold extra buffer, set alerts, or eat Aave's liquidation bonus (5.5% on WETH, 7% on cbBTC). Shield gives them a priced, opt-in exit at 1%.
 
 Shield does not race liquidators. Aave on Monad runs Chainlink SVR via Atlas: the price update that pushes a position under water arrives in the same bundle as the winning liquidator's transaction. Shield triggers above health factor 1.0. That is the only honest design, and it is why the trigger is the borrower's choice.
 
@@ -56,7 +56,7 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 | | Shield | Morpho pre-liquidation | Euler V2 native | DeFi Saver automation |
 | --- | --- | --- | --- | --- |
 | Lender covered | Aave V3 Monad | Morpho Blue only | Euler vaults only | Aave, Morpho, others |
-| On Monad today | Yes | No (Ethereum, Base) | Yes | No |
+| On Monad today | Yes | Yes, Morpho Blue markets only | Yes | No (6 chains, not Monad) |
 | Mechanism | Opt-in early trigger, vault repays, 1% discount | Opt-in preLIF and preLltv, permissionless caller | Reverse Dutch auction from 0% discount | Repay from collateral via swap |
 | Cost to borrower | Premium per block plus 1% on seized collateral | preLIF discount | Rising discount | About 0.08% plus swap slippage |
 | Who funds the exit | Vault LPs, flash-loan fallback | Any liquidator | Any liquidator | Borrower's own collateral |
@@ -78,7 +78,7 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 
 | Milestone | State |
 | --- | --- |
-| M0 Verify external facts | not started |
+| M0 Verify external facts | done |
 | M1 Scaffold contracts, keeper, web, indexer | not started |
 | M2 Contracts and Foundry tests | not started |
 | M3 Keeper | not started |

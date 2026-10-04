@@ -94,6 +94,72 @@ Decision: MIT from the first commit (OSI-approved, required by Metropolis). The 
 
 Execution Events SDK (mentioned as the path to sub-block latency, not used); Chainlink CRE bounty; EIP-7702 delegated accounts; LP governance over holding versus unwinding seized collateral (hackathon build unwinds immediately).
 
+## ADR-015 Demo path: real Aave V3 Monad position only (5 Oct 2026)
+
+Decision: the proof and the video use one real Aave V3 Monad position (WETH collateral, USDC debt). The own-Morpho-market path is not built. Supersedes the "recommended: both" line in SPEC.md, Demo plan.
+
+Why: the human pre-made this choice for the run, and M0 shows the Aave path can be exercised end to end on mainnet: USDC is borrowable and repayable on behalf (no caller restriction in `ValidationLogic.validateRepay` beyond an explicit amount), WETH is collateral outside eMode, flash loans are enabled on USDC and WETH, and Pyth has a live ETH/USD push feed. The HF move that triggers the exit comes from a real borrower action (an extra USDC borrow) or from the market; both are real Monad transactions. Nothing in the demo is mocked.
+
+## ADR-016 Collateral is WETH (and cbBTC); debt asset is the vault asset, USDC (5 Oct 2026)
+
+Decision: the demo collateral is WETH, not MON. The registry supports any Aave reserve that is collateral outside eMode and has a Pyth feed; at launch it lists WETH (Pyth ETH/USD) and cbBTC (Pyth CBBTC/USD). The debt Shield repays must be in the vault asset, USDC. The vault asset is USDC (human decision, pre-made).
+
+Why: Aave V3 Monad has no WMON reserve (`Pool.getReservesList()` on 5 Oct 2026 returns 13 reserves, none of them MON). SPEC.md's "collateral MON" cannot be exercised. WETH on Monad is a bridged asset with thin DEX liquidity (Uniswap V3 WETH/USDC 0.3% pool holds 2.2 WETH; selling 1 WETH quotes 3.8% under the oracle), which is exactly the illiquid-collateral borrower Shield is for. Restricting the debt asset to the vault asset avoids a swap on the repay leg. eMode positions are out of scope: Aave's eMode liquidation bonus on Monad is 1% (categories 3 and 4), so Shield's 1% discount saves nothing there.
+
+## ADR-017 Pyth: on-chain push feeds first, Hermes update optional (5 Oct 2026)
+
+Decision: `reprice` and `exit` take `bytes[] pythUpdate`, which may be empty. When it is non-empty the contract pays `getUpdateFee` from `msg.value` and calls `updatePriceFeeds`; either way it then reads the on-chain price. The keeper attaches a Hermes update only when `PYTH_HERMES_API_KEY` is set. Exit requires the Pyth price to be no older than `exitMaxPriceAge` (default 3,600 s, the push heartbeat).
+
+Why: Hermes has required an API key since 26 Aug 2026 (unauthenticated `GET /v2/updates/price/latest` returns 401). Pyth pushes sponsored feeds on Monad mainnet (ETH/USD and BTC/USD at 0.02% deviation, 1 h heartbeat), so a fresh on-chain price exists whenever the market moves. Pyth's role is premium pricing and an exit sanity bound; Aave's own HF still gates every exit (ADR-006).
+
+## ADR-018 Flash-loan fallback swaps seized collateral through an owner-set swapper (5 Oct 2026)
+
+Decision: supersedes the mechanism in ADR-010. When the vault's idle USDC is below the repay amount, the Executor flash-borrows the gap in USDC with `flashLoanSimple`, repays the borrower's debt, pulls the borrower's aWETH, withdraws enough WETH and swaps it to USDC through an `ISwapper` set by the owner, then repays the flash loan plus the 5 bp premium. The swap is exact-output with `amountInMaximum` bounded by the Aave oracle price and `maxSwapSlippageBps`; if the market cannot meet it, the exit reverts and the LPs lose nothing. Leftover collateral is re-supplied to Aave on behalf of the vault. The launch swapper is Uniswap V3 `SwapRouter02` on Monad.
+
+Why: the flash loan is in USDC but the seized collateral is WETH, so a same-transaction swap is the only way to close the loan. Bounding it against the oracle keeps the LP loss per exit capped at the configured slippage.
+
+## ADR-019 Foundry 1.8 with Monad execution (5 Oct 2026)
+
+Decision: supersedes the EVM target note in ADR-002. Foundry 1.8.4 (official foundryup build), `network = "monad"` in `foundry.toml`, solc `evm_version = "prague"`. Forge tests, `forge snapshot` and Anvil then use Monad's gas model, including MIP-8 page accounting (MonadTen). CI pins Foundry v1.8.4.
+
+Why: Foundry releases before 1.8 do not include Monad execution, so a 1.7 gas snapshot would price storage like Ethereum and the README's gas numbers would be wrong for Monad. Block headers on mainnet carry `requestsHash` (Prague shape); Monad's docs ship `evm_version = "prague"` in the Foundry template.
+
+## ADR-020 Where each kind of test runs (5 Oct 2026)
+
+Decision: Aave V3 is not deployed on Monad testnet, so every Aave-dependent test (Foundry fork tests, keeper end to end, web end to end with Playwright) runs against a local Anvil fork of Monad mainnet. Monad testnet is used for what exists there: keeper RPC behaviour (`monadNewHeads`, `eth_sendRawTransactionSync`), Pyth reads, and an Envio index of a testnet deployment of the registry and repricer events. The fork is for testing only and never appears in the demo or the README proof tables.
+
+Why: the human pre-made this rule for the case M0 found. Monad's protocol registry lists no Aave on testnet and the Aave address book has no Monad testnet market.
+
+## ADR-021 Exit sizing and discount (5 Oct 2026)
+
+Decision: an exit repays enough debt to bring HF back to `trigger + exitHfBuffer` (default buffer 0.06, so 1.04 goes to 1.10). With D the debt and HF the health factor from `getUserAccountData`, LT_c the liquidation threshold of the seized collateral and delta the exit discount, the repay value is `r = D * (H_t - HF) / (H_t - (1 + delta) * LT_c)`, capped by the borrower's USDC debt and by the aToken balance that can be seized. The seized collateral is `(1 + delta) * r` valued at Aave's oracle. delta is the registry's `exitDiscountBps` (default 100); the borrower's `maxDiscountBps` is a ceiling that delta must not exceed, and opt-in rejects a ceiling below the current delta. The trigger must lie in [1.01, 2.00]. After the exit the record closes; unused prepaid premium stays withdrawable. `savedVsAave` is `r * (aaveLiquidationBonus - 1 - delta)` in USDC: the penalty Aave would charge on the same repaid debt, minus Shield's discount.
+
+Why: restoring a target HF is what a borrower who sets a trigger wants, and the closed form is exact for a single-collateral position. HF always improves when `HF / LT_c > 1 + delta` (for WETH, any HF above 0.85), so the after-exit check in the Executor is a guard, not the sizing method. Aave's aToken `transferFrom` checks the borrower's HF stays at or above 1 (`SupplyLogic.executeFinalizeTransfer`), which the repay-first order always satisfies at these sizes.
+
+## ADR-022 Pricing defaults and the calibration of k (5 Oct 2026)
+
+Decision: supersedes the "human decision" note in ADR-009 with the human's pre-made values: `d_min = 0.01`, `N = 200` price samples, trigger default 1.04, max discount default 100 bps. `k` is calibrated so that a position at distance d = 0.05 with 80% annualised realised volatility pays 2% of covered debt per year: `0.02 = k * 0.80 / 0.05`, so `k = 0.00125` for every listed collateral. The calibration lives in a Foundry test and the values are published in the README. Covered debt V is the borrower's total debt value from `getUserAccountData`. Per block, `p = k * sigma * V / max(d, d_min) * (blockTimeMs / 1000) / 31,536,000`, charged for every block since the last reprice.
+
+Why: the formula already scales by each asset's own volatility, so the same target lands on the same k for WETH and cbBTC; k stays per asset so a risk premium can be added later without a redeploy.
+
+## ADR-023 Realised volatility lives in one MIP-8 page per feed (5 Oct 2026)
+
+Decision: the Repricer keeps, per Pyth feed, a ring buffer of the last N = 200 distinct Pyth observations (price and publish time, two observations per slot) plus a header slot, all inside one 128-slot page. A new observation is recorded only when its publish time is newer than the last one. Variance per second is the sum of squared simple returns over the window divided by the window's time span, annualised with 31,536,000 s. Until 10 observations exist the asset's fallback sigma applies (80% for WETH and cbBTC); sigma is clamped to [10%, 500%].
+
+Why: the whole volatility state for an asset costs one cold page access (8,100 gas) and 100 gas per further slot under MIP-8, which is what makes per-block repricing cheap on Monad. Dividing by elapsed time, not by sample count, keeps the estimate right when push updates arrive irregularly.
+
+## ADR-024 Vault holds USDC and seized aTokens; NAV at Aave's oracle (5 Oct 2026)
+
+Decision: `ShieldVault` is an ERC-4626 over USDC with a 6-decimal virtual-share offset. `totalAssets()` is idle USDC plus every seized aToken balance valued at the Aave oracle and converted to USDC. A keeper role calls `unwind(asset, amount, minOut)` to withdraw seized collateral from Aave and swap it to USDC through the same swapper, bounded by oracle price and `maxSwapSlippageBps`. Premiums arrive as USDC from the Repricer on every reprice.
+
+Why: on Monad, unwinding a large WETH amount immediately would cost more than the 1% discount (3.8% slippage for 1 WETH on 5 Oct 2026), so forcing an unwind inside the exit would hand the LPs a loss. Holding aWETH earns Aave supply yield and the oracle valuation is the same one Aave uses for HF. The SPEC's "unwind immediately" becomes "unwind when the swap clears the slippage bound".
+
+## ADR-025 Keeper repricing cadence is configurable (5 Oct 2026)
+
+Decision: the keeper reprices every proposed block by default (`REPRICE_EVERY_N_BLOCKS=1`) and batches all active records into one `repriceMany` call per block. A `REPRICE_WINDOW_BLOCKS` setting bounds a continuous every-block run (used to capture the consecutive repricing transactions for the proof), after which the keeper falls back to `REPRICE_IDLE_EVERY_N_BLOCKS`. The health-factor watch and exits always run every block.
+
+Why: on 5 Oct 2026 the base fee is 100 gwei and MON is $0.0334, so one reprice transaction at a 150,000 gas limit costs about 0.015 MON, and running one every 300 ms costs about 4,300 MON per day. Accrual is charged per elapsed block, so a slower cadence changes how often the number updates, not what the borrower pays.
+
 ## Verified facts
 
 Append one line per fact, with the date checked and the source. Agents append here as M0 items are resolved.
@@ -105,3 +171,27 @@ Append one line per fact, with the date checked and the source. Agents append he
 - 4 Oct 2026: Aave V3 on Monad launched July 2026 with Chainlink SVR via Atlas from day one. Source: monad.xyz/blog/aave-third-largest-fee-generator.
 - 4 Oct 2026: MIP-12 300 ms blocks; MIP-8 page-ified storage live since 2 Sep 2026. Source: mips.monad.xyz.
 - 4 Oct 2026: Metropolis submission closes 13 Oct 2026 11:59pm ET; judging five criteria at 20% each; OSI license and public repo required; AI tools must be disclosed. Source: hackathon.monad.xyz rules (gated) as quoted in an entrant's README.
+- 5 Oct 2026: Aave V3 Monad addresses. PoolAddressesProvider `0x34793Fb9935F7bB5E5aE920fb963F39063E7A615`, Pool `0x69a5F9AD4f96ebf0a0C792dD42a01cC5C0102fef` (confirmed: `PoolAddressesProvider.getPool()` returns it), AaveOracle `0x0c02b2c2038066C10Eab8fe1D5Cdb73d5a78A1Bf`, ProtocolDataProvider `0xB65A68B98274ef7D9a60E0C0747dD1BEc3D32fad`. Source: github.com/bgd-labs/aave-address-book `src/AaveV3Monad.sol`, checked on chain with `cast call` against rpc.monad.xyz.
+- 5 Oct 2026: Aave V3 Monad runs aave-v3-origin v3.7.0 (`Pool.POOL_REVISION()` = 11, matching `PoolInstance.sol` at tag v3.7.0). Source: on chain and github.com/aave-dao/aave-v3-origin.
+- 5 Oct 2026: Aave Monad reserves (13): USDT0, USDC, USDe, mUSD, AUSD, WETH, cbBTC, wstETH, weETH, syrupUSDC, sUSDe, GHO, PT-AUSD-8OCT2026. No WMON. Source: `Pool.getReservesList()`.
+- 5 Oct 2026: reserve parameters outside eMode (LTV / liquidation threshold / liquidation bonus): WETH 80.50% / 84.00% / 105.50%; cbBTC 73.00% / 78.00% / 107.00%; USDC 75.00% / 78.00% / 107.50%, borrowing enabled, active, not frozen, not paused. wstETH, weETH, sUSDe, syrupUSDC and the PT token have LTV 0 outside eMode. eMode 3 (wstETH/WETH) is 94% / 96% / 101%. Source: `ProtocolDataProvider.getReserveConfigurationData`, `Pool.getEModeCategoryCollateralConfig(3)`.
+- 5 Oct 2026: token addresses. USDC `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` (aUSDC `0x35a73BAcb179d3740395A3ceCc87FF2e581d6042`, variable debt `0x9F555aB84C4e0a531B50283f09Dba7A97134c4e4`); WETH `0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242` (aWETH `0x4377b53aAA8b8e3fF7AA2843832CAF004f5Cb8b6`); cbBTC `0xd18B7EC58Cdf4876f6AFebd3Ed1730e4Ce10414b` (acbBTC `0x1F5e388861A32226c716e922CE748a6FEE5e8e57`). Source: `getReserveTokensAddresses` and the address book.
+- 5 Oct 2026: Aave flash loans. `FLASHLOAN_PREMIUM_TOTAL` = 5 (0.05%), `FLASHLOAN_PREMIUM_TO_PROTOCOL` = 10000 (all of it to the protocol); flash loans enabled on USDC, WETH, cbBTC. USDC reserve: 177.4M supplied, 161.6M borrowed. Source: on chain.
+- 5 Oct 2026: `repay(asset, amount, 2, onBehalfOf)` is open to any caller; the only on-behalf rule is that `amount` must not be `type(uint256).max`. Source: `ValidationLogic.validateRepay` at v3.7.0.
+- 5 Oct 2026: aToken `transferFrom` out of a borrower runs `ValidationLogic.validateHFAndLtvzero` when the asset is collateral and the borrower has debt: HF after the transfer must be at least 1.0, and LTV-0 collateral must be moved first. Since v3.6 the receiver does not get the asset enabled as collateral, and a max allowance is not consumed. Since v3.5 the scaled transfer amount rounds up, so the receiver gets at least the requested amount. Source: aave-v3-origin v3.7.0 `SupplyLogic.executeFinalizeTransfer`, docs/3.5 and docs/3.6 feature notes.
+- 5 Oct 2026: Aave oracle sources are Chainlink-style feeds: USDC "Capped USDC / USD" `0x787962943811D279d01eC973Bd3A15f1b3e1F0D9`, WETH "ETH / USD (USD Scaled)" `0x47F1D18329Ae59341617B7a5BE59605B63f0e373`, cbBTC "CBBTC / USD (USD Scaled)" `0x48692d15DA2636E1b0335344104Ce9d92f231DdA`; base currency unit 1e8. Source: `AaveOracle.getSourceOfAsset` and `description()`.
+- 5 Oct 2026: Pyth mainnet PriceFeed contract `0x2880aB155794e7179c9eE2e38200202908C17B43` (same address as testnet), Entropy `0xD458261E832415CFd3BAE5E416FdF3230ce6F134`. `getUpdateFee([])` and `singleUpdateFeeInWei()` return 0. Feed ids: ETH/USD `0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace`, CBBTC/USD `0x2817d7bfe5c64b8ea956e9a26f573ef64e72e4d7891f2d6af9bcc93f7aff9a97`, USDC/USD `0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a`, MON/USD `0x31491744e2dbf6df7fcf4ac0820d18a609b49076d45066d3568424e62f686cd1`. Sponsored push feeds: ETH and BTC at 0.02% deviation and 1 h heartbeat. Read on chain: ETH $2,729.06, MON $0.0334. Source: github.com/monad-crypto/protocols `mainnet/pyth.jsonc`, then `cast call` on mainnet.
+- 5 Oct 2026: Pyth Hermes requires an API key since 26 Aug 2026; `hermes.pyth.network/v2/updates/price/latest` returns HTTP 401 without one, while `/v2/price_feeds` still answers. Source: direct request; docs.pyth.network/price-feeds/core/api-instances-and-providers/hermes.
+- 5 Oct 2026: block tags. `latest` and `pending` both map to Proposed, `safe` to Voted, `finalized` to Finalized. Source: docs.monad.xyz/reference/json-rpc/overview.
+- 5 Oct 2026: `eth_sendRawTransactionSync` is recognised by rpc.monad.xyz (Monad/0.16.4): an invalid payload returns code 5 "The transaction is not ready to be processed", while an unknown method returns -32601. A funded transaction is still needed to confirm the receipt shape (see docs/PROGRESS.md). Source: direct request.
+- 5 Oct 2026: `monadNewHeads` subscriptions work on wss://rpc.monad.xyz, wss://rpc1.monad.xyz, wss://rpc3.monad.xyz and wss://rpc-mainnet.monadinfra.com. Each block arrives as Proposed, then Voted one block later, then Finalized, then Verified, each with `blockId` and `commitState`. Source: direct subscription.
+- 5 Oct 2026: measured block time 304 ms (1,000 blocks in 304 s ending at block 110,588,957); block timestamps are whole seconds. Base fee 100 gwei, `eth_gasPrice` 102 gwei. Source: `cast block`, `cast gas-price`.
+- 5 Oct 2026: MIP-8 (Final). Page = 128 slots, `page_index = slot >> 7`. SLOAD: 8,100 for the first touch of a page, 100 after. SSTORE: 100 base, plus 8,000 if the page is cold, plus 2,800 on the first value-changing write to the page, plus 17,000 per net-new slot. Access-list keys in the same page pay the cold cost once. Cold account access 10,100. Source: mips.monad.xyz/MIPs/MIP-8 and docs.monad.xyz/developer-essentials/opcode-pricing.
+- 5 Oct 2026: Monad charges `gas_bid * gas_limit`; max contract size 128 KB, init code 256 KB; EIP-7702 delegated EOAs keep a 10 MON reserve. Source: docs.monad.xyz/developer-essentials/differences.
+- 5 Oct 2026: EVM target. Mainnet headers carry `requestsHash` (Prague shape). Foundry 1.8 or later provides Monad execution (`network = "monad"`, MonadTen, MIP-8 accounting) in forge, anvil and cast; releases before 1.8 do not. Installed: forge 1.8.4. Source: docs.monad.xyz/tooling-and-infra/toolkits/foundry, `cast block`.
+- 5 Oct 2026: Morpho Blue `0xD5D960E8C380B724a48AC59E2DfF1b2CB4a1eAee` and `PreLiquidationFactory` `0xB5b3e541abD19799E0c65905a5a42BD37d6c94c0` are live on Monad mainnet (bytecode present, factory's `MORPHO()` returns the Morpho address). The SPEC comparison row "On Monad today: No" for Morpho pre-liquidation was wrong and is corrected. Source: github.com/monad-crypto/protocols `mainnet/morpho.jsonc`, on chain.
+- 5 Oct 2026: Euler V2 is live on Monad mainnet (`mainnet/euler.jsonc`). DeFi Saver supports Ethereum, Arbitrum, Optimism, Base, Linea and Plasma, not Monad. Source: monad-crypto/protocols; help.defisaver.com/general/compatibility/supported-chains-and-protocols.
+- 5 Oct 2026: Uniswap V3 on Monad: factory `0x204faca1764b154221e35c0d20abb3c525710498`, SwapRouter02 `0xfe31f71c1b106eac32f1a19239c9a9a72ddfb900`, QuoterV2 `0x661e93cca42afacb172121ef892830ca3b70f08d`. WETH/USDC 0.3% pool `0x25EF1a210fF55BcEe9F8fee979aAFf6bD1bE5Bf1` holds 2.23 WETH and 8,048 USDC; QuoterV2 gives 2,625.57 USDC for 1 WETH against an Aave oracle price of 2,728.78 (3.8% under). Source: monad-crypto/protocols `mainnet/uniswap.jsonc`, on chain.
+- 5 Oct 2026: Aave V3 is not on Monad testnet: monad-crypto/protocols `testnet/` lists no Aave entry and the address book has no Monad testnet market. Source: GitHub API listing.
+- 5 Oct 2026: the testnet faucet (faucet.monad.xyz) sits behind a Vercel security checkpoint and returns HTTP 429 to scripted requests; testnet MON must be claimed by a person in a browser.
+- 5 Oct 2026: Envio prize on the public prizes page: "Two months of Cloud hosting free, then a third month at 50% off. Up to $5,000 USD". The bounty requirement text is behind the portal login; the version quoted by other entrants reads: "Meaningfully use Envio's HyperIndex, HyperSync, or HyperRPC to power real on-chain data driving a core feature in your app", with evidence being a working indexer, its endpoints consumed by the app, and documentation. VERIFY: log in at hackathon.monad.xyz/tracks and read the Envio bounty card.

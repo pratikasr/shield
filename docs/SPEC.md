@@ -8,7 +8,7 @@ Shield targets Track 01 (Onchain Finance and Trading) of Monad Metropolis, due 1
 
 Shield is an opt-in early exit for borrowers on Aave V3 Monad: the borrower sets a trigger a little above the liquidation line, and when the position reaches it a vault repays part of the debt and takes collateral at a 1% discount instead of the protocol's 5% penalty, with the price of that protection recomputed every 300 ms block.
 
-**User.** Borrowers on Aave V3 Monad with large or illiquid collateral (MON, LST loops, PT tokens) where swapping collateral to deleverage costs more than 1% in slippage. Today they hold extra buffer, set alerts, or eat the penalty.
+**User.** Borrowers on Aave V3 Monad with large or illiquid collateral where swapping collateral to deleverage costs more than 1% in slippage. On Monad that is bridged WETH and cbBTC against stablecoin debt: on 5 Oct 2026 selling 1 WETH on Uniswap V3 Monad quoted 3.8% under the oracle. (Aave Monad has no MON reserve, and its LST and PT collateral only works inside eModes whose liquidation bonus is 1%, where Shield saves nothing; see ADR-016.) Today they hold extra buffer, set alerts, or eat the penalty.
 
 **What it is not.** It does not race liquidators. Aave on Monad runs Chainlink SVR via Atlas: the price update that pushes a position under water arrives in the same bundle as the winning liquidator's transaction. Shield triggers above 1.0, which is the only honest design, and the README says so before a judge does.
 
@@ -19,12 +19,12 @@ Shield is an opt-in early exit for borrowers on Aave V3 Monad: the borrower sets
 | | Shield | Morpho pre-liquidation | Euler V2 native | DeFi Saver automation |
 | --- | --- | --- | --- | --- |
 | Lender covered | Aave V3 Monad | Morpho Blue only | Euler vaults only | Aave, Morpho, others |
-| On Monad today | Yes | No (Ethereum, Base) | Yes | No |
+| On Monad today | Yes | Yes, but Morpho Blue markets only (PreLiquidationFactory live since launch) | Yes | No (6 chains, not Monad) |
 | Mechanism | Opt-in early trigger, vault repays, 1% discount | Opt-in preLIF and preLltv, permissionless caller | Reverse Dutch auction from 0% discount | Repay from collateral via swap |
 | Cost to borrower | Premium per block plus 1% on seized collateral | preLIF discount | Rising discount | About 0.08% plus swap slippage |
 | Who funds the exit | Vault LPs, flash-loan fallback | Any liquidator | Any liquidator | Borrower's own collateral |
 | Wins when | Collateral is illiquid or large; swap slippage exceeds 1% | Borrower is on Morpho | Borrower is on Euler | Collateral is liquid |
-| Status | This entry | SDK deprecated upstream | Live | Live, $446M protected Jan to Feb 2026 |
+| Status | This entry | Live on Monad; SDK deprecated upstream | Live | Live, $446M protected Jan to Feb 2026 |
 
 **Prizes and judging map (five criteria at 20% each, from the gated rules).**
 
@@ -129,9 +129,11 @@ The demo must run on real Monad transactions. A fork or a mock lender fails the 
 
 Recommended: the real Aave position for the on-chain proof in the README, and the Morpho market for the scripted video. Both produce real Monad tx hashes.
 
+Decided 5 Oct 2026 (ADR-015): the real Aave position only. The exit is reached by the market or by a real extra borrow that moves HF to the trigger.
+
 ### 3-minute video (hard cap)
 
-1. Position page: a live Aave V3 Monad position, HF 1.07, collateral MON. Toggle Shield on, trigger 1.04. Premium quote appears and ticks per block. Comparison line: "Aave penalty if liquidated: $412. Shield: $83."
+1. Position page: a live Aave V3 Monad position, HF 1.07, collateral WETH, debt USDC (ADR-016: Aave Monad has no MON reserve). Toggle Shield on, trigger 1.04. Premium quote appears and ticks per block. Comparison line: "Aave penalty if liquidated: $412. Shield: $83."
 2. Explorer: the opt-in tx and three consecutive repricing txs, 300 ms apart.
 3. Price moves, HF reaches 1.04, keeper fires, `Exited` event, borrower screen reads "penalty avoided: $329". Show the tx hash.
 4. LP dashboard: premium income and the 1% discount captured.
@@ -160,12 +162,12 @@ Recommended: the real Aave position for the on-chain proof in the README, and th
 
 Resolve each item, record the answer with date and source in `docs/TECH-DECISIONS.md` under "Verified facts", then tick it here.
 
-- [ ] VERIFY Aave V3 Monad Pool, PoolAddressesProvider, aToken and flash-loan addresses from the Aave address book, and that `repay` with `onBehalfOf` is enabled for the chosen reserve.
-- [ ] VERIFY that transferring aTokens out of a borrower's account after a partial repay keeps HF above 1.0 for the sizes you will demo; Aave's `transfer` on aTokens runs its own HF check.
-- [ ] VERIFY Pyth's Monad mainnet contract address and the price feed ids for MON and the chosen collateral. Testnet price feeds contract and the MON/USD feed id are already recorded in TECH-DECISIONS.
-- [ ] VERIFY whether public RPCs expose `eth_sendRawTransactionSync` and the `pending` tag semantics described in the docs; fall back to `eth_sendRawTransaction` plus `latest` if not.
-- [ ] VERIFY Morpho Blue market creation on Monad is permissionless and which oracle interface it expects, if the deterministic demo path is used.
-- [ ] VERIFY the exact Envio bounty requirement text on the portal (login-gated).
+- [x] VERIFY Aave V3 Monad Pool, PoolAddressesProvider, aToken and flash-loan addresses from the Aave address book, and that `repay` with `onBehalfOf` is enabled for the chosen reserve. Done 5 Oct 2026: addresses, v3.7.0, 5 bp flash premium, open repay-on-behalf; see Verified facts.
+- [x] VERIFY that transferring aTokens out of a borrower's account after a partial repay keeps HF above 1.0 for the sizes you will demo; Aave's `transfer` on aTokens runs its own HF check. Done 5 Oct 2026: the check is `validateHFAndLtvzero` (HF at least 1.0); HF improves whenever HF / LT exceeds 1.01 (ADR-021); the M2 fork tests assert it at demo sizes.
+- [x] VERIFY Pyth's Monad mainnet contract address and the price feed ids for MON and the chosen collateral. Testnet price feeds contract and the MON/USD feed id are already recorded in TECH-DECISIONS. Done 5 Oct 2026: same address on mainnet, fee 0, ETH/USD and CBBTC/USD push feeds; Hermes now needs an API key (ADR-017).
+- [x] VERIFY whether public RPCs expose `eth_sendRawTransactionSync` and the `pending` tag semantics described in the docs; fall back to `eth_sendRawTransaction` plus `latest` if not. Done 5 Oct 2026: the method is recognised on rpc.monad.xyz; `pending` equals `latest` (Proposed); `monadNewHeads` works on four public WebSocket endpoints. The keeper keeps the fallback.
+- [x] VERIFY Morpho Blue market creation on Monad is permissionless and which oracle interface it expects, if the deterministic demo path is used. Not needed: ADR-015 drops the Morpho path. Morpho Blue and its PreLiquidationFactory are live on Monad (comparison table corrected).
+- [x] VERIFY the exact Envio bounty requirement text on the portal (login-gated). Done as far as possible without a login on 5 Oct 2026: public prize line and the requirement text quoted by other entrants are recorded in Verified facts; the human confirms the card text when logging in to submit.
 
 ## Sources
 
