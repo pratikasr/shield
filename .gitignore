@@ -1,0 +1,29 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.key
+keystore/
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/**/dry-run/
+contracts/lib/
+
+# node
+node_modules/
+web/.next/
+web/out/
+*.tsbuildinfo
+.pnpm-store/
+indexer/generated/
+keeper/dist/
+
+# tooling
+.DS_Store
+*.log
+coverage/
+lcov.info
+test-results/
+playwright-report/
