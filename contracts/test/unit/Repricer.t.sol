@@ -1,0 +1,392 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.37;
+
+import {PositionRegistry} from "../../src/PositionRegistry.sol";
+import {Repricer} from "../../src/Repricer.sol";
+import {ShieldVault} from "../../src/ShieldVault.sol";
+import {IPositionRegistry} from "../../src/interfaces/IPositionRegistry.sol";
+import {IRepricer} from "../../src/interfaces/IRepricer.sol";
+import {IShieldVault} from "../../src/interfaces/IShieldVault.sol";
+import {PremiumMath} from "../../src/libraries/PremiumMath.sol";
+import {MockAaveOracle, MockAavePool} from "../mocks/MockAave.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {MockPyth} from "@pythnetwork/pyth-sdk-solidity/MockPyth.sol";
+import {IAaveOracle} from "aave-v3-origin/contracts/interfaces/IAaveOracle.sol";
+import {IPool} from "aave-v3-origin/contracts/interfaces/IPool.sol";
+import {Test, Vm} from "forge-std/Test.sol";
+
+/// @notice Repricer accrual, lapse, top-up, withdrawal and the per-feed volatility window, against mocked Aave
+/// and MockPyth. The same paths run against real Aave in test/fork.
+contract RepricerTest is Test {
+    PositionRegistry internal reg;
+    Repricer internal rp;
+    ShieldVault internal vault;
+    MockAavePool internal pool;
+    MockAaveOracle internal oracle;
+    MockPyth internal pyth;
+    MockERC20 internal usdc;
+    address internal constant WETH = address(0xE7);
+    bytes32 internal constant FEED = bytes32("ETH/USD");
+    uint64 internal constant K = 0.00125e18;
+    address internal alice = makeAddr("alice");
+    address internal bob = makeAddr("bob");
+    address internal executor = makeAddr("executor");
+    uint64 internal pythTime;
+
+    function setUp() public {
+        vm.warp(1_790_000_000);
+        pythTime = uint64(block.timestamp);
+        usdc = new MockERC20("USD Coin", "USDC", 6);
+        pool = new MockAavePool();
+        oracle = new MockAaveOracle();
+        oracle.setPrice(address(usdc), 1e8);
+        oracle.setPrice(WETH, 2700e8);
+        pyth = new MockPyth(3600, 0);
+        reg = new PositionRegistry(address(this));
+        reg.setAsset(WETH, FEED, K, 0.8e18, true);
+        vault = new ShieldVault(
+            address(this), IERC20(address(usdc)), IPool(address(pool)), IAaveOracle(address(oracle)), reg
+        );
+        rp = new Repricer(
+            address(this),
+            reg,
+            IPool(address(pool)),
+            IAaveOracle(address(oracle)),
+            IPyth(address(pyth)),
+            IERC20(address(usdc)),
+            vault
+        );
+        reg.setModules(address(rp), executor);
+        vault.setModules(executor, address(rp));
+        // Alice: $10,000 debt, HF 1.09, trigger 1.04 (d = 0.05).
+        pool.setAccount(alice, 13_000e8, 10_000e8, 1.09e18);
+        _fund(alice, 1000e6);
+        vm.prank(alice);
+        reg.optIn(WETH, 10_400, 100);
+        vm.prank(alice);
+        rp.topUp(100e6);
+    }
+
+    function _fund(address who, uint256 amount) internal {
+        usdc.mint(who, amount);
+        vm.prank(who);
+        usdc.approve(address(rp), type(uint256).max);
+    }
+
+    function _pythUpdate(int64 price) internal returns (bytes[] memory u) {
+        pythTime += 1;
+        u = new bytes[](1);
+        u[0] = pyth.createPriceFeedUpdateData(FEED, price, 1e6, -8, price, 1e6, pythTime);
+    }
+
+    function _none() internal pure returns (bytes[] memory) {
+        return new bytes[](0);
+    }
+
+    // ------------------------------------------------------------ accrual
+
+    function test_firstReprice_setsRateWithoutCharging() public {
+        vm.roll(block.number + 10);
+        rp.reprice(alice, _none());
+        IPositionRegistry.Record memory r = reg.record(alice);
+        assertEq(r.accrued, 0, "nothing owed before a rate existed");
+        // Calibration point: 2% of $10,000 a year at the fallback sigma of 80%.
+        uint256 expected = PremiumMath.perBlock(200e18, 300);
+        assertEq(r.premiumPerBlock, expected);
+        assertEq(r.healthFactorBps, 10_900);
+        assertEq(r.sigma, 0.8e18);
+    }
+
+    function test_reprice_chargesStoredRatePerElapsedBlock() public {
+        rp.reprice(alice, _none());
+        uint256 rate = reg.record(alice).premiumPerBlock;
+        vm.roll(block.number + 25);
+        // HF moves; the past 25 blocks are still charged at the old rate.
+        pool.setAccount(alice, 13_000e8, 10_000e8, 1.06e18);
+        vm.expectEmit(address(rp));
+        emit IRepricer.Repriced(
+            alice,
+            rate * 25,
+            PremiumMath.perBlock(200e18 * 5 / 2, 300),
+            1.06e18,
+            0.8e18,
+            100e18 - rate * 25,
+            false
+        );
+        rp.reprice(alice, _none());
+        IPositionRegistry.Record memory r = reg.record(alice);
+        assertEq(r.accrued, rate * 25);
+        assertEq(r.prepaid, 100e18 - rate * 25);
+    }
+
+    function test_reprice_twiceInOneBlock_chargesOnce() public {
+        rp.reprice(alice, _none());
+        vm.roll(block.number + 3);
+        rp.reprice(alice, _none());
+        uint256 accrued = reg.record(alice).accrued;
+        rp.reprice(alice, _none());
+        assertEq(reg.record(alice).accrued, accrued);
+    }
+
+    function test_reprice_noPremiumAtOrBelowTrigger() public {
+        pool.setAccount(alice, 13_000e8, 10_000e8, 1.04e18);
+        rp.reprice(alice, _none());
+        assertEq(reg.record(alice).premiumPerBlock, 0);
+    }
+
+    function test_reprice_revertsForInactive() public {
+        vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.NotActive.selector, bob));
+        rp.reprice(bob, _none());
+    }
+
+    function test_reprice_borrowerRepaidInFull_rateZero() public {
+        pool.setAccount(alice, 13_000e8, 0, 0);
+        rp.reprice(alice, _none());
+        assertEq(reg.record(alice).premiumPerBlock, 0);
+        assertEq(reg.record(alice).healthFactorBps, type(uint32).max, "HF saturates");
+    }
+
+    function test_premiumFlowsToVault_inWholeUnitsWithRemainder() public {
+        // A large position so a few blocks are worth more than one USDC unit.
+        pool.setAccount(alice, 1_300_000e8, 1_000_000e8, 1.09e18);
+        rp.reprice(alice, _none());
+        uint256 rate = reg.record(alice).premiumPerBlock;
+        vm.roll(block.number + 100);
+        rp.reprice(alice, _none());
+        uint256 owed = rate * 100;
+        assertEq(usdc.balanceOf(address(vault)), owed / 1e12);
+        assertEq(rp.pendingToVault(), owed % 1e12);
+        assertEq(vault.totalPremiumEarned(), owed / 1e12);
+    }
+
+    // ------------------------------------------------------------ lapse and top-up
+
+    function test_prepaidExhausted_lapsesMidCover() public {
+        pool.setAccount(alice, 1_300_000e8, 1_000_000e8, 1.05e18); // d at the floor: a high rate
+        rp.reprice(alice, _none());
+        uint256 rate = reg.record(alice).premiumPerBlock;
+        uint256 blocksToEmpty = 100e18 / rate + 1;
+        vm.roll(block.number + blocksToEmpty + 10);
+        vm.expectEmit(address(reg));
+        emit IPositionRegistry.CoverLapsed(alice);
+        rp.reprice(alice, _none());
+        IPositionRegistry.Record memory r = reg.record(alice);
+        assertEq(r.prepaid, 0);
+        assertEq(r.accrued, 100e18, "charged exactly what was prepaid");
+        assertTrue(r.flags & reg.FLAG_LAPSED() != 0);
+        // While lapsed nothing is charged.
+        vm.roll(block.number + 1000);
+        rp.reprice(alice, _none());
+        assertEq(reg.record(alice).accrued, 100e18);
+        // Top-up restores cover and the lapsed blocks are never billed.
+        vm.prank(alice);
+        rp.topUp(10e6);
+        r = reg.record(alice);
+        assertEq(r.flags & reg.FLAG_LAPSED(), 0);
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _none());
+        assertEq(reg.record(alice).accrued, 100e18 + r.premiumPerBlock * 1);
+    }
+
+    function test_topUp_zeroReverts() public {
+        vm.prank(alice);
+        vm.expectRevert(IRepricer.ZeroAmount.selector);
+        rp.topUp(0);
+    }
+
+    function test_withdrawUnused_settlesFirst() public {
+        rp.reprice(alice, _none());
+        uint256 rate = reg.record(alice).premiumPerBlock;
+        vm.roll(block.number + 40);
+        uint256 before = usdc.balanceOf(alice);
+        vm.prank(alice);
+        rp.withdrawUnused(50e6);
+        assertEq(usdc.balanceOf(alice) - before, 50e6);
+        IPositionRegistry.Record memory r = reg.record(alice);
+        assertEq(r.accrued, rate * 40, "due premium charged before the withdrawal");
+        assertEq(r.prepaid, 50e18 - rate * 40);
+        assertGt(r.premiumPerBlock, 0, "cover keeps running");
+    }
+
+    function test_withdrawUnused_cannotExceedBalance() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IRepricer.InsufficientPrepaid.selector, 101e6, 100e6));
+        rp.withdrawUnused(101e6);
+    }
+
+    function test_withdrawAll_lapses() public {
+        vm.prank(alice);
+        rp.withdrawUnused(100e6);
+        assertTrue(reg.record(alice).flags & reg.FLAG_LAPSED() != 0);
+    }
+
+    function test_settleForExit_onlyExecutor_andStopsRate() public {
+        rp.reprice(alice, _none());
+        vm.expectRevert(IRepricer.NotExecutor.selector);
+        rp.settleForExit(alice);
+        vm.roll(block.number + 5);
+        vm.prank(executor);
+        rp.settleForExit(alice);
+        assertEq(reg.record(alice).premiumPerBlock, 0);
+        assertGt(reg.record(alice).accrued, 0);
+    }
+
+    // ------------------------------------------------------------ repriceMany
+
+    function test_repriceMany_skipsInactiveAndSamplesOnce() public {
+        pool.setAccount(bob, 13_000e8, 10_000e8, 1.2e18);
+        _fund(bob, 100e6);
+        vm.prank(bob);
+        reg.optIn(WETH, 10_400, 100);
+        vm.prank(bob);
+        rp.topUp(10e6);
+        address[] memory list = new address[](3);
+        list[0] = alice;
+        list[1] = makeAddr("nobody");
+        list[2] = bob;
+        vm.recordLogs();
+        rp.repriceMany(list, _pythUpdate(2700e8));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 sampled;
+        uint256 repriced;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == IRepricer.PriceSampled.selector) ++sampled;
+            if (logs[i].topics[0] == IRepricer.Repriced.selector) ++repriced;
+        }
+        assertEq(sampled, 1, "one feed, one sample");
+        assertEq(repriced, 2, "two active borrowers");
+    }
+
+    // ------------------------------------------------------------ Pyth and the volatility window
+
+    function test_pythUpdate_feeChargedAndRefunded() public {
+        MockPyth paid = new MockPyth(3600, 7);
+        Repricer rp2 = new Repricer(
+            address(this),
+            reg,
+            IPool(address(pool)),
+            IAaveOracle(address(oracle)),
+            IPyth(address(paid)),
+            IERC20(address(usdc)),
+            vault
+        );
+        bytes[] memory u = new bytes[](1);
+        u[0] = paid.createPriceFeedUpdateData(FEED, 2700e8, 1e6, -8, 2700e8, 1e6, uint64(block.timestamp));
+        vm.deal(address(this), 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(IRepricer.InsufficientUpdateFee.selector, 7, 6));
+        rp2.repriceMany{value: 6}(new address[](0), u);
+        uint256 before = address(this).balance;
+        rp2.repriceMany{value: 100}(new address[](0), u);
+        assertEq(before - address(this).balance, 7, "only the fee is kept");
+    }
+
+    receive() external payable {}
+
+    function test_sample_ignoresStaleOrRepeatedPublishTime() public {
+        rp.reprice(alice, _pythUpdate(2700e8));
+        (uint16 count,,,,) = rp.volState(FEED);
+        assertEq(count, 1);
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _none()); // same publish time: no new observation
+        (count,,,,) = rp.volState(FEED);
+        assertEq(count, 1);
+    }
+
+    function test_sample_wrongFeedUpdateDoesNotMoveOurFeed() public {
+        rp.reprice(alice, _pythUpdate(2700e8));
+        bytes[] memory u = new bytes[](1);
+        u[0] = pyth.createPriceFeedUpdateData(
+            bytes32("BTC/USD"), 60_000e8, 1e6, -8, 60_000e8, 1e6, pythTime + 50
+        );
+        vm.roll(block.number + 1);
+        rp.reprice(alice, u);
+        (uint16 count,,, uint64 newest,) = rp.volState(FEED);
+        assertEq(count, 1, "an update for another feed adds no observation");
+        assertEq(newest, pythTime);
+    }
+
+    function test_sigma_fallbackUntilMinSamples() public {
+        for (uint256 i; i < rp.MIN_SAMPLES() - 1; ++i) {
+            vm.roll(block.number + 1);
+            rp.reprice(alice, _pythUpdate(int64(int256(2700e8 + i * 1e8))));
+        }
+        assertEq(rp.sigmaOf(FEED, 0.8e18), 0.8e18);
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _pythUpdate(2700e8));
+        assertTrue(rp.sigmaOf(FEED, 0.8e18) != 0.8e18, "realised volatility takes over");
+    }
+
+    /// @notice The running sum of squared returns always equals a from-scratch recomputation over the
+    /// observations still in the window, including after the ring buffer wraps.
+    function testFuzz_volWindow_sumMatchesRecompute(uint256 seed, uint16 extra) public {
+        uint256 n = 200 + bound(extra, 0, 260);
+        int64[] memory prices = new int64[](n);
+        uint256 x = seed;
+        int256 p = 2700e8;
+        for (uint256 i; i < n; ++i) {
+            x = uint256(keccak256(abi.encode(x)));
+            int256 stepBps = int256(x % 41) - 20; // -0.20% .. +0.20%
+            p = p + p * stepBps / 10_000;
+            prices[i] = int64(p);
+            vm.roll(block.number + 1);
+            rp.reprice(alice, _pythUpdate(int64(p)));
+        }
+        (uint16 count, uint16 head, uint128 sumSq, uint64 newest, uint64 oldest) = rp.volState(FEED);
+        assertEq(count, 200);
+        assertEq(head, n % 200);
+        uint256 expected;
+        for (uint256 i = n - 199; i < n; ++i) {
+            expected += PremiumMath.squaredReturn(uint256(int256(prices[i - 1])), uint256(int256(prices[i])));
+        }
+        assertEq(sumSq, expected, "no drift in the running sum");
+        assertEq(newest - oldest, 199, "window spans the last 200 publish times");
+    }
+
+    function test_volWindow_constantPrice_clampsToMinimum() public {
+        for (uint256 i; i < 20; ++i) {
+            vm.roll(block.number + 1);
+            rp.reprice(alice, _pythUpdate(2700e8));
+        }
+        assertEq(rp.sigmaOf(FEED, 0.8e18), rp.SIGMA_MIN());
+    }
+
+    function test_volWindow_knownVolatility() public {
+        // Alternate +1% and -1% each second: squared return about 1e-4 per second.
+        int64 price = 2700e8;
+        for (uint256 i; i < 101; ++i) {
+            vm.roll(block.number + 1);
+            rp.reprice(alice, _pythUpdate(price));
+            price = i % 2 == 0 ? price * 101 / 100 : price * 100 / 101;
+        }
+        // sqrt(1e-4 * 31,536,000) is about 56.2, above the 500% clamp.
+        assertEq(rp.sigmaOf(FEED, 0.8e18), rp.SIGMA_MAX());
+    }
+
+    function test_volSlot_pageAligned() public view {
+        uint256 base = rp.volSlot(FEED);
+        assertEq(base & 127, 0);
+        assertEq(base >> 7, (base + 100) >> 7, "header and 100 sample slots share one page");
+    }
+
+    function test_quoteFor_beforeOptIn() public {
+        pool.setAccount(bob, 13_000e8, 10_000e8, 1.09e18);
+        (uint256 perBlock,, uint256 sigma, uint256 annual) = rp.quoteFor(bob, WETH, 10_400);
+        assertEq(annual, 200e18);
+        assertEq(perBlock, PremiumMath.perBlock(200e18, 300));
+        assertEq(sigma, 0.8e18);
+    }
+
+    function test_setBlockTimeMs_bounds() public {
+        vm.expectRevert(IRepricer.InvalidParameter.selector);
+        rp.setBlockTimeMs(50);
+        rp.setBlockTimeMs(400);
+        assertEq(rp.blockTimeMs(), 400);
+    }
+
+    function test_notifyPremium_onlyRepricer() public {
+        vm.expectRevert(IShieldVault.NotRepricer.selector);
+        vault.notifyPremium(1);
+    }
+}

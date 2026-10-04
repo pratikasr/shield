@@ -1,7 +1,371 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.37;
 
+import {IPositionRegistry} from "./interfaces/IPositionRegistry.sol";
+import {IRepricer} from "./interfaces/IRepricer.sol";
+import {IShieldVault} from "./interfaces/IShieldVault.sol";
+import {PremiumMath} from "./libraries/PremiumMath.sol";
+import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {IAaveOracle} from "aave-v3-origin/contracts/interfaces/IAaveOracle.sol";
+import {IPool} from "aave-v3-origin/contracts/interfaces/IPool.sol";
+
 /// @title Repricer
-/// @notice Per-block premium from Pyth realised volatility and distance to trigger, accrued against the borrower's prepaid balance (ADR-022, ADR-023).
-/// @dev Implemented in M2. See docs/SPEC.md and docs/TECH-DECISIONS.md.
-contract Repricer {}
+/// @notice Computes each borrower's premium from Pyth realised volatility and the distance between Aave's
+/// health factor and the trigger, and accrues it against the borrower's prepaid balance every block
+/// (docs/SPEC.md, Pricing model; ADR-022, ADR-023).
+/// @dev Accrual is piecewise constant: the rate set at the last reprice applies to every block since, then
+/// a new rate is computed from live state. Nobody can choose a past rate, so calling `reprice` is
+/// permissionless. The volatility state for each Pyth feed (header plus 200 observations, two per slot) sits
+/// in one 128-slot MIP-8 page at `volSlot(feedId)`.
+contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
+    using SafeERC20 for IERC20;
+
+    /// @notice Observations kept per feed (N).
+    uint256 public constant WINDOW = 200;
+    /// @notice Observations needed before realised volatility replaces the asset's fallback.
+    uint256 public constant MIN_SAMPLES = 10;
+    uint256 public constant SIGMA_MIN = 0.1e18;
+    uint256 public constant SIGMA_MAX = 5e18;
+
+    bytes32 private constant VOL_NAMESPACE = keccak256("shield.repricer.vol.v1");
+    uint256 private constant PAGE_MASK = ~uint256(127);
+
+    IPositionRegistry public immutable registry;
+    IPool public immutable pool;
+    IAaveOracle public immutable oracle;
+    IPyth public immutable pyth;
+    IERC20 public immutable asset;
+    IShieldVault public immutable vault;
+    /// @dev 10 ** (18 - asset decimals): converts asset units to the 18-decimal accounting units.
+    uint256 public immutable scale;
+
+    /// @notice Block time used to turn an annual premium into a per-block premium (MIP-12: 300 ms).
+    uint32 public blockTimeMs = 300;
+    /// @notice Premium owed to the vault that is smaller than one asset unit, in 18-decimal units.
+    uint256 public pendingToVault;
+
+    struct Ctx {
+        uint256 assetPrice;
+        uint256 dMin;
+    }
+
+    constructor(
+        address owner_,
+        IPositionRegistry registry_,
+        IPool pool_,
+        IAaveOracle oracle_,
+        IPyth pyth_,
+        IERC20 asset_,
+        IShieldVault vault_
+    ) Ownable(owner_) {
+        registry = registry_;
+        pool = pool_;
+        oracle = oracle_;
+        pyth = pyth_;
+        asset = asset_;
+        vault = vault_;
+        uint8 decimals = IERC20Metadata(address(asset_)).decimals();
+        if (decimals > 18) revert InvalidParameter();
+        scale = 10 ** (18 - decimals);
+    }
+
+    // ---------------------------------------------------------------- borrower funds
+
+    /// @notice Add `amount` of the vault asset to the caller's prepaid premium balance.
+    function topUp(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        asset.safeTransferFrom(msg.sender, address(this), amount);
+        registry.creditPrepaid(msg.sender, uint128(amount * scale));
+        emit ToppedUp(msg.sender, amount);
+    }
+
+    /// @notice Withdraw `amount` of the caller's unused prepaid balance. Premium already due is settled first.
+    function withdrawUnused(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        IPositionRegistry.Record memory r = registry.record(msg.sender);
+        if (r.flags & registry.FLAG_ACTIVE() != 0) {
+            _charge(msg.sender, r, true, _ctx());
+            r = registry.record(msg.sender);
+        }
+        uint256 wad = amount * scale;
+        if (wad > r.prepaid) revert InsufficientPrepaid(amount, r.prepaid / scale);
+        registry.debitPrepaid(msg.sender, uint128(wad));
+        asset.safeTransfer(msg.sender, amount);
+        _flush();
+        emit Withdrawn(msg.sender, amount);
+    }
+
+    // ---------------------------------------------------------------- repricing
+
+    /// @notice Accrue the borrower's premium up to this block and set the next rate.
+    /// @param pythUpdate Optional Pyth price update (Hermes); empty uses the on-chain push feeds (ADR-017).
+    function reprice(address borrower, bytes[] calldata pythUpdate) external payable nonReentrant {
+        _applyPythUpdate(pythUpdate);
+        Ctx memory c = _ctx();
+        IPositionRegistry.Record memory r = registry.record(borrower);
+        if (r.flags & registry.FLAG_ACTIVE() == 0) revert IPositionRegistry.NotActive(borrower);
+        _sample(registry.assetConfig(registry.assetAt(r.collateralId)).pythFeedId);
+        _charge(borrower, r, true, c);
+        _flush();
+    }
+
+    /// @notice Reprice many borrowers in one transaction; inactive ones are skipped. Each feed is sampled once.
+    function repriceMany(address[] calldata borrowers, bytes[] calldata pythUpdate)
+        external
+        payable
+        nonReentrant
+    {
+        _applyPythUpdate(pythUpdate);
+        Ctx memory c = _ctx();
+        uint8 active = registry.FLAG_ACTIVE();
+        uint256 sampled; // bitmap of collateral ids already sampled in this call
+        for (uint256 i; i < borrowers.length; ++i) {
+            IPositionRegistry.Record memory r = registry.record(borrowers[i]);
+            if (r.flags & active == 0) continue;
+            uint256 bit = 1 << r.collateralId;
+            if (sampled & bit == 0) {
+                sampled |= bit;
+                _sample(registry.assetConfig(registry.assetAt(r.collateralId)).pythFeedId);
+            }
+            _charge(borrowers[i], r, true, c);
+        }
+        _flush();
+    }
+
+    /// @notice Final accrual before an exit: charges up to this block and stops the rate. Executor only.
+    function settleForExit(address borrower) external nonReentrant {
+        if (msg.sender != registry.executor()) revert NotExecutor();
+        IPositionRegistry.Record memory r = registry.record(borrower);
+        _sample(registry.assetConfig(registry.assetAt(r.collateralId)).pythFeedId);
+        _charge(borrower, r, false, _ctx());
+        _flush();
+    }
+
+    // ---------------------------------------------------------------- owner
+
+    function setBlockTimeMs(uint32 blockTimeMs_) external onlyOwner {
+        if (blockTimeMs_ < 100 || blockTimeMs_ > 15_000) revert InvalidParameter();
+        blockTimeMs = blockTimeMs_;
+        emit BlockTimeSet(blockTimeMs_);
+    }
+
+    // ---------------------------------------------------------------- views
+
+    /// @notice Live quote for a borrower, without changing state: the per-block and annual premium in
+    /// 18-decimal vault-asset units, Aave's HF (x 1e18) and the sigma in use (x 1e18).
+    function quote(address borrower)
+        external
+        view
+        returns (uint256 premiumPerBlock, uint256 healthFactor, uint256 sigma, uint256 annualPremium)
+    {
+        IPositionRegistry.Record memory r = registry.record(borrower);
+        IPositionRegistry.AssetConfig memory cfg = registry.assetConfig(registry.assetAt(r.collateralId));
+        sigma = sigmaOf(cfg.pythFeedId, cfg.sigmaFallback);
+        uint256 debtBase;
+        (, debtBase,,,, healthFactor) = pool.getUserAccountData(borrower);
+        Ctx memory c = _ctx();
+        annualPremium =
+            PremiumMath.annualPremium(debtBase, healthFactor, r.trigger, c.dMin, cfg.k, sigma, c.assetPrice);
+        premiumPerBlock = PremiumMath.perBlock(annualPremium, blockTimeMs);
+    }
+
+    /// @notice Quote for a cover that does not exist yet, for the opt-in screen: what `borrower` would pay
+    /// with `collateral` and `trigger` (HF x 1e4) at current state.
+    function quoteFor(address borrower, address collateral, uint32 trigger)
+        external
+        view
+        returns (uint256 premiumPerBlock, uint256 healthFactor, uint256 sigma, uint256 annualPremium)
+    {
+        IPositionRegistry.AssetConfig memory cfg = registry.assetConfig(collateral);
+        sigma = sigmaOf(cfg.pythFeedId, cfg.sigmaFallback);
+        uint256 debtBase;
+        (, debtBase,,,, healthFactor) = pool.getUserAccountData(borrower);
+        Ctx memory c = _ctx();
+        annualPremium =
+            PremiumMath.annualPremium(debtBase, healthFactor, trigger, c.dMin, cfg.k, sigma, c.assetPrice);
+        premiumPerBlock = PremiumMath.perBlock(annualPremium, blockTimeMs);
+    }
+
+    /// @notice Realised annualised volatility x 1e18 for a feed, or `fallbackSigma` with too few observations.
+    function sigmaOf(bytes32 feedId, uint64 fallbackSigma) public view returns (uint256 sigma) {
+        uint256 base = volSlot(feedId);
+        uint256 header = _load(base);
+        uint256 count = uint16(header);
+        if (count < MIN_SAMPLES) return fallbackSigma;
+        uint256 oldestIdx = count == WINDOW ? uint16(header >> 16) : 0;
+        (, uint64 oldestTime) = _sampleAt(base, oldestIdx);
+        uint64 newestTime = uint64(header >> 160);
+        if (newestTime <= oldestTime) return fallbackSigma;
+        sigma = PremiumMath.annualisedSigma(uint128(header >> 32), newestTime - oldestTime);
+        if (sigma < SIGMA_MIN) sigma = SIGMA_MIN;
+        if (sigma > SIGMA_MAX) sigma = SIGMA_MAX;
+    }
+
+    /// @notice Volatility window header: observation count, next write index, sum of squared returns
+    /// (x 1e18), and the newest and oldest publish times.
+    function volState(bytes32 feedId)
+        external
+        view
+        returns (uint16 count, uint16 head, uint128 sumSquares, uint64 newestTime, uint64 oldestTime)
+    {
+        uint256 base = volSlot(feedId);
+        uint256 header = _load(base);
+        count = uint16(header);
+        head = uint16(header >> 16);
+        sumSquares = uint128(header >> 32);
+        newestTime = uint64(header >> 160);
+        if (count != 0) (, oldestTime) = _sampleAt(base, count == WINDOW ? head : 0);
+    }
+
+    /// @notice Page-aligned base slot of a feed's volatility window. The keeper lists it in its access list.
+    function volSlot(bytes32 feedId) public pure returns (uint256) {
+        return uint256(keccak256(abi.encode(feedId, VOL_NAMESPACE))) & PAGE_MASK;
+    }
+
+    // ---------------------------------------------------------------- internals
+
+    function _ctx() private view returns (Ctx memory c) {
+        c.assetPrice = oracle.getAssetPrice(address(asset));
+        c.dMin = registry.dMin();
+    }
+
+    /// @dev Charges the stored rate for every block since the last reprice, then stores a fresh rate
+    /// (or zero when `setRate` is false, as at exit).
+    function _charge(address borrower, IPositionRegistry.Record memory r, bool setRate, Ctx memory c)
+        private
+    {
+        uint256 elapsed = block.number - r.lastRepricedBlock;
+        uint256 prepaid = r.prepaid;
+        uint256 accrued = r.accrued;
+        bool lapsed = r.flags & registry.FLAG_LAPSED() != 0;
+        uint256 charged;
+        if (!lapsed && elapsed != 0) {
+            uint256 due = uint256(r.premiumPerBlock) * elapsed;
+            charged = due < prepaid ? due : prepaid;
+            prepaid -= charged;
+            accrued += charged;
+            if (prepaid == 0 && due != 0) lapsed = true;
+        }
+
+        (uint256 rate, uint256 hf, uint256 sigma) = _rate(borrower, r, c);
+        if (!setRate) rate = 0;
+        uint256 hfBps = hf / PremiumMath.BPS_TO_WAD;
+        if (hfBps > type(uint32).max) hfBps = type(uint32).max;
+
+        registry.writeRepricerState(
+            borrower, uint128(prepaid), uint128(accrued), uint96(rate), uint32(hfBps), uint64(sigma), lapsed
+        );
+        pendingToVault += charged;
+        emit Repriced(borrower, charged, rate, hf, sigma, prepaid, lapsed);
+    }
+
+    /// @dev Live per-block rate (capped to uint96), Aave HF and sigma for a record.
+    function _rate(address borrower, IPositionRegistry.Record memory r, Ctx memory c)
+        private
+        view
+        returns (uint256 rate, uint256 hf, uint256 sigma)
+    {
+        IPositionRegistry.AssetConfig memory cfg = registry.assetConfig(registry.assetAt(r.collateralId));
+        sigma = sigmaOf(cfg.pythFeedId, cfg.sigmaFallback);
+        uint256 debtBase;
+        (, debtBase,,,, hf) = pool.getUserAccountData(borrower);
+        uint256 annual =
+            PremiumMath.annualPremium(debtBase, hf, r.trigger, c.dMin, cfg.k, sigma, c.assetPrice);
+        rate = PremiumMath.perBlock(annual, blockTimeMs);
+        if (rate > type(uint96).max) rate = type(uint96).max;
+    }
+
+    /// @dev Sends whole asset units of accrued premium to the vault; the remainder waits for the next call.
+    function _flush() private {
+        uint256 pending = pendingToVault;
+        uint256 amount = pending / scale;
+        if (amount == 0) return;
+        pendingToVault = pending - amount * scale;
+        asset.safeTransfer(address(vault), amount);
+        vault.notifyPremium(amount);
+        emit PremiumForwarded(amount);
+    }
+
+    function _applyPythUpdate(bytes[] calldata update) private {
+        uint256 fee;
+        if (update.length != 0) {
+            fee = pyth.getUpdateFee(update);
+            if (msg.value < fee) revert InsufficientUpdateFee(fee, msg.value);
+            pyth.updatePriceFeeds{value: fee}(update);
+        }
+        uint256 refund = msg.value - fee;
+        if (refund != 0) {
+            (bool ok,) = msg.sender.call{value: refund}("");
+            if (!ok) revert RefundFailed();
+        }
+    }
+
+    /// @dev Records the feed's latest Pyth price if it is newer than the newest observation.
+    function _sample(bytes32 feedId) private {
+        PythStructs.Price memory p;
+        try pyth.getPriceUnsafe(feedId) returns (PythStructs.Price memory price) {
+            p = price;
+        } catch {
+            return;
+        }
+        if (p.price <= 0 || p.publishTime == 0 || p.publishTime > type(uint64).max) return;
+        uint256 base = volSlot(feedId);
+        uint256 header = _load(base);
+        uint256 count = uint16(header);
+        uint256 head = uint16(header >> 16);
+        uint256 sumSquares = uint128(header >> 32);
+        uint64 newest = uint64(header >> 160);
+        uint64 time = uint64(p.publishTime);
+        uint64 price = uint64(p.price);
+        if (count != 0 && time <= newest) return;
+
+        if (count != 0) {
+            (uint64 prevPrice,) = _sampleAt(base, (head + WINDOW - 1) % WINDOW);
+            sumSquares += PremiumMath.squaredReturn(prevPrice, price);
+            if (count == WINDOW) {
+                (uint64 oldestPrice,) = _sampleAt(base, head);
+                (uint64 secondPrice,) = _sampleAt(base, (head + 1) % WINDOW);
+                sumSquares -= PremiumMath.squaredReturn(oldestPrice, secondPrice);
+            }
+        }
+        _writeSample(base, head, price, time);
+        head = (head + 1) % WINDOW;
+        if (count < WINDOW) ++count;
+        if (sumSquares > type(uint128).max) sumSquares = type(uint128).max;
+        _store(base, count | (head << 16) | (sumSquares << 32) | (uint256(time) << 160));
+        emit PriceSampled(feedId, p.price, time, uint16(count));
+    }
+
+    function _sampleAt(uint256 base, uint256 index) private view returns (uint64 price, uint64 time) {
+        uint256 word = _load(base + 1 + (index >> 1));
+        uint256 lane = (index & 1) * 128;
+        price = uint64(word >> lane);
+        time = uint64(word >> (lane + 64));
+    }
+
+    function _writeSample(uint256 base, uint256 index, uint64 price, uint64 time) private {
+        uint256 slot = base + 1 + (index >> 1);
+        uint256 lane = (index & 1) * 128;
+        uint256 word = _load(slot);
+        word = (word & ~(uint256(type(uint128).max) << lane))
+            | ((uint256(price) | (uint256(time) << 64)) << lane);
+        _store(slot, word);
+    }
+
+    function _load(uint256 slot) private view returns (uint256 v) {
+        assembly ("memory-safe") {
+            v := sload(slot)
+        }
+    }
+
+    function _store(uint256 slot, uint256 v) private {
+        assembly ("memory-safe") {
+            sstore(slot, v)
+        }
+    }
+}
