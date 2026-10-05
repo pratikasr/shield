@@ -50,10 +50,35 @@ export interface LiveCover {
   premiumPerBlock: bigint;
 }
 
-export interface LiveProtocol {
+export interface ProtocolShare {
   shareBps?: number;
   maxShareBps?: number;
   treasury?: Address;
+}
+
+/** The protocol share and its cap. Owner-set, so read every 30 s rather than every block. */
+export function useProtocolShare(): ProtocolShare {
+  const enabled = Boolean(shield.registry);
+  const q = useReadContracts({
+    allowFailure: true,
+    contracts: enabled
+      ? [
+          { address: shield.registry!, abi: positionRegistryAbi, functionName: "protocolShareBps", chainId },
+          { address: shield.registry!, abi: positionRegistryAbi, functionName: "MAX_PROTOCOL_SHARE_BPS", chainId },
+          { address: shield.registry!, abi: positionRegistryAbi, functionName: "treasury", chainId },
+        ]
+      : [],
+    query: { enabled, refetchInterval: 30_000 },
+  });
+  const ok = (i: number) => (q.data?.[i]?.status === "success" ? q.data[i]!.result : undefined);
+  return {
+    shareBps: ok(0) !== undefined ? Number(ok(0)) : undefined,
+    maxShareBps: ok(1) !== undefined ? Number(ok(1)) : undefined,
+    treasury: ok(2) as Address | undefined,
+  };
+}
+
+export interface LiveCovers {
   activeCount?: number;
   /** Protocol share charged and not yet swept, in dollars (from the 18-decimal counter, so sub-micro amounts show). */
   pendingProtocol?: number;
@@ -61,22 +86,18 @@ export interface LiveProtocol {
   /** USDC debt of active covers that are paid up. */
   protectedDebt?: number;
   lapsedCount?: number;
-  /** True once the first full read has answered. */
-  loaded: boolean;
   error: Error | null;
 }
 
 /**
- * The protocol's live state on Monad, refreshed every block: the protocol share and treasury, active covers with their
- * Aave health factor and USDC debt, and the protocol premium waiting for the next sweep.
+ * Active covers, read live on every block: the registry's active borrowers with their Aave health factor, USDC debt
+ * and current rate, and the protocol premium waiting for the next sweep. Components that show these call it
+ * themselves, so a block re-renders them and not the whole page; wagmi shares one query between them.
  */
-export function useLiveProtocol(): LiveProtocol {
+export function useLiveCovers(): LiveCovers {
   const enabled = Boolean(shield.registry && shield.repricer);
   const baseCalls: (ContractFunctionParameters & { chainId?: number })[] = enabled
     ? [
-        { address: shield.registry!, abi: positionRegistryAbi, functionName: "protocolShareBps", chainId },
-        { address: shield.registry!, abi: positionRegistryAbi, functionName: "MAX_PROTOCOL_SHARE_BPS", chainId },
-        { address: shield.registry!, abi: positionRegistryAbi, functionName: "treasury", chainId },
         { address: shield.registry!, abi: positionRegistryAbi, functionName: "activeCount", chainId },
         { address: shield.registry!, abi: positionRegistryAbi, functionName: "activeBorrowers", args: [0n, BigInt(ACTIVE_READ_LIMIT)], chainId },
         { address: shield.repricer!, abi: repricerAbi, functionName: "pendingToTreasury", chainId },
@@ -85,8 +106,8 @@ export function useLiveProtocol(): LiveProtocol {
     : [];
   const base = useReadContracts({ allowFailure: true, contracts: baseCalls, query: { enabled } });
   const ok = <T,>(i: number): T | undefined => (base.data?.[i]?.status === "success" ? (base.data[i]!.result as T) : undefined);
-  const borrowers = ok<readonly Address[]>(4);
-  const debtToken = ok<Address>(6);
+  const borrowers = ok<readonly Address[]>(1);
+  const debtToken = ok<Address>(3);
 
   const coverCalls: (ContractFunctionParameters & { chainId?: number })[] =
     borrowers && debtToken
@@ -123,17 +144,14 @@ export function useLiveProtocol(): LiveProtocol {
     });
   }, [borrowers, per.data]);
 
-  const pending = ok<bigint>(5);
+  const pending = ok<bigint>(2);
+  const count = ok<bigint>(0);
   return {
-    shareBps: ok<number>(0) !== undefined ? Number(ok<number>(0)) : undefined,
-    maxShareBps: ok<number>(1) !== undefined ? Number(ok<number>(1)) : undefined,
-    treasury: ok<Address>(2),
-    activeCount: ok<bigint>(3) !== undefined ? Number(ok<bigint>(3)) : undefined,
+    activeCount: count !== undefined ? Number(count) : undefined,
     pendingProtocol: pending !== undefined ? toNumber(pending, 18) : undefined,
     covers,
     protectedDebt: covers?.filter((c) => !c.lapsed).reduce((s, c) => s + c.usdcDebt, 0),
     lapsedCount: covers?.filter((c) => c.lapsed).length,
-    loaded: base.isSuccess && (covers !== undefined || !borrowers),
     error: base.error ?? null,
   };
 }
