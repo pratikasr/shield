@@ -123,28 +123,33 @@ function useBlocksSince(condition: boolean, block: bigint | undefined): number {
   return condition && since.current !== undefined && block !== undefined ? Number(block - since.current) : 0;
 }
 
-export function BorrowView() {
+/**
+ * The borrower page. `initialWatch` is the `?address=` parameter and `walletHint` says a wallet was connected on the
+ * last visit (lib/wallet-cookie.ts), both read by the server so the first paint needs no script.
+ */
+export function BorrowView({ initialWatch = "", walletHint = false }: { initialWatch?: string; walletHint?: boolean }) {
   const { address, isConnected, status } = useAccount();
-  // Read after mount: useSearchParams would make Next skip server rendering of the whole page.
-  const [watch, setWatch] = useState({ read: false, raw: "" });
-  const [settled, setSettled] = useState(false);
+  const [watchRaw, setWatchRaw] = useState(initialWatch);
+  // A returning wallet is restored by wagmi just after mount: wait a moment before offering to connect. A first visit
+  // gets the connect prompt at once.
+  const [settled, setSettled] = useState(!walletHint);
   useEffect(() => {
-    const read = () => setWatch({ read: true, raw: new URLSearchParams(window.location.search).get("address") ?? "" });
-    read();
+    const read = () => setWatchRaw(new URLSearchParams(window.location.search).get("address") ?? "");
     window.addEventListener("popstate", read);
-    // wagmi restores a wallet just after mount; wait a moment before offering to connect.
-    const t = setTimeout(() => setSettled(true), 400);
+    const t = walletHint ? setTimeout(() => setSettled(true), 400) : undefined;
     return () => {
       window.removeEventListener("popstate", read);
       clearTimeout(t);
     };
-  }, []);
-  const parsed = parseWatchParam(watch.raw);
+  }, [walletHint]);
+  const parsed = parseWatchParam(watchRaw);
   const watching = parsed.address;
   const connected = isConnected ? address : undefined;
   // ?address= wins over the connected wallet: the page shows what the link says, read only.
   const viewer = watching ?? connected;
-  const reconnecting = status === "reconnecting" || status === "connecting";
+  // "reconnecting" is wagmi restoring a stored wallet; "connecting" is also what a first visit shows while wagmi checks
+  // for one, so it does not hide the connect prompt.
+  const reconnecting = status === "reconnecting";
   const wrongNetwork = useWrongNetwork();
 
   const { config } = useShieldConfig();
@@ -187,7 +192,7 @@ export function BorrowView() {
       </Notice>
     );
   }
-  if (!watch.read || (!viewer && (reconnecting || !settled))) return <PositionSkeleton />;
+  if (!viewer && (reconnecting || !settled)) return <PositionSkeleton />;
   if (parsed.invalid) {
     return (
       <Notice
@@ -200,7 +205,7 @@ export function BorrowView() {
         }
         footer={<WatchForm />}
       >
-        <span className="break-all">&ldquo;{watch.raw}&rdquo;</span> is not a valid Monad address. Check it, including its upper and lower case letters, and try again.
+        <span className="break-all">&ldquo;{watchRaw}&rdquo;</span> is not a valid Monad address. Check it, including its upper and lower case letters, and try again.
       </Notice>
     );
   }

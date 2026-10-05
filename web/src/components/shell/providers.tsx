@@ -6,13 +6,14 @@ import type { Wallet } from "@rainbow-me/rainbowkit";
 import { injectedWallet, metaMaskWallet, rabbyWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { monadTestnet } from "viem/chains";
-import { createConfig, createConnector, http, WagmiProvider } from "wagmi";
+import { createConfig, createConnector, http, useAccount, WagmiProvider } from "wagmi";
 import { mock } from "wagmi/connectors";
 import { monadMainnet, supportedChains } from "@/lib/chains";
 import { isFork } from "@/lib/env";
+import { setWalletCookie } from "@/lib/wallet-cookie";
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
 
@@ -81,11 +82,24 @@ function Rainbow({ children }: { children: ReactNode }) {
   );
 }
 
+/** Keeps lib/wallet-cookie.ts in step with the wallet: set on connect, cleared on a disconnect or a failed restore. */
+function WalletCookie() {
+  const { status } = useAccount();
+  const last = useRef(status);
+  useEffect(() => {
+    if (status === "connected") setWalletCookie(true);
+    else if (status === "disconnected" && last.current !== "disconnected") setWalletCookie(false);
+    last.current = status;
+  }, [status]);
+  return null;
+}
+
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 2, refetchOnWindowFocus: false } } }));
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
+        <WalletCookie />
         <Rainbow>
           <TooltipProvider delayDuration={150}>{children}</TooltipProvider>
         </Rainbow>
