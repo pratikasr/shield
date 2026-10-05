@@ -34,6 +34,10 @@ library ShieldDeployment {
         uint32 minCoverSeconds;
         /// @notice cbBTC stays listed but disabled until a cbBTC/USDC swap route exists (audit M-5).
         bool cbbtcEnabled;
+        /// @notice Receives the protocol share of premiums; defaults to the owner (ADR-037).
+        address treasury;
+        /// @notice Protocol share of premiums, in bps; at most PositionRegistry.MAX_PROTOCOL_SHARE_BPS.
+        uint16 protocolShareBps;
     }
 
     struct Deployed {
@@ -64,6 +68,8 @@ library ShieldDeployment {
         c.sigmaFallback = SIGMA_FALLBACK;
         c.minCoverSeconds = 900;
         c.cbbtcEnabled = false;
+        c.treasury = owner;
+        c.protocolShareBps = 1000;
     }
 
     function deploy(Config memory c) internal returns (Deployed memory d) {
@@ -85,6 +91,7 @@ library ShieldDeployment {
         if (c.minCoverSeconds != d.executor.minCoverSeconds()) {
             d.executor.setMinCoverSeconds(c.minCoverSeconds);
         }
+        if (c.protocolShareBps != 0) d.registry.setProtocolShare(c.treasury, c.protocolShareBps);
         d.registry.setAsset(c.weth, c.wethFeed, c.k, c.sigmaFallback, true);
         if (c.cbbtc != address(0)) {
             d.registry.setAsset(c.cbbtc, c.cbbtcFeed, c.k, c.sigmaFallback, c.cbbtcEnabled);

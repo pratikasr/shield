@@ -244,4 +244,86 @@ describe("audit regressions (5 Oct 2026)", () => {
     await indexer.process({ chains: { 143: { simulate: [repriced(11, true)] } } });
     expect((await indexer.Position.getOrThrow(borrower.toLowerCase())).status).toBe("Unprotected");
   });
+
+  it("splits each premium by the protocol share in force and keeps hourly, daily and all-time earnings", async () => {
+    const indexer = createTestIndexer();
+    const borrower = Addresses.mockAddresses[4]!;
+    const treasury = Addresses.mockAddresses[5]!;
+    const lp = Addresses.mockAddresses[6]!;
+    const day = 1_791_158_400; // a UTC midnight
+    const at = (n: number, t: number) => ({ number: n, timestamp: t });
+    const repriced = (n: number, t: number, charged: bigint) => ({
+      contract: "Repricer" as const,
+      event: "Repriced" as const,
+      block: at(n, t),
+      params: { borrower, charged, premiumPerBlock: 1n, healthFactor: 107n * 10n ** 16n, sigma: 1n, prepaid: WAD, lapsed: false },
+    });
+
+    await indexer.process({
+      chains: {
+        143: {
+          simulate: [
+            { contract: "ShieldVault", event: "Deposit", block: at(1, day + 60), params: { sender: lp, owner: lp, assets: 50_000_000n, shares: 50_000_000n * 10n ** 6n } },
+            { contract: "PositionRegistry", event: "OptedIn", block: at(2, day + 120), params: { borrower, collateral: WETH, trigger: 10_500n, maxDiscountBps: 100n } },
+            // Before any ProtocolShareSet the share is the contract's initial zero.
+            repriced(3, day + 180, 1_000_000_000n),
+            { contract: "PositionRegistry", event: "ProtocolShareSet", block: at(4, day + 3_700), params: { treasury, protocolShareBps: 1000n } },
+            repriced(5, day + 3_800, 2_000_000_007n),
+            { contract: "Repricer", event: "ProtocolPremiumPaid", block: at(6, day + 90_000), params: { treasury, amount: 3n } },
+            { contract: "PositionRegistry", event: "ExitParamsSet", block: at(7, day + 90_100), params: { exitDiscountBps: 150n, exitHfBuffer: 600n, dMin: 100n } },
+            {
+              contract: "Executor",
+              event: "Exited",
+              block: at(8, day + 90_200),
+              params: {
+                borrower,
+                collateral: WETH,
+                repaid: 26_000_000n,
+                seized: 10n ** 16n,
+                savedVsAave: 1_170_000n,
+                healthFactorBefore: 1_045n * 10n ** 15n,
+                healthFactorAfter: 112n * 10n ** 16n,
+                flashLoanAmount: 0n,
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    const reprices = (await indexer.Reprice.getAll()).sort((a, b) => Number(a.blockNumber - b.blockNumber));
+    expect(reprices.map((r) => r.protocolShare)).toEqual([0n, 200_000_000n]); // floor(2_000_000_007 x 1000 / 10_000)
+
+    const all = await indexer.EarningsBucket.getOrThrow("all");
+    expect(all.premiumCharged).toBe(3_000_000_007n);
+    expect(all.premiumToProtocol).toBe(200_000_000n);
+    expect(all.premiumToVault).toBe(2_800_000_007n);
+    expect(all.protocolPaid).toBe(3n);
+    expect(all.reprices).toBe(2);
+    expect(all.optIns).toBe(1);
+    expect(all.deposited).toBe(50_000_000n);
+    expect(all.exits).toBe(1);
+    expect(all.debtRepaid).toBe(26_000_000n);
+    expect(all.savedVsAave).toBe(1_170_000n);
+    expect(all.exitDiscount).toBe(390_000n); // 26 USDC at the 150 bps set before the exit
+
+    const day0 = await indexer.EarningsBucket.getOrThrow(`day-${day}`);
+    expect(day0.period).toBe("day");
+    expect(day0.start).toBe(BigInt(day));
+    expect(day0.premiumCharged).toBe(3_000_000_007n);
+    expect(day0.exits).toBe(0);
+    const day1 = await indexer.EarningsBucket.getOrThrow(`day-${day + 86_400}`);
+    expect(day1.exits).toBe(1);
+    expect(day1.protocolPaid).toBe(3n);
+    expect((await indexer.EarningsBucket.getOrThrow(`hour-${day}`)).premiumCharged).toBe(1_000_000_000n);
+    expect((await indexer.EarningsBucket.getOrThrow(`hour-${day + 3_600}`)).premiumToProtocol).toBe(200_000_000n);
+
+    const exit = (await indexer.Exit.getAll())[0]!;
+    expect(exit.trigger).toBe(10_500);
+    expect(exit.discountBps).toBe(150);
+    const config = await indexer.ProtocolConfig.getOrThrow("config");
+    expect(config.protocolShareBps).toBe(1000);
+    expect(config.treasury).toBe(treasury.toLowerCase());
+    expect((await indexer.ProtocolPayout.getAll()).map((p) => p.amount)).toEqual([3n]);
+  });
 });

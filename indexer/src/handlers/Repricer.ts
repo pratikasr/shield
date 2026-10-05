@@ -1,9 +1,11 @@
 import { indexer } from "envio";
-import { USDC_TO_WAD, eventId, fields, loadPosition } from "./shared.js";
+import { USDC_TO_WAD, addEarnings, eventId, fields, loadConfig, loadPosition, protocolPart } from "./shared.js";
 
 indexer.onEvent({ contract: "Repricer", event: "Repriced", fields }, async ({ event, context }) => {
   const p = await loadPosition(context, event.params.borrower);
   const { charged, premiumPerBlock, healthFactor, sigma, prepaid, lapsed } = event.params;
+  const config = await loadConfig(context);
+  const protocolShare = protocolPart(charged, config.protocolShareBps);
   context.Reprice.set({
     id: eventId(event),
     position_id: p.id,
@@ -14,6 +16,7 @@ indexer.onEvent({ contract: "Repricer", event: "Repriced", fields }, async ({ ev
     sigma,
     prepaid,
     lapsed,
+    protocolShare,
     blockNumber: BigInt(event.block.number),
     timestamp: BigInt(event.block.timestamp),
     txHash: event.transaction.hash,
@@ -32,6 +35,12 @@ indexer.onEvent({ contract: "Repricer", event: "Repriced", fields }, async ({ ev
     repriceCount: p.repriceCount + 1,
     lastRepricedBlock: BigInt(event.block.number),
     status: lapsed ? "Unprotected" : "Protected",
+  });
+  await addEarnings(context, event.block.timestamp, {
+    premiumCharged: charged,
+    premiumToProtocol: protocolShare,
+    premiumToVault: charged - protocolShare,
+    reprices: 1,
   });
 });
 
@@ -87,4 +96,16 @@ indexer.onEvent({ contract: "Repricer", event: "PriceSampled" }, async ({ event,
 
 indexer.onEvent({ contract: "Repricer", event: "PremiumForwarded" }, async () => {
   // The vault's PremiumReceived event carries the same amount; it is counted there.
+});
+
+indexer.onEvent({ contract: "Repricer", event: "ProtocolPremiumPaid", fields }, async ({ event, context }) => {
+  context.ProtocolPayout.set({
+    id: eventId(event),
+    treasury: event.params.treasury.toLowerCase(),
+    amount: event.params.amount,
+    blockNumber: BigInt(event.block.number),
+    timestamp: BigInt(event.block.timestamp),
+    txHash: event.transaction.hash,
+  });
+  await addEarnings(context, event.block.timestamp, { protocolPaid: event.params.amount });
 });

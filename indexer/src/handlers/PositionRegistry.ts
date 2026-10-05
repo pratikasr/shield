@@ -1,5 +1,5 @@
 import { indexer } from "envio";
-import { fields, loadPosition } from "./shared.js";
+import { addEarnings, fields, loadConfig, loadPosition } from "./shared.js";
 
 indexer.onEvent({ contract: "PositionRegistry", event: "OptedIn", fields }, async ({ event, context }) => {
   const p = await loadPosition(context, event.params.borrower);
@@ -15,6 +15,7 @@ indexer.onEvent({ contract: "PositionRegistry", event: "OptedIn", fields }, asyn
     lastRepricedBlock: BigInt(event.block.number),
     exitedAt: undefined,
   });
+  await addEarnings(context, event.block.timestamp, { optIns: 1 });
 });
 
 indexer.onEvent({ contract: "PositionRegistry", event: "TriggerSet" }, async ({ event, context }) => {
@@ -45,4 +46,19 @@ indexer.onEvent({ contract: "PositionRegistry", event: "CoverRestored" }, async 
 indexer.onEvent({ contract: "PositionRegistry", event: "RecordClosed" }, async ({ event, context }) => {
   const p = await loadPosition(context, event.params.borrower);
   context.Position.set({ ...p, premiumPerBlock: 0n });
+});
+
+indexer.onEvent({ contract: "PositionRegistry", event: "ExitParamsSet" }, async ({ event, context }) => {
+  const c = await loadConfig(context);
+  context.ProtocolConfig.set({
+    ...c,
+    exitDiscountBps: Number(event.params.exitDiscountBps),
+    exitHfBuffer: Number(event.params.exitHfBuffer),
+    dMin: Number(event.params.dMin),
+  });
+});
+
+indexer.onEvent({ contract: "PositionRegistry", event: "ProtocolShareSet" }, async ({ event, context }) => {
+  const c = await loadConfig(context);
+  context.ProtocolConfig.set({ ...c, treasury: event.params.treasury.toLowerCase(), protocolShareBps: Number(event.params.protocolShareBps) });
 });

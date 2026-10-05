@@ -18,6 +18,7 @@ interface IRepricer {
     event ToppedUp(address indexed borrower, uint256 amount);
     event Withdrawn(address indexed borrower, uint256 amount);
     event PremiumForwarded(uint256 amount);
+    event ProtocolPremiumPaid(address indexed treasury, uint256 amount);
     event BlockTimeSet(uint32 blockTimeMs);
 
     error NotExecutor();
@@ -36,6 +37,7 @@ interface IRepricer {
     function withdrawUnused(uint256 amount) external;
     function sweep() external returns (uint256 amount);
     function pendingPremium() external view returns (uint256);
+    function pendingProtocolPremium() external view returns (uint256);
 
     function quote(address borrower)
         external

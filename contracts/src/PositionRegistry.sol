@@ -33,6 +33,8 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
     /// @notice Bounds on an asset's fallback volatility, the same clamp the Repricer applies to measured sigma.
     uint64 public constant MIN_SIGMA_FALLBACK = 0.1e18;
     uint64 public constant MAX_SIGMA_FALLBACK = 5e18;
+    /// @notice Upper bound on the protocol's share of premiums (ADR-037).
+    uint16 public constant MAX_PROTOCOL_SHARE_BPS = 2000;
 
     bytes32 private constant RECORD_NAMESPACE = keccak256("shield.registry.record.v1");
     uint256 private constant PAGE_MASK = ~uint256(127);
@@ -46,10 +48,16 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
     uint32 public exitHfBuffer = 600;
     /// @notice Floor on the HF distance in the premium formula (HF x 1e4).
     uint32 public dMin = 100;
+    /// @notice Share of each premium charge that goes to the protocol treasury, in bps (ADR-037). The rest of the
+    /// premium, and the whole exit discount, goes to the vault. Packed with the exit parameters, so the Repricer
+    /// reads it from a slot it already touches.
+    uint16 public protocolShareBps;
 
     mapping(address collateral => AssetConfig) private _assetConfig;
     address[] private _assets;
     address[] private _active;
+    /// @notice Receives the protocol share of premiums (Repricer.sweep).
+    address public treasury;
 
     modifier onlyRepricer() {
         if (msg.sender != repricer) revert NotRepricer();
@@ -234,6 +242,15 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
     }
 
     /// @notice Exit discount (bps), post-exit HF buffer and premium distance floor (both HF x 1e4).
+    /// @notice Sets the protocol's share of premiums and the treasury that receives it. The share applies to charges
+    /// from the next reprice on; premium already charged keeps the split it was charged with.
+    function setProtocolShare(address treasury_, uint16 protocolShareBps_) external onlyOwner {
+        if (treasury_ == address(0) || protocolShareBps_ > MAX_PROTOCOL_SHARE_BPS) revert InvalidParameter();
+        treasury = treasury_;
+        protocolShareBps = protocolShareBps_;
+        emit ProtocolShareSet(treasury_, protocolShareBps_);
+    }
+
     function setExitParams(uint16 exitDiscountBps_, uint32 exitHfBuffer_, uint32 dMin_) external onlyOwner {
         if (exitDiscountBps_ == 0 || exitDiscountBps_ > MAX_DISCOUNT_CEILING_BPS) revert InvalidParameter();
         if (exitHfBuffer_ < 100 || exitHfBuffer_ > 5000) revert InvalidParameter();

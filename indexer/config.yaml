@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
-# Shield on Monad mainnet (chain 143): positions, repricing, exits and vault flows (ADR-005, Envio bounty).
+# Shield on Monad mainnet (chain 143): positions, repricing, exits, vault flows, and the platform's earnings by
+# hour, day and since deployment (ADR-005, ADR-037, Envio bounty).
 # Hosted: HyperSync with ENVIO_API_TOKEN. Local rehearsal against a fork: ENVIO_RPC_URL=http://127.0.0.1:8545
 # and ENVIO_RPC_FOR=sync. The contract addresses and the start block have no defaults: ENVIO_START_BLOCK and the
 # four ENVIO_*_ADDRESS variables must be set (indexer/.env, written by scripts/stack.sh on a fork, or the hosted
@@ -18,6 +19,8 @@ contracts:
       - event: CoverLapsed
       - event: CoverRestored
       - event: RecordClosed
+      - event: ExitParamsSet
+      - event: ProtocolShareSet
   - name: Repricer
     abi_file_path: ./abis/Repricer.json
     events:
@@ -26,6 +29,7 @@ contracts:
       - event: ToppedUp
       - event: Withdrawn
       - event: PremiumForwarded
+      - event: ProtocolPremiumPaid
   - name: Executor
     abi_file_path: ./abis/Executor.json
     events:

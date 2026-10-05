@@ -1,5 +1,5 @@
 import { indexer, type VaultFlow } from "envio";
-import { eventId, fields, loadStats } from "./shared.js";
+import { addEarnings, eventId, fields, loadStats } from "./shared.js";
 
 function flow(
   event: { chainId: number; logIndex: number; block: { number: number; timestamp: number }; transaction: { hash: string } },
@@ -30,6 +30,7 @@ indexer.onEvent({ contract: "ShieldVault", event: "Deposit", fields }, async ({ 
     deposited: stats.deposited + event.params.assets,
     depositors: stats.depositors + (depositor && depositor.shares > 0n ? 0 : 1),
   });
+  await addEarnings(context, event.block.timestamp, { deposited: event.params.assets });
 });
 
 indexer.onEvent({ contract: "ShieldVault", event: "Withdraw", fields }, async ({ event, context }) => {
@@ -45,6 +46,7 @@ indexer.onEvent({ contract: "ShieldVault", event: "Withdraw", fields }, async ({
     withdrawn: stats.withdrawn + event.params.assets,
     depositors: stats.depositors - (before > 0n && left <= 0n && stats.depositors > 0 ? 1 : 0),
   });
+  await addEarnings(context, event.block.timestamp, { withdrawn: event.params.assets });
 });
 
 const ZERO = "0x0000000000000000000000000000000000000000";

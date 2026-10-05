@@ -129,6 +129,8 @@ contract AccountingHandler is Test {
 
 /// @notice Money is never created or lost between the borrower, the Repricer and the vault.
 contract AccountingInvariantTest is StdInvariant, Test {
+    address internal constant TREASURY = address(0x7EA5);
+
     PositionRegistry internal reg;
     Repricer internal rp;
     ShieldVault internal vault;
@@ -161,6 +163,8 @@ contract AccountingInvariantTest is StdInvariant, Test {
         );
         reg.setModules(address(rp), makeAddr("executor"));
         vault.setModules(makeAddr("executor"), address(rp));
+        // A 10% protocol share (ADR-037), so conservation is checked across the vault and the treasury.
+        reg.setProtocolShare(TREASURY, 1000);
         handler = new AccountingHandler(reg, rp, pool, pyth, usdc);
         targetContract(address(handler));
     }
@@ -171,10 +175,11 @@ contract AccountingInvariantTest is StdInvariant, Test {
         for (uint256 i; i < handler.usersLength(); ++i) {
             prepaid += reg.record(handler.users(i)).prepaid;
         }
-        assertEq(usdc.balanceOf(address(rp)) * 1e12, prepaid + rp.pendingToVault());
+        assertEq(usdc.balanceOf(address(rp)) * 1e12, prepaid + rp.pendingToVault() + rp.pendingToTreasury());
     }
 
-    /// @notice Every unit that left a borrower is either still prepaid, forwarded to the vault, or pending.
+    /// @notice Every unit that left a borrower is either still prepaid, forwarded to the vault or the treasury, or
+    /// pending.
     function invariant_conservation() public view {
         uint256 prepaid;
         uint256 accrued;
@@ -184,7 +189,13 @@ contract AccountingInvariantTest is StdInvariant, Test {
             accrued += r.accrued;
         }
         assertEq(prepaid + accrued, (handler.ghostToppedUp() - handler.ghostWithdrawn()) * 1e12);
-        assertEq(accrued, vault.totalPremiumEarned() * 1e12 + rp.pendingToVault());
+        assertEq(
+            accrued,
+            (vault.totalPremiumEarned() + usdc.balanceOf(TREASURY)) * 1e12 + rp.pendingToVault()
+                + rp.pendingToTreasury()
+        );
+        // The treasury never receives more than the capped share of what was charged.
+        assertLe(usdc.balanceOf(TREASURY) * 1e12, accrued * 1000 / 10_000);
         assertEq(usdc.balanceOf(address(vault)), vault.totalPremiumEarned());
     }
 

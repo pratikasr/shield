@@ -98,4 +98,28 @@ contract RepricerForkTest is ForkBase {
         assertEq(d.vault.totalPremiumEarned(), swept);
         assertEq(d.vault.totalAssets() - navBefore, swept, "sweeping does not change NAV");
     }
+
+    /// @notice The deployment's 10% protocol share of premiums reaches the treasury in real USDC (ADR-037).
+    function test_protocolShare_paidToTreasury() public {
+        assertEq(d.registry.protocolShareBps(), 1000, "deployment default");
+        assertEq(d.registry.treasury(), address(this), "treasury defaults to the owner");
+        _nextBlock();
+        d.repricer.reprice(borrower, _none());
+        uint256 accruedBefore = d.registry.record(borrower).accrued;
+        vm.roll(block.number + 200_000);
+        vm.warp(block.timestamp + 60_000);
+        d.repricer.reprice(borrower, _none());
+        uint256 charged = d.registry.record(borrower).accrued - accruedBefore;
+        assertEq(uint256(d.repricer.pendingToTreasury()), charged * 1000 / 10_000);
+        uint256 owed = d.repricer.pendingProtocolPremium();
+        assertGt(owed, 0);
+        uint256 before = usdc.balanceOf(address(this));
+        d.repricer.sweep();
+        assertEq(usdc.balanceOf(address(this)) - before, owed, "treasury paid in USDC");
+        assertEq(
+            d.vault.totalPremiumEarned() * 1e12 + owed * 1e12 + d.repricer.pendingToVault()
+                + d.repricer.pendingToTreasury(),
+            charged
+        );
+    }
 }

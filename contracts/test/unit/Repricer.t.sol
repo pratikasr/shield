@@ -216,6 +216,98 @@ contract RepricerTest is Test {
         assertEq(rp.sweep(), 0, "nothing left to sweep");
     }
 
+    // ---------------------------------------------------------------- protocol share (ADR-037)
+
+    address internal treasury = makeAddr("treasury");
+
+    function _chargeLarge(uint256 blocks) internal returns (uint256 owed) {
+        pool.setAccount(alice, 1_300_000e8, 1_000_000e8, 1.09e18);
+        rp.reprice(alice, _none());
+        uint256 rate = reg.record(alice).premiumPerBlock;
+        vm.roll(block.number + blocks);
+        rp.reprice(alice, _none());
+        owed = rate * blocks;
+    }
+
+    function test_protocolShare_splitsEachCharge() public {
+        reg.setProtocolShare(treasury, 1000);
+        uint256 owed = _chargeLarge(100);
+        uint256 toTreasury = owed * 1000 / 10_000;
+        assertEq(rp.pendingToTreasury(), toTreasury, "10% of the charge");
+        assertEq(rp.pendingToVault(), owed - toTreasury, "the rest to the vault");
+        // The vault's NAV and premium figures count only its own part.
+        assertEq(vault.premiumEarned(), (owed - toTreasury) / 1e12);
+        assertEq(rp.pendingProtocolPremium(), toTreasury / 1e12);
+    }
+
+    function test_protocolShare_sweepPaysTreasuryAndVault() public {
+        reg.setProtocolShare(treasury, 1500);
+        uint256 owed = _chargeLarge(100);
+        uint256 toTreasury = owed * 1500 / 10_000;
+        vm.expectEmit(true, false, false, true, address(rp));
+        emit IRepricer.ProtocolPremiumPaid(treasury, toTreasury / 1e12);
+        assertEq(rp.sweep(), (owed - toTreasury) / 1e12, "returns the vault's part");
+        assertEq(usdc.balanceOf(treasury), toTreasury / 1e12);
+        assertEq(usdc.balanceOf(address(vault)), (owed - toTreasury) / 1e12);
+        assertEq(vault.totalPremiumEarned(), (owed - toTreasury) / 1e12);
+        assertEq(rp.pendingToTreasury(), toTreasury % 1e12, "sub-unit remainder waits");
+        assertEq(rp.pendingToVault(), (owed - toTreasury) % 1e12);
+    }
+
+    function test_protocolShare_changeAppliesOnlyToLaterCharges() public {
+        reg.setProtocolShare(treasury, 2000);
+        uint256 first = _chargeLarge(100);
+        uint256 rate = reg.record(alice).premiumPerBlock;
+        reg.setProtocolShare(treasury, 0);
+        vm.roll(block.number + 50);
+        rp.reprice(alice, _none());
+        uint256 second = rate * 50;
+        assertEq(rp.pendingToTreasury(), first * 2000 / 10_000, "the second charge owes the protocol nothing");
+        assertEq(rp.pendingToVault(), first - first * 2000 / 10_000 + second);
+        // Premium charged at the old share is still paid out after the share drops to zero.
+        rp.sweep();
+        assertEq(usdc.balanceOf(treasury), first * 2000 / 10_000 / 1e12);
+    }
+
+    function test_protocolShare_zeroByDefault_allToVault() public {
+        assertEq(reg.protocolShareBps(), 0);
+        uint256 owed = _chargeLarge(100);
+        assertEq(rp.pendingToTreasury(), 0);
+        assertEq(rp.pendingToVault(), owed);
+    }
+
+    function test_protocolShare_vaultSweepAlsoPaysTreasury() public {
+        reg.setProtocolShare(treasury, 1000);
+        _chargeLarge(1000);
+        uint256 vaultPart = rp.pendingPremium();
+        uint256 protocolPart = rp.pendingProtocolPremium();
+        assertGt(protocolPart, 0);
+        vm.prank(executor);
+        vault.fundExit(vaultPart);
+        assertEq(usdc.balanceOf(treasury), protocolPart, "the vault's sweep pays the treasury too");
+        assertEq(usdc.balanceOf(executor), vaultPart);
+    }
+
+    function testFuzz_protocolShare_conservesEveryCharge(uint16 share, uint32 blocks) public {
+        share = uint16(bound(share, 0, reg.MAX_PROTOCOL_SHARE_BPS()));
+        blocks = uint32(bound(blocks, 1, 50_000));
+        if (share != 0) reg.setProtocolShare(treasury, share);
+        uint256 accruedBefore = reg.record(alice).accrued;
+        pool.setAccount(alice, 1_300_000e8, 1_000_000e8, 1.09e18);
+        rp.reprice(alice, _none());
+        vm.roll(block.number + blocks);
+        rp.reprice(alice, _none());
+        uint256 charged = reg.record(alice).accrued - accruedBefore;
+        assertEq(uint256(rp.pendingToVault()) + rp.pendingToTreasury(), charged, "nothing created or lost");
+        assertLe(rp.pendingToTreasury(), charged * share / 10_000 + 1);
+        rp.sweep();
+        assertEq(
+            usdc.balanceOf(address(vault)) * 1e12 + usdc.balanceOf(treasury) * 1e12 + rp.pendingToVault()
+                + rp.pendingToTreasury(),
+            charged
+        );
+    }
+
     function test_vaultPullsPendingPremiumWhenPayingOut() public {
         pool.setAccount(alice, 1_300_000e8, 1_000_000e8, 1.09e18);
         rp.reprice(alice, _none());

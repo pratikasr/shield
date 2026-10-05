@@ -48,11 +48,15 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     /// @notice Block time used to turn an annual premium into a per-block premium (MIP-12: 300 ms).
     uint32 public blockTimeMs = 300;
     /// @notice Premium owed to the vault that is smaller than one asset unit, in 18-decimal units.
-    uint256 public pendingToVault;
+    /// @notice Charged premium not yet swept, 18-decimal units: the vault's part and the protocol's (ADR-037).
+    /// One slot, so a charge writes both with a single cold store.
+    uint128 public pendingToVault;
+    uint128 public pendingToTreasury;
 
     struct Ctx {
         uint256 assetPrice;
         uint256 dMin;
+        uint256 protocolShareBps;
     }
 
     constructor(
@@ -150,22 +154,38 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         _charge(borrower, r, false, _ctx());
     }
 
-    /// @notice Moves accrued premium, in whole asset units, to the vault; the remainder waits. Anyone may call it,
-    /// and the vault calls it whenever it moves money. Repricing itself never transfers tokens, so its gas stays
-    /// the same block after block.
+    /// @notice Moves charged premium, in whole asset units, to the vault and the protocol's share to the treasury;
+    /// remainders under one unit wait. Anyone may call it, and the vault calls it whenever it moves money.
+    /// Repricing itself never transfers tokens, so its gas stays the same block after block.
+    /// @return amount Asset units sent to the vault.
     function sweep() external nonReentrant returns (uint256 amount) {
         uint256 pending = pendingToVault;
         amount = pending / scale;
-        if (amount == 0) return 0;
-        pendingToVault = pending - amount * scale;
-        asset.safeTransfer(address(vault), amount);
-        vault.notifyPremium(amount);
-        emit PremiumForwarded(amount);
+        if (amount != 0) {
+            pendingToVault = uint128(pending - amount * scale);
+            asset.safeTransfer(address(vault), amount);
+            vault.notifyPremium(amount);
+            emit PremiumForwarded(amount);
+        }
+        uint256 pendingProtocol = pendingToTreasury;
+        uint256 toTreasury = pendingProtocol / scale;
+        if (toTreasury != 0) {
+            // A share above zero can only be set together with a treasury, so this is never address(0).
+            address treasury = registry.treasury();
+            pendingToTreasury = uint128(pendingProtocol - toTreasury * scale);
+            asset.safeTransfer(treasury, toTreasury);
+            emit ProtocolPremiumPaid(treasury, toTreasury);
+        }
     }
 
-    /// @notice Premium accrued for the vault and not yet swept, in asset units.
+    /// @notice Premium charged for the vault and not yet swept, in asset units.
     function pendingPremium() external view returns (uint256) {
         return pendingToVault / scale;
+    }
+
+    /// @notice Premium charged for the protocol treasury and not yet swept, in asset units.
+    function pendingProtocolPremium() external view returns (uint256) {
+        return pendingToTreasury / scale;
     }
 
     // ---------------------------------------------------------------- owner
@@ -254,6 +274,7 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     function _ctx() private view returns (Ctx memory c) {
         c.assetPrice = oracle.getAssetPrice(address(asset));
         c.dMin = registry.dMin();
+        c.protocolShareBps = registry.protocolShareBps();
     }
 
     /// @dev Charges every block since the last reprice at the higher of the stored rate and the live one, then
@@ -291,7 +312,9 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
             SafeCast.toUint64(sigma),
             lapsed
         );
-        pendingToVault += charged;
+        uint256 toTreasury = charged * c.protocolShareBps / 10_000;
+        pendingToTreasury += SafeCast.toUint128(toTreasury);
+        pendingToVault += SafeCast.toUint128(charged - toTreasury);
         emit Repriced(borrower, charged, rate, hf, sigma, prepaid, lapsed);
     }
 

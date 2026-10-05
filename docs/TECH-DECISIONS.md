@@ -236,6 +236,25 @@ Decision: supersedes the defaults in ADR-025. The keeper reprices every block fo
 
 Why: with no window, every-block repricing of one borrower costs about 7,200 MON a day (ADR-025), and a keeper left running would spend its balance on reprices while a due exit could not be paid for. Lapsed or empty covers cannot be charged, so repricing them only spends gas. One `repriceMany` for every borrower stops fitting under the ceiling at about 50 borrowers, and one reverting borrower blocked the whole batch. The cached limit and access list cut a steady pass from 9 sequential round trips to 3, which keeps three reprices in consecutive 300 ms blocks within reach on mainnet.
 
+## ADR-037 A protocol share of premiums; the exit discount stays with liquidity providers (5 Oct 2026)
+
+Decision: `PositionRegistry.protocolShareBps` (default 1000 at deploy, 10%; capped in code at `MAX_PROTOCOL_SHARE_BPS`, 2000) of every premium charge goes to `PositionRegistry.treasury` (default: the owner; `SHIELD_TREASURY` and `SHIELD_PROTOCOL_SHARE_BPS` override it at deploy). The Repricer splits each charge when it bills it, into `pendingToVault` and `pendingToTreasury` (one storage slot), and `sweep()` pays both, emitting `ProtocolPremiumPaid`. A change of share applies from the next charge; premium already charged keeps its split. The whole exit discount still goes to the vault, and the borrower's cost is unchanged.
+
+Why: a clear protocol revenue line the owner cannot raise past a fixed cap. Premiums are the steady income and accrue every 300 ms block. The exit discount is what pays liquidity providers for holding the seized collateral's price risk (SECURITY.md, Known limits), so taking part of it would weaken the side that funds exits. Splitting at charge time keeps the split exact, and the exit path, the most audited code, does not change. The share is packed into the slot that already holds the exit parameters, so a reprice reads it from a slot it already touches; the second pending counter shares a slot with the first.
+
+## ADR-038 Analytics from the indexer; a live Monad block stream; other lenders shown as coming soon (5 Oct 2026)
+
+Decision:
+- The indexer keeps earnings buckets (since deployment, per UTC day, per hour): premiums charged and their split, treasury payouts, gross exit discounts, exits, debt repaid, savings against Aave's bonus, reprices, opt-ins, deposits and withdrawals. It also keeps a config row and the treasury payouts.
+- A public analytics page reads those buckets, plus live values from the chain on the proposed tag. It shows a live block stream from `monadNewHeads`, where each block moves through Proposed, Voted, Finalized and Verified and the keeper's reprices land in it. On a fork, which has no `monadNewHeads`, it falls back to polling and says so.
+- Euler V2, Morpho Blue, Curvance and Neverland are shown as coming soon, with their Monad TVL from DefiLlama and its date.
+- The one WETH/USDC liquidation in Aave Monad's history is shown as a worked example, with its transaction hash.
+
+Why:
+- Judges and users should see what the platform earns, who earns it, and that it runs block by block on Monad. The data comes from Envio and the chain, never from fixtures.
+- An aggregate "liquidation penalties paid on Monad" figure was dropped: Aave Monad has had one liquidation (Verified facts). One real, checkable example is more honest than a thin total.
+- Other lenders need their own exit path and fork tests, so they are listed, not built, before the deadline.
+
 ## Verified facts
 
 Append one line per fact, with the date checked and the source. Agents append here as M0 items are resolved.
@@ -301,3 +320,7 @@ Append one line per fact, with the date checked and the source. Agents append he
 - 5 Oct 2026 (audit): rpc.monad.xyz served account state 500,000 blocks back (block 110,200,773) and failed at 2,000,000.
 - 5 Oct 2026 (audit): on Monad mainnet a receipt's `gasUsed` equals the transaction's gas limit (all 38 transactions in block 110,698,158), so a revert cannot be told from out-of-gas by gas used.
 - 5 Oct 2026 (audit): mainnet base fee 100 gwei; `eth_maxPriorityFeePerGas` 2 gwei. Round trip from the build machine to rpc.monad.xyz on a reused connection: 82 to 90 ms, with spikes of 1.1 to 2.3 s.
+- 5 Oct 2026: Lending protocols with TVL on Monad mainnet, by DefiLlama's Monad TVL: Aave V3 $324.0M, Euler V2 $258.6M, Morpho Blue $192.7M, Curvance $128.7M, Neverland $8.5M (then Gearbox, Folks Finance and TownSquare under $0.3M each). Source: https://api.llama.fi/protocols, filtered to chain Monad, category Lending.
+- 5 Oct 2026: Aave V3 Monad's Pool (0x69a5F9AD4f96ebf0a0C792dD42a01cC5C0102fef) has emitted one `LiquidationCall` from block 0 to 110,740,416: block 98,106,057 (22 Aug 2026), tx 0xa5ce55310328c30e978a1c778a9cd11f95bf08c8eb4f21affb853d44fcfe7794. WETH collateral, USDC debt, user 0xc556d420ebd20fb8b3763bffeebf16fa61250443. 1,670.686190 USDC repaid; 0.728710735618030097 WETH to the liquidator plus 0.003818874745973479 aWETH to Aave's treasury, 0.732529610364003697 WETH in total. Source: `eth_getLogs` in 20M-block ranges on rpc1.monad.xyz, and the transaction receipt.
+- 5 Oct 2026: The last Pyth ETH/USD update on Monad before that liquidation (block 98,106,025, publish time 1787375497) was $2,400.81. At that price the WETH taken was worth $1,758.66, $87.98 (5.27%) above the debt repaid; a 1% exit on the same repayment costs $16.71. Aave's 5.5% bonus implies an oracle price of $2,406.15, within 0.2% of Pyth. Source: Pyth `PriceFeedUpdate` logs on 0x2880aB155794e7179c9eE2e38200202908C17B43. Pyth's historical HTTP APIs (benchmarks and Hermes by timestamp) answered 401 without a key.
+- 5 Oct 2026: `monadNewHeads` on wss://rpc.monad.xyz accepts a subscription from a client that sends a browser Origin header, so the web app can subscribe directly; blocks arrived about every 300 ms as Proposed, then Voted, Finalized and Verified. Source: direct subscription with Origin set.

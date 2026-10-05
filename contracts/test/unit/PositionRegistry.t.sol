@@ -217,6 +217,30 @@ contract PositionRegistryTest is Test {
         reg.setAsset(WETH, bytes32("ETH/USD"), maxK, 5e18, true);
     }
 
+    /// @notice The protocol share is owner-set, capped, and always paired with a treasury (ADR-037).
+    function test_setProtocolShare_boundsAndEvent() public {
+        address treasury = makeAddr("treasury");
+        uint16 cap = reg.MAX_PROTOCOL_SHARE_BPS();
+        assertEq(cap, 2000);
+        vm.expectRevert(IPositionRegistry.InvalidParameter.selector);
+        reg.setProtocolShare(treasury, cap + 1);
+        vm.expectRevert(IPositionRegistry.InvalidParameter.selector);
+        reg.setProtocolShare(address(0), 1000);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        vm.prank(alice);
+        reg.setProtocolShare(treasury, 1000);
+
+        vm.expectEmit(false, false, false, true, address(reg));
+        emit IPositionRegistry.ProtocolShareSet(treasury, cap);
+        reg.setProtocolShare(treasury, cap);
+        assertEq(reg.treasury(), treasury);
+        assertEq(reg.protocolShareBps(), cap);
+        // The share shares a slot with the exit parameters, which keep their values.
+        assertEq(reg.exitDiscountBps(), 100);
+        assertEq(reg.exitHfBuffer(), 600);
+        assertEq(reg.dMin(), 100);
+    }
+
     /// @notice The paged view does not overflow on a huge limit.
     function test_activeBorrowers_hugeLimit() public {
         _credit(alice);

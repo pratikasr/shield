@@ -16,6 +16,10 @@ contract Deploy is Script {
         ShieldDeployment.Config memory c = ShieldDeployment.monadMainnet(owner, keeper);
         // Fork rehearsals shorten the waiting period so a scripted run does not sit idle for 15 minutes.
         c.minCoverSeconds = uint32(vm.envOr("SHIELD_MIN_COVER_SECONDS", uint256(c.minCoverSeconds)));
+        c.treasury = vm.envOr("SHIELD_TREASURY", c.treasury);
+        uint256 share = vm.envOr("SHIELD_PROTOCOL_SHARE_BPS", uint256(c.protocolShareBps));
+        require(share <= 2000, "SHIELD_PROTOCOL_SHARE_BPS is above the 2000 bps cap");
+        c.protocolShareBps = uint16(share);
         d = ShieldDeployment.deploy(c);
         vm.stopBroadcast();
 
@@ -23,6 +27,8 @@ contract Deploy is Script {
         vm.serializeUint(key, "chainId", block.chainid);
         vm.serializeUint(key, "block", block.number);
         vm.serializeAddress(key, "owner", owner);
+        vm.serializeAddress(key, "treasury", c.treasury);
+        vm.serializeUint(key, "protocolShareBps", c.protocolShareBps);
         vm.serializeAddress(key, "PositionRegistry", address(d.registry));
         vm.serializeAddress(key, "ShieldVault", address(d.vault));
         vm.serializeAddress(key, "Repricer", address(d.repricer));
@@ -37,5 +43,7 @@ contract Deploy is Script {
         console2.log("Repricer", address(d.repricer));
         console2.log("Executor", address(d.executor));
         console2.log("UniswapV3Swapper", address(d.swapper));
+        console2.log("treasury", c.treasury);
+        console2.log("protocol share of premiums, bps", c.protocolShareBps);
     }
 }

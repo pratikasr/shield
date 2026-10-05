@@ -48,6 +48,8 @@ type Reprice {
   sigma: BigInt!
   prepaid: BigInt!
   lapsed: Boolean!
+  """The protocol's part of charged at the share in force (ADR-037); the vault's part is charged - protocolShare."""
+  protocolShare: BigInt!
   blockNumber: BigInt! @index
   timestamp: BigInt!
   txHash: String!
@@ -66,6 +68,10 @@ type Exit {
   healthFactorBefore: BigInt!
   healthFactorAfter: BigInt!
   flashLoanAmount: BigInt!
+  """The borrower's trigger (HF x 1e4) when the exit ran: how close to it the exit landed."""
+  trigger: Int!
+  """Exit discount in force, bps; repaid x discountBps / 1e4 is the discount the vault side received."""
+  discountBps: Int!
   blockNumber: BigInt! @index
   timestamp: BigInt!
   txHash: String!
@@ -122,4 +128,51 @@ type PriceSample {
 type Depositor {
   id: ID!
   shares: BigInt!
+}
+
+"""
+Owner-set parameters as last seen on chain, one row with id "config". Until the first ExitParamsSet or
+ProtocolShareSet the values are the contracts' initial ones (exit discount 100 bps, buffer 600, dMin 100, share 0).
+"""
+type ProtocolConfig {
+  id: ID!
+  treasury: String
+  protocolShareBps: Int!
+  exitDiscountBps: Int!
+  exitHfBuffer: Int!
+  dMin: Int!
+}
+
+"""
+Platform earnings and activity for one period: "all" (since deployment, start 0), "day" (one UTC day) or "hour".
+Premium fields are 18-decimal USDC units as charged. protocolPaid, exitDiscount, debtRepaid, savedVsAave,
+deposited and withdrawn are USDC units (6 decimals). exitDiscount is gross, at Aave's oracle price: a flash-assisted
+exit pays its flash premium and swap cost out of it.
+"""
+type EarningsBucket {
+  id: ID!
+  period: String! @index
+  start: BigInt! @index
+  premiumCharged: BigInt!
+  premiumToVault: BigInt!
+  premiumToProtocol: BigInt!
+  protocolPaid: BigInt!
+  exitDiscount: BigInt!
+  exits: Int!
+  debtRepaid: BigInt!
+  savedVsAave: BigInt!
+  reprices: Int!
+  optIns: Int!
+  deposited: BigInt!
+  withdrawn: BigInt!
+}
+
+"""The protocol share of premiums paid to the treasury by a sweep, in USDC units."""
+type ProtocolPayout {
+  id: ID!
+  treasury: String!
+  amount: BigInt!
+  blockNumber: BigInt! @index
+  timestamp: BigInt!
+  txHash: String!
 }

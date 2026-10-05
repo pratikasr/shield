@@ -43,6 +43,7 @@ interface IPositionRegistry {
         address indexed collateral, uint8 id, bytes32 pythFeedId, uint64 k, uint64 sigmaFallback, bool enabled
     );
     event ExitParamsSet(uint16 exitDiscountBps, uint32 exitHfBuffer, uint32 dMin);
+    event ProtocolShareSet(address treasury, uint16 protocolShareBps);
     event ModulesSet(address repricer, address executor);
 
     error TriggerOutOfRange(uint32 trigger);
@@ -79,6 +80,8 @@ interface IPositionRegistry {
     function exitDiscountBps() external view returns (uint16);
     function exitHfBuffer() external view returns (uint32);
     function dMin() external view returns (uint32);
+    function protocolShareBps() external view returns (uint16);
+    function treasury() external view returns (address);
 
     function writeRepricerState(
         address borrower,
