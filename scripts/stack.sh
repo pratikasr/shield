@@ -135,7 +135,9 @@ ENV
   if [ "${STACK_KEEPER:-1}" = "1" ]; then
     echo "== keeper"
     # Fork rehearsals reprice every block for as long as the keeper runs: the Playwright run needs three consecutive
-    # reprices after an opt-in that can come minutes after the keeper starts. The lock file stays in .fork/. The
+    # reprices after an opt-in that can come minutes after the keeper starts. While a cover is active a reprice is
+    # nearly always waiting for its block, and Anvil then fails queries on the `pending` tag, so the e2e helpers send
+    # with fixed gas limits (scripts/demo-position.sh keeper uses the mainnet cadence instead). The lock file stays in .fork/. The
     # keeper also loads keeper/.env, where a variable already in the environment wins even when empty (and empty
     # means unset to the keeper), so KEEPER_PRIVATE_KEY_FILE and the address overrides are passed empty.
     MONAD_RPC_URL="$FORK_RPC_URL" MONAD_WS_URL="$FORK_WS_URL" CHAIN_ID=143 KEEPER_PRIVATE_KEY="$KEEPER_PRIVATE_KEY" \

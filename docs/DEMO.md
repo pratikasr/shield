@@ -105,6 +105,20 @@ The keeper saw HF 1.0449 at block 110644686 and decided to exit at 03:27:28.164Z
 
 `scripts/proof.sh --fork` checked every address for code and every hash for a successful receipt and printed the README rows. On mainnet the same script prints them with MonadVision links.
 
+### Run 4: the scripted mainnet flow after the internal audit, 5 Oct 2026 (fork, test only)
+
+The same commands as run 3, rerun because the audit changed the deploy, demo and keeper scripts (keystores, safe deploys, the nudge preflight, keeper spending limits). Fork of mainnet block 110732451; fork deployment with a 20-second waiting period.
+
+| Step | Outcome |
+| --- | --- |
+| `fork.sh`, `deploy-mainnet.sh --fork`, `seed --fork`, `open --fork` | exit 0; HF after `open` 1.0700; opt-in `0x37f1f360aba4c948080dc8610e1436188009901e5341547f0ae2fd86c7560361` in block 110732674 |
+| `keeper --fork` | three reprices in blocks 110733351, 110733352 and 110733353, receipts 300 ms and 299 ms apart; every block for its first 600 blocks, then every 200 |
+| `nudge --fork` | preflight: cover active, waiting period over, approval unlimited, keeper log live, and a warning that the vault's 100 USDC is under the 106.61 USDC debt (the flash-loan fallback covers the rest); HF 1.0450; `previewExit` Ready |
+| Exit by the keeper | `0x0c8207830d3ea5be330374e8774a9009d186582eb0f5e8c36a134da94385fd07` in block 110734019, 3.9 s after the nudge; 724,129 gas of an 832,749 limit (vault and flash loan together) |
+| `proof.sh --fork` | exit 0; every address has code and every hash a successful receipt |
+
+Found on the way: the first nudge failed in forge's gas estimate with "Required data unavailable" from Anvil. The fork demo keeper repriced every block for as long as it ran, so one of its transactions was always waiting for the next block, and while one waits Anvil fails every query on the `pending` tag, which forge's estimate uses. The fork demo keeper now uses the mainnet cadence above, and the nudge went through after its 600-block window. Monad's `pending` tag is the proposed block, so this cannot happen on mainnet.
+
 ## Part 2: the mainnet runbook
 
 Everything here spends real MON and moves real tokens, so it is run by the repo owner. Use four fresh accounts. No key is ever typed on a command line, exported in the shell or stored inside the repo: three accounts live in encrypted Foundry keystores (`~/.foundry/keystores`) and the keeper's key lives in a chmod 600 file outside the repo, because the keeper is TypeScript and reads a raw key. The `*_PRIVATE_KEY` variables still work and are what the fork scripts use; do not use them on mainnet.

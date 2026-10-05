@@ -194,8 +194,12 @@ keeper() {
   local key="" file="" extra=()
   if [ "$FORK" = 1 ]; then
     key="$KEEPER_PRIVATE_KEY"
-    # Fork rehearsals reprice every block for as long as the keeper runs, and keep their lock file in .fork/.
-    extra=(REPRICE_WINDOW_BLOCKS="${REPRICE_WINDOW_BLOCKS:-0}" KEEPER_LOCK_FILE="$ROOT/.fork/demo-keeper.lock")
+    # Fork rehearsals keep their lock file in .fork/ and use the mainnet repricing cadence (every block for the first
+    # REPRICE_WINDOW_BLOCKS, then every 200): a keeper that reprices every block always has a transaction waiting for
+    # the next block, and while one waits Anvil fails every "pending" query, which forge's gas estimate for the nudge
+    # uses. Monad's pending tag is the proposed block, so mainnet has no such failure.
+    extra=(KEEPER_LOCK_FILE="$ROOT/.fork/demo-keeper.lock")
+    if [ -n "${REPRICE_WINDOW_BLOCKS:-}" ]; then extra+=(REPRICE_WINDOW_BLOCKS="$REPRICE_WINDOW_BLOCKS"); fi
   else
     key="${KEEPER_PRIVATE_KEY:-}"; file="${KEEPER_PRIVATE_KEY_FILE:-}"
     if [ -n "$file" ] && [ -n "$key" ]; then
