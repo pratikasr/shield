@@ -6,13 +6,13 @@ Shield targets Track 01 (Onchain Finance and Trading) of Monad Metropolis, due 1
 
 ## Overview
 
-Shield is an opt-in early exit for borrowers on Aave V3 Monad: the borrower sets a trigger a little above the liquidation line, and when the position reaches it a vault repays part of the debt and takes collateral at a 1% discount instead of the protocol's 5% penalty, with the price of that protection recomputed every 300 ms block.
+Shield is an opt-in early exit for borrowers on Aave V3 Monad: the borrower sets a trigger a little above the liquidation line, and when the position reaches it a vault repays part of the debt and takes collateral at a 1% discount instead of the protocol's 5.5% penalty on WETH, with the price of that protection recomputed every 300 ms block.
 
-**User.** Borrowers on Aave V3 Monad with large or illiquid collateral where swapping collateral to deleverage costs more than 1% in slippage. On Monad that is bridged WETH and cbBTC against stablecoin debt: on 5 Oct 2026 selling 1 WETH on Uniswap V3 Monad quoted 3.8% under the oracle. (Aave Monad has no MON reserve, and its LST and PT collateral only works inside eModes whose liquidation bonus is 1%, where Shield saves nothing; see ADR-016.) Today they hold extra buffer, set alerts, or eat the penalty.
+**User.** Borrowers on Aave V3 Monad with WETH collateral and USDC debt who want an exit that happens on its own, on chain, at a health factor they choose, without watching the market. (Updated in the 5 Oct 2026 audit: an aggregator quoted 0.06% under the oracle for 1 WETH and 0.49% for 50 WETH, so swapping is not expensive for most sizes; the 3.8% figure was one thin Uniswap V3 pool. Shield matters most for large positions and when liquidity thins. cbBTC is disabled until a swap route exists, ADR-034. Aave Monad has no MON reserve, and its LST and PT collateral only works inside eModes, which Shield does not cover; see ADR-016 and ADR-035.) Today they hold extra buffer, set alerts, or eat the penalty.
 
 **What it is not.** It does not race liquidators. Aave on Monad runs Chainlink SVR via Atlas: the price update that pushes a position under water arrives in the same bundle as the winning liquidator's transaction. Shield triggers above 1.0, which is the only honest design, and the README says so before a judge does.
 
-**Why it can win.** Aave V3 arrived on Monad in July with $324M TVL and has no opt-in pre-liquidation layer. Morpho's exists only on Ethereum and Base and its SDK is being deprecated. Euler has one built in; Aave does not. The one real "why Monad" is per-block premium repricing: pointless on a 12-second chain, nearly free here with MIP-8 page-warmed storage. That is the technical centerpiece and the video.
+**Why it can win.** Aave V3 arrived on Monad in July with $324M TVL and has no opt-in pre-liquidation layer. Morpho's pre-liquidation is live on Monad but covers Morpho Blue markets only. Euler has one built in; Aave does not. The one real "why Monad" is per-block premium repricing: pointless on a 12-second chain, nearly free here with MIP-8 page-warmed storage. That is the technical centerpiece and the video.
 
 **Comparison the judges will build themselves, so build it first.**
 
@@ -61,16 +61,16 @@ flowchart TB
     end
 ```
 
-The top row runs every block and costs almost nothing; the bottom row runs once per position, when the keeper sees the trigger on proposed state.
+The top row runs every block and costs the keeper about 0.025 MON per reprice (about 7,200 MON a day at every block, ADR-025, so the keeper reprices every block in a window and less often outside it); the bottom row runs once per position, when the keeper sees the trigger on proposed state.
 
 ### Contracts
 
 | Contract | Responsibility | Key functions |
 | --- | --- | --- |
-| `PositionRegistry` | One record per opted-in borrower, laid out inside one 128-slot storage page | `optIn(trigger, maxDiscountBps)`, `setTrigger`, `optOut`, `record(addr)` |
-| `Repricer` | Computes the per-block premium from Pyth price, realised volatility and distance to threshold; accrues it against the borrower's prepaid balance | `reprice(addr, pythUpdate)`, `premiumPerBlock(addr)`, `topUp`, `withdrawUnused` |
+| `PositionRegistry` | One record per opted-in borrower, laid out inside one 128-slot storage page | `optIn(collateral, trigger, maxDiscountBps)` (needs 1 USDC prepaid), `setTrigger`, `setMaxDiscount`, `optOut`, `record(addr)` |
+| `Repricer` | Computes the per-block premium from Pyth price, realised volatility and distance to threshold; accrues it against the borrower's prepaid balance | `reprice(addr, pythUpdate)`, `repriceMany`, `quote(addr)`, `topUp`, `withdrawUnused`, `sweep` |
 | `Executor` | The exit: pulls funds from the vault (or a flash loan), calls `Pool.repay(asset, amount, 2, borrower)`, then `aToken.transferFrom(borrower, vault, amount x 1.01)`; reverts unless HF after exit is above 1.0 and above the pre-exit HF | `exit(addr, pythUpdate)` |
-| `ShieldVault` | ERC-4626 in USDC or AUSD; LP deposits fund exits and receive premiums plus the 1% discount; seized aTokens are swapped back to the vault asset by the keeper or held | `deposit`, `withdraw`, `fund(executor, amount)`, `receiveCollateral` |
+| `ShieldVault` | ERC-4626 in USDC or AUSD; LP deposits fund exits and receive premiums plus the 1% discount; seized aTokens are swapped back to the vault asset by the keeper or held | `deposit`, `withdraw`, `fundExit(amount)`, `recordExit`, `unwind` |
 
 Aave calls used: `getUserAccountData` for HF, `repay` with `onBehalfOf`, aToken `approve` and `transferFrom`, and `flashLoanSimple` as the fallback funding path. The borrower approves the Executor on their aTokens once at opt-in; the Executor can only move them inside `exit`, and only after a successful repay in the same transaction.
 
@@ -82,19 +82,19 @@ $$
 p_t = k \cdot \sigma_t \cdot \frac{V_t}{\max(d_t, d_{min})} \cdot \Delta t
 $$
 
-where V_t is the debt value covered, sigma_t is realised volatility of the collateral over the last N blocks from Pyth updates, d_t is the distance between current HF and the trigger, d_min floors the distance so the premium is bounded, and Delta t is one block (300 ms). k is set per collateral asset and published in the registry. The borrower prepays a balance; when it runs out, cover lapses and the position shows "unprotected" in the UI. At exit the vault takes collateral worth 1.01 x the repaid debt; the 1% is the LP's exit fee and the borrower's saving against Aave's bonus.
+where V_t is the borrower's total Aave debt in USD (not the smaller amount an exit repays), sigma_t is realised volatility of the collateral over the last 200 Pyth observations, d_t is the distance between current HF and the trigger, d_min floors the distance so the premium is bounded, and Delta t is one block (300 ms). k is set per collateral asset and published in the registry. The borrower prepays a balance; when it runs out, cover lapses and the position shows "unprotected" in the UI. At exit the vault takes collateral worth 1.01 x the repaid debt; the 1% is the LP's exit fee and the borrower's saving against Aave's bonus.
 
 ### Monad-specific design (the "Why Monad" README section)
 
-- 300 ms blocks make per-block repricing meaningful; on a 12-second chain the premium would be repriced 40 times less often and the keeper would act minutes late.
+- 300 ms blocks make per-block repricing meaningful; on a 12-second chain the premium would be repriced 40 times less often and an exit could wait up to 12 seconds for the next block.
 - MIP-8 page-ified storage (live since 2 Sep): each borrower record is packed into one 128-slot page, so the first `SLOAD` costs 8,100 and every further slot 100. The keeper's transaction carries an EIP-2930 access list that warms the whole page in one entry.
-- The keeper reads health factors on the `pending` (proposed) tag and submits with `eth_sendRawTransactionSync`, which returns the receipt on the proposed block; finality follows in 600 ms.
+- The keeper reads health factors on the proposed block (`latest`, the same as `pending` on Monad) and submits with `eth_sendRawTransactionSync`, which returns the receipt on the proposed block; finality follows in 600 ms.
 - Gas is charged as gas_limit x price on Monad, so the keeper sets tight limits per call and the Executor's gas use is measured and documented.
 - EIP-7702 is not used; borrowers stay EOAs, which avoids the 10 MON reserve and no-CREATE constraints on delegated accounts.
 
 ### Flows
 
-1. **Opt in.** Borrower connects, picks a position, sets trigger HF (default 1.04) and a maximum discount (default 100 bps), approves the Executor on the position's aTokens, and prepays a premium balance. The UI shows the live premium and the comparison line: "Aave penalty if liquidated: $412. Shield: $83."
+1. **Opt in.** Borrower connects, picks a position, sets trigger HF (default 1.04) and a maximum discount (default 100 bps), approves the Executor on the position's aTokens, and prepays a premium balance. The UI shows the live premium and the comparison line: "Aave penalty if liquidated: $X. Shield: $Y." (computed from the position; see the web app for the definitions).
 2. **Reprice.** Every block the Repricer updates the premium for every active record on the warmed page, consuming the prepaid balance. Events carry the premium so the UI ticks.
 3. **Watch.** Keeper polls `getUserAccountData` on proposed state for every active record; when HF is at or below the trigger it builds `exit` with a fresh Pyth update attached.
 4. **Exit.** Executor pulls vault funds (or a flash loan), repays the computed amount on behalf of the borrower, takes 1.01 x in aTokens, checks HF improved and stays above 1.0, emits `Exited(borrower, repaid, seized, savedVsAave)`.
@@ -107,7 +107,7 @@ The demo must run on real Monad transactions. A fork or a mock lender fails the 
 ### Keeper
 
 - One process (TypeScript, see TECH-DECISIONS ADR-003) subscribed to `monadNewHeads` with `commitState`; on each proposed block it reads `getUserAccountData` for every active record and compares HF to the trigger.
-- Submits `exit` with a fresh Pyth price update in the same calldata, through `eth_sendRawTransactionSync`, with an EIP-2930 access list covering the registry page and the Aave reserve slots touched.
+- Submits `exit` (with a fresh Pyth price update in the same calldata when a Hermes key is configured; otherwise the on-chain push feed, ADR-017), through `eth_sendRawTransactionSync`, with an EIP-2930 access list covering the registry page and the Aave reserve slots touched.
 - Gas limit set per call from a measured upper bound; Monad charges gas_limit x price, so an oversized limit is paid in full.
 - Permissionless: anyone may call `exit` when the condition holds; the keeper is a convenience, not a trust assumption. The README states this.
 - No Execution Events SDK in the demo. It requires running node software and nothing it adds is visible in a 3-minute video. Mention it as the path to sub-block latency; do not depend on it.
@@ -116,8 +116,8 @@ The demo must run on real Monad transactions. A fork or a mock lender fails the 
 
 - ERC-4626, single asset (USDC on mainnet; AUSD is the alternative since Aave Monad lists both at the same supply rate).
 - Income: the per-block premium stream and the 1% exit discount. Outgo: the repay amount at each exit, returned as aTokens worth 1.01 x.
-- Seized aTokens: held and unwound by the keeper into the vault asset through Aave `withdraw` plus a swap on Kuru or 1inch, or kept as yield-bearing collateral if the LP vote says so. For the hackathon, unwind immediately so the vault NAV stays in one asset.
-- Flash-loan fallback: when vault liquidity is below the repay amount, Executor takes `flashLoanSimple` from Aave for the gap and repays it from the seized aTokens in the same transaction. This keeps the demo independent of how much LP capital you seed.
+- Seized aTokens: held and unwound by the keeper into the vault asset through Aave `withdraw` plus a swap on Kuru or 1inch, or kept as yield-bearing collateral if the LP vote says so. Superseded by ADR-024: seized aTokens are held and valued at Aave's oracle, and the owner or unwinder sells them within a slippage bound.
+- Flash-loan fallback: when vault liquidity is below the repay amount, Executor takes `flashLoanSimple` from Aave for the gap and repays it from the seized aTokens in the same transaction. Superseded by ADR-029: the flash path must leave the vault whole and fits only small exits on Monad's thin Uniswap V3 pool, so the demo seeds the vault with enough USDC for the repay.
 - Dashboard: deposits, premium earned, exits executed, average discount captured.
 
 ### Demo plan (two paths, pick one before building)
@@ -133,9 +133,9 @@ Decided 5 Oct 2026 (ADR-015): the real Aave position only. The exit is reached b
 
 ### 3-minute video (hard cap)
 
-1. Position page: a live Aave V3 Monad position, HF 1.07, collateral WETH, debt USDC (ADR-016: Aave Monad has no MON reserve). Toggle Shield on, trigger 1.04. Premium quote appears and ticks per block. Comparison line: "Aave penalty if liquidated: $412. Shield: $83."
+1. Position page: a live Aave V3 Monad position, HF 1.07, collateral WETH, debt USDC (ADR-016: Aave Monad has no MON reserve). Toggle Shield on, trigger 1.04. Premium quote appears and ticks per block. Comparison line: "Aave penalty if liquidated: $X. Shield: $Y." (illustrative figures earlier in this spec did not follow from the formulas; the real ones come from the position).
 2. Explorer: the opt-in tx and three consecutive repricing txs, 300 ms apart.
-3. Price moves, HF reaches 1.04, keeper fires, `Exited` event, borrower screen reads "penalty avoided: $329". Show the tx hash.
+3. Price moves, HF reaches 1.04, keeper fires, `Exited` event, borrower screen reads the penalty avoided from the `Exited` event. Show the tx hash.
 4. LP dashboard: premium income and the 1% discount captured.
 5. The comparison table against Morpho, Euler and DeFi Saver, 10 seconds.
 6. One sentence on why Monad: per-block repricing and a page-warmed registry.

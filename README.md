@@ -1,12 +1,12 @@
 # Shield
 
-Opt-in early exit for borrowers on Aave V3 Monad. Set a trigger a little above the liquidation line. When your position reaches it, a vault repays part of your debt and takes collateral at a 1% discount instead of Aave's 5.5% liquidation bonus on WETH. The price of that protection is recomputed every 300 ms block.
+Opt-in early exit for borrowers on Aave V3 Monad. Set a trigger a little above the liquidation line. When your position reaches it, a vault repays part of your debt and takes collateral at a 1% discount, plus a per-block premium while you are covered, instead of Aave's 5.5% liquidation bonus on WETH. The premium is recomputed every 300 ms block.
 
-Built for Track 01 (Onchain Finance and Trading) of [Monad Metropolis](https://www.monad.xyz/developers/hackathons/metropolis). Submission closes 13 Oct 2026, 11:59pm ET.
+Built for Track 01 (Onchain Finance & Trading) of [Monad Metropolis](https://www.monad.xyz/developers/hackathons/metropolis). Submission closes 13 Oct 2026, 11:59pm ET.
 
 ## What it is, what it is not
 
-Borrowers with large or illiquid collateral cannot deleverage by swapping without paying more than 1% in slippage. On Aave V3 Monad that is bridged WETH and cbBTC borrowed against stablecoins: on 5 Oct 2026, selling 1 WETH on Uniswap V3 Monad quoted 3.8% under the oracle price. Today these borrowers hold extra buffer, set alerts, or eat Aave's liquidation bonus (5.5% on WETH, 7% on cbBTC). Shield gives them a priced, opt-in exit at 1%.
+Swapping collateral to deleverage is cheap on Monad for most sizes: on 5 Oct 2026 an aggregator quoted 0.06% under Aave's oracle for 1 WETH and 0.49% for 50 WETH. What a borrower cannot buy today is an exit that happens on its own, on chain, at a health factor they choose, without watching the market. Today they hold extra buffer, set alerts, or eat Aave's liquidation bonus (5.5% on WETH). Shield gives WETH borrowers with USDC debt an opt-in exit, enforced by the contracts, at a known 1% plus a per-block premium. It matters most for large positions and for the moments when liquidity thins. cbBTC is listed but disabled until a cbBTC/USDC swap route exists on Monad (ADR-034).
 
 Shield does not race liquidators. Aave on Monad runs Chainlink SVR via Atlas: the price update that pushes a position under water arrives in the same bundle as the winning liquidator's transaction. Shield triggers above health factor 1.0. That is the only honest design, and it is why the trigger is the borrower's choice.
 
@@ -14,9 +14,9 @@ Anyone may call `exit` when the condition holds. The keeper is a convenience, no
 
 ## Why Monad
 
-- 300 ms blocks make per-block premium repricing meaningful. On a 12-second chain the premium would be repriced 40 times less often and the keeper would act minutes late.
-- MIP-8 page-ified storage: each borrower record is packed into one 128-slot storage page, and each collateral's 200-observation volatility window into another, so after the first access every further slot costs 100 gas. Every keeper transaction carries an EIP-2930 access list with one key per page. Measured on a mainnet fork: `repriceMany` 523,194 gas without the list, 192,094 with it (63% less); `exit` 1,203,849 without, 682,349 with (43% less).
-- The keeper reads health factors on the `pending` (proposed) tag and submits with `eth_sendRawTransactionSync`, which returns the receipt on the proposed block; finality follows in 600 ms.
+- 300 ms blocks make per-block premium repricing meaningful. On a 12-second chain the premium would be repriced 40 times less often and an exit could wait up to 12 seconds for the next block.
+- MIP-8 page-ified storage: each borrower record is packed into one 128-slot storage page, and each collateral's 200-observation volatility window into another, so after the first access every further slot costs 100 gas. Every keeper transaction carries an EIP-2930 access list naming the pages it will touch, Aave's and Shield's, with one key per page. Measured on a mainnet fork: `repriceMany` 523,194 gas without the list, 192,094 with it (63% less); `exit` 1,203,849 without, 682,349 with (43% less). Most of the saving is Aave's and the tokens' pages; Shield's own layout keeps its share to one page per record and one per feed.
+- The keeper reads health factors on the proposed block (`latest`, the same as `pending` on Monad) and submits with `eth_sendRawTransactionSync`, which returns the receipt from the proposed block; finality follows in 600 ms. On a local fork the receipt came back in about 290 ms; the mainnet figure will be published with the proof.
 - Gas is charged as gas_limit x price on Monad, so every keeper call uses a measured limit and the Executor's gas is published below.
 
 ## How it works
@@ -38,18 +38,20 @@ flowchart TB
     end
 ```
 
-Premium per block: `p = k * sigma * V / max(d, d_min) * dt`, where V is the debt covered, sigma is realised collateral volatility from Pyth over the last N blocks, d is the distance between current HF and the trigger, d_min bounds the premium, and dt is one block. The borrower prepays a balance; when it runs out, cover lapses and the UI shows "unprotected".
+Premium per block: `p = k * sigma * V / max(d, d_min) * dt`, where V is the borrower's total Aave debt in USD (not the smaller amount an exit repays), sigma is realised collateral volatility from the last 200 Pyth observations, d is the distance between current HF and the trigger (at or below the trigger d is taken as d_min, the most expensive rate), d_min bounds the premium, and dt is one block. Each interval is billed at the higher of the stored and the live rate. The borrower prepays at least 1 USDC; when it runs out, cover lapses and the UI shows "unprotected". New, restored or raised cover can exit only after a 15-minute waiting period (ADR-031).
 
 ### Pricing parameters
 
 | Parameter | Value | Meaning |
 | --- | --- | --- |
 | `k` (WETH) | 0.00125 | Calibrated so a position at distance d = 0.05 with 80% annualised volatility pays 2% of covered debt a year: 0.02 = k x 0.80 / 0.05 |
-| `k` (cbBTC) | 0.00125 | Same calibration. The formula already carries each asset's own volatility, so the same target gives the same k |
+| `k` (cbBTC) | 0.00125 | Same calibration (cbBTC is configured but disabled at launch, ADR-034). The owner can set k up to 0.0125 |
 | `d_min` | 0.01 | Floor on the HF distance; caps the premium at 5x the d = 0.05 rate |
 | `N` | 200 | Pyth observations in the realised-volatility window |
 | sigma fallback | 80% | Used until a feed has 10 observations; realised sigma is clamped to [10%, 500%] |
-| Default trigger | 1.04 | Borrower's choice, between 1.01 and 2.00 |
+| Default trigger | 1.04 | Borrower's choice; the contract accepts 1.01 to 2.00 |
+| Waiting period | 15 minutes | Time cover must be held before it can exit (owner-set, at most 7 days) |
+| Minimum prepay | 1 USDC | Needed to opt in |
 | Exit discount | 1% | Borrower's max discount must be at least this (default 1%, at most 5%) |
 | Exit target | trigger + 0.06 | The exit repays enough debt to bring HF back to this |
 
@@ -63,8 +65,8 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 | --- | --- |
 | `PositionRegistry` | One packed record per opted-in borrower, page-aligned for MIP-8 |
 | `Repricer` | Per-block premium from Pyth price, realised volatility and distance to trigger; accrues against the prepaid balance |
-| `Executor` | The exit: vault funds or flash loan, `Pool.repay` on behalf of the borrower, `aToken.transferFrom` at 1.01x, reverts unless HF improves and stays above 1.0 |
-| `ShieldVault` | ERC-4626 vault in USDC; LPs fund exits and earn premiums plus the 1% discount. NAV is USDC, seized aTokens at Aave's oracle, and premium accrued at the Repricer |
+| `Executor` | The exit: vault funds or flash loan, `Pool.repay` on behalf of the borrower, `aToken.transferFrom` at 1.01x, reverts unless HF improves and stays above 1.0, and (on the flash path) unless the vault gets back at least what it paid |
+| `ShieldVault` | ERC-4626 vault in USDC; LPs fund exits and earn premiums plus the 1% discount. NAV is USDC, seized aTokens at Aave's oracle, and premium accrued at the Repricer, less exit gains still unlocking (they reach the share price over six hours) |
 | `UniswapV3Swapper` | Helper: the bounded swap the flash-loan fallback and vault unwinds use (Uniswap V3 on Monad) |
 
 The exit is permissionless: anyone may call `Executor.exit` when the conditions hold, and the contract checks every one of them. The keeper is a convenience, not a trust assumption. Trust model and static-analysis results: [docs/SECURITY.md](docs/SECURITY.md).
@@ -75,10 +77,10 @@ The exit is permissionless: anyone may call `Executor.exit` when the conditions 
 | --- | --- | --- | --- | --- |
 | Lender covered | Aave V3 Monad | Morpho Blue only | Euler vaults only | Aave, Morpho, others |
 | On Monad today | Yes | Yes, Morpho Blue markets only | Yes | No (6 chains, not Monad) |
-| Mechanism | Opt-in early trigger, vault repays, 1% discount | Opt-in preLIF and preLltv, permissionless caller | Reverse Dutch auction from 0% discount | Repay from collateral via swap |
-| Cost to borrower | Premium per block plus 1% on seized collateral | preLIF discount | Rising discount | About 0.08% plus swap slippage |
-| Who funds the exit | Vault LPs, flash-loan fallback | Any liquidator | Any liquidator | Borrower's own collateral |
-| Wins when | Collateral is illiquid or large; swap slippage exceeds 1% | Borrower is on Morpho | Borrower is on Euler | Collateral is liquid |
+| Mechanism | Opt-in early trigger, vault repays, 1% discount | Opt-in preLIF and preLltv, permissionless caller | Liquidation discount that starts at 0% and rises as health worsens | Repay from collateral via swap |
+| Cost to borrower | Premium per block plus 1% of the debt repaid | preLIF discount | A discount that rises as health worsens | About 0.3% per automated repay (0.25% service fee plus 0.05% automation fee), plus gas and slippage |
+| Who funds the exit | Vault LPs, with a small flash-loan fallback | Any liquidator | Any liquidator | Borrower's own collateral |
+| Wins when | You want an on-chain exit at a set health factor on Aave Monad, for large positions or thin moments | Borrower is on Morpho | Borrower is on Euler | Collateral is cheap to swap, on chains it supports |
 
 ## Repository layout
 
@@ -126,8 +128,8 @@ Filled during M6 with Monad mainnet transactions only, from `bash scripts/proof.
 | Opt-in tx | not yet (M6) |
 | Three consecutive repricing txs | not yet (M6) |
 | Exit tx (`Exited` event) | not yet (M6) |
-| Gas (forge snapshot, Monad execution, cold state) | `exit` funded by the vault 1,113,356; `exit` through the flash-loan fallback 1,716,714; `reprice` of one borrower 523,633; `repriceMany` of three 716,151. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
-| Gas with the keeper's access list (mainnet fork) | steady-state `repriceMany` for one borrower 192,094 (523,194 without); `exit` 682,349 (1,203,849 without) |
+| Gas (forge snapshot, Monad execution, cold state, after the audit fixes) | `exit` funded by the vault 1,175,748; `exit` through the flash-loan fallback 1,850,421; `reprice` of one borrower 524,163; `repriceMany` of three 699,754; vault `unwind` 849,073. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
+| Gas with the keeper's access list (mainnet fork, measured before the audit fixes with `pnpm --filter keeper measure`) | steady-state `repriceMany` for one borrower 192,094 (523,194 without); `exit` 682,349 (1,203,849 without) |
 | Envio indexer endpoint | not yet (needs the owner's Envio login) |
 | Demo video | not yet (M6) |
 
@@ -155,7 +157,7 @@ pnpm test
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
 
-The first fork-test run takes about 12 minutes, because every state read goes to the public RPC. Foundry caches that state per pinned block, so pin one with `FORK_BLOCK=<block>` (public RPCs keep about 100,000 blocks of state, roughly eight hours): a rerun at the same block took 4.4 minutes on 5 Oct 2026. Test runs do not rewrite the committed gas figures; `FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` refreshes them at the block they were measured at, for as long as Foundry's cache or an archive RPC holds it.
+The first fork-test run takes about 12 minutes, because every state read goes to the public RPC. Foundry caches that state per pinned block, so pin one with `FORK_BLOCK=<block>` (rpc.monad.xyz served state 500,000 blocks back on 5 Oct 2026, about 40 hours): a rerun at the same block took 4.4 minutes on 5 Oct 2026. Test runs do not rewrite the committed gas figures; `FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` refreshes them at the block they were measured at, for as long as Foundry's cache or an archive RPC holds it.
 
 ### Run the whole thing locally
 
@@ -165,7 +167,7 @@ Everything against a local fork of Monad mainnet (a test environment; the header
 bash scripts/stack.sh up      # fork, Shield deployment, LP deposit, a borrower position, Envio, keeper, web
 ```
 
-Open http://localhost:3200, choose "Fork test wallet" in Connect, set a trigger, approve, prepay and opt in. The keeper reprices every block. `bash scripts/stack.sh down` stops everything. `bash scripts/e2e.sh` runs the same flow under Playwright and checks every on-screen claim against the fork's receipts.
+Open http://localhost:3200, choose "Fork test wallet" in Connect, set a trigger, approve, prepay and opt in. The keeper reprices every block. `bash scripts/stack.sh down` stops everything. `bash scripts/e2e.sh` runs the same flow under Playwright and checks the video script's key claims against the fork's receipts.
 
 ### On Monad mainnet
 
@@ -192,11 +194,11 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
 | Lighthouse (mobile) | landing, borrower, LP | performance 94, 94, 91; accessibility and best practices 100 on all |
 
-Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
+Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md). The internal audit of 5 Oct 2026 (contracts, keeper, indexer, scripts, web, live QA and every claim in these docs), its findings and their fixes: [docs/AUDIT.md](docs/AUDIT.md). Shield has had no external audit.
 
 ## Bounties
 
-Envio: every Shield event (opt-ins, triggers, each per-block reprice, exits, vault deposits, withdrawals, premiums and collateral flows) is indexed with Envio HyperIndex (`indexer/`). The web app's exit history, repricing history, covered-positions table, vault activity and the LP premium rate read from its GraphQL endpoint. HyperSync serves Monad mainnet; the same indexer runs against the local fork over RPC.
+Envio: every user-facing Shield event (opt-ins, triggers, each per-block reprice, exits, vault deposits, withdrawals, share transfers, premiums and collateral flows) is indexed with Envio HyperIndex (`indexer/`). The web app's exit history, repricing history, covered-positions table, vault activity and the LP premium rate read from its GraphQL endpoint. HyperSync serves Monad mainnet; the same indexer runs against the local fork over RPC.
 
 ## Disclosures
 

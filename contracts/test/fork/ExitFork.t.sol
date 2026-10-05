@@ -47,7 +47,10 @@ contract ExitForkTest is ForkBase {
         assertGt(hfAfter, hfBefore, "HF improved");
         assertApproxEqRel(hfAfter, 1.1e18, 0.002e18, "HF restored to trigger + 0.06");
         assertApproxEqAbs(debtBefore - vUsdc.balanceOf(borrower), repaid, 2, "debt reduced by repaid");
-        assertEq(vaultUsdcBefore - usdc.balanceOf(address(d.vault)), repaid, "vault paid exactly the repay");
+        // The vault paid the repay; the premium settled at the exit was swept in during the same call.
+        assertApproxEqAbs(
+            vaultUsdcBefore - usdc.balanceOf(address(d.vault)), repaid, 0.01e6, "vault paid the repay"
+        );
         assertGe(aWeth.balanceOf(address(d.vault)), seized, "vault holds the seized aWETH");
 
         // Seized collateral is worth 1.01 x repaid at Aave's oracle.
@@ -69,7 +72,7 @@ contract ExitForkTest is ForkBase {
         _nextBlock();
         uint256 navBefore = d.vault.totalAssets();
         (uint256 repaid, uint256 seized) = d.executor.exit(borrower, _none());
-        assertApproxEqAbs(d.vault.totalAssets(), navBefore, 2, "the gain is locked at first (audit F3)");
+        assertApproxEqAbs(d.vault.totalAssets(), navBefore, 0.01e6, "the gain is locked at first (audit F3)");
         vm.warp(block.timestamp + d.vault.PROFIT_UNLOCK_SECONDS());
         uint256 gain = d.vault.totalAssets() - navBefore;
         assertApproxEqRel(
