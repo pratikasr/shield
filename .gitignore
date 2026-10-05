@@ -27,3 +27,6 @@ lcov.info
 test-results/
 playwright-report/
 indexer/.envio/
+.fork/
+contracts/deployments/fork-*.json
+contracts/broadcast/

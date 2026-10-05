@@ -15,7 +15,7 @@ Anyone may call `exit` when the condition holds. The keeper is a convenience, no
 ## Why Monad
 
 - 300 ms blocks make per-block premium repricing meaningful. On a 12-second chain the premium would be repriced 40 times less often and the keeper would act minutes late.
-- MIP-8 page-ified storage: each borrower record is packed into one storage page, so after the first `SLOAD` every further slot of that record is cheap. The keeper's transaction carries an EIP-2930 access list that warms the whole page in one entry.
+- MIP-8 page-ified storage: each borrower record is packed into one 128-slot storage page, and each collateral's 200-observation volatility window into another, so after the first access every further slot costs 100 gas. Every keeper transaction carries an EIP-2930 access list with one key per page. Measured on a mainnet fork: `repriceMany` 523,194 gas without the list, 192,094 with it (63% less); `exit` 1,203,849 without, 682,349 with (43% less).
 - The keeper reads health factors on the `pending` (proposed) tag and submits with `eth_sendRawTransactionSync`, which returns the receipt on the proposed block; finality follows in 600 ms.
 - Gas is charged as gas_limit x price on Monad, so every keeper call uses a measured limit and the Executor's gas is published below.
 
@@ -96,7 +96,7 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 | M0 Verify external facts | done |
 | M1 Scaffold contracts, keeper, web, indexer | done |
 | M2 Contracts and Foundry tests | done |
-| M3 Keeper | not started |
+| M3 Keeper | done (on a mainnet fork; Aave is not on testnet, ADR-020) |
 | M4 Web | not started |
 | M5 Envio indexer | not started |
 | M6 Mainnet deployment and proof | not started |
@@ -120,7 +120,7 @@ Filled during M6. Every item opens on [monadvision.com](https://monadvision.com)
 | Opt-in tx | pending M6 |
 | Three consecutive repricing txs | pending M6 |
 | Exit tx (`Exited` event) | pending M6 |
-| Executor gas (forge snapshot, Monad execution, cold state) | `exit` funded by the vault: 1,109,278; `exit` through the flash-loan fallback: 1,714,904; `reprice` (one borrower): 618,956; `repriceMany` (three borrowers): 827,870. Source: [contracts/snapshots/](contracts/snapshots/) and [contracts/.gas-snapshot](contracts/.gas-snapshot) |
+| Executor gas (forge snapshot, Monad execution, cold state) | `exit` funded by the vault: 1,112,530; `exit` through the flash-loan fallback: 1,715,888; `reprice` (one borrower): 523,162; `repriceMany` (three borrowers): 715,031. With the keeper's access list a steady-state `repriceMany` for one borrower uses 192,094 and an `exit` 682,349. Source: [contracts/snapshots/](contracts/snapshots/) and [contracts/.gas-snapshot](contracts/.gas-snapshot) |
 | Envio indexer endpoint | pending M5 |
 | Demo video | pending M6 |
 

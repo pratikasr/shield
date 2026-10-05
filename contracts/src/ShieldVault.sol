@@ -2,6 +2,7 @@
 pragma solidity 0.8.37;
 
 import {IPositionRegistry} from "./interfaces/IPositionRegistry.sol";
+import {IRepricer} from "./interfaces/IRepricer.sol";
 import {IShieldVault} from "./interfaces/IShieldVault.sol";
 import {ISwapper} from "./interfaces/ISwapper.sol";
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -75,7 +76,9 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
         address usdc = asset();
         uint256 assetPrice = oracle.getAssetPrice(usdc);
         for (uint256 i; i < collaterals.length; ++i) {
-            uint256 bal = IERC20(pool.getReserveAToken(collaterals[i])).balanceOf(address(this));
+            address aToken = pool.getReserveAToken(collaterals[i]);
+            if (aToken == address(0)) continue;
+            uint256 bal = IERC20(aToken).balanceOf(address(this));
             if (bal == 0) continue;
             uint256 unit = 10 ** ((pool.getConfiguration(collaterals[i]).data >> 48) & 0xff);
             uint256 valueBase = Math.mulDiv(bal, oracle.getAssetPrice(collaterals[i]), unit);
@@ -97,15 +100,39 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
         return 6;
     }
 
+    /// @dev Pull accrued premium in before paying out, so withdrawals can use it.
+    function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)
+        internal
+        override
+    {
+        _sweepPremium();
+        super._withdraw(caller, receiver, owner, assets, shares);
+    }
+
+    function _sweepPremium() private {
+        if (repricer != address(0) && IRepricer(repricer).pendingPremium() != 0) IRepricer(repricer).sweep();
+    }
+
     // ---------------------------------------------------------------- module hooks
 
-    /// @inheritdoc IShieldVault
+    /// @notice USDC the vault can pay out now: its balance plus premium accrued at the Repricer, which the vault
+    /// sweeps in before any payment.
     function availableLiquidity() public view returns (uint256) {
-        return IERC20(asset()).balanceOf(address(this));
+        uint256 idle = IERC20(asset()).balanceOf(address(this));
+        if (repricer != address(0)) idle += IRepricer(repricer).pendingPremium();
+        return idle;
+    }
+
+    /// @notice Premium earned so far, swept or not, in USDC units.
+    function premiumEarned() external view returns (uint256) {
+        uint256 earned = totalPremiumEarned;
+        if (repricer != address(0)) earned += IRepricer(repricer).pendingPremium();
+        return earned;
     }
 
     /// @inheritdoc IShieldVault
     function fundExit(uint256 amount) external onlyExecutor {
+        _sweepPremium();
         uint256 idle = availableLiquidity();
         if (amount > idle) revert InsufficientLiquidity(amount, idle);
         IERC20(asset()).safeTransfer(executor, amount);

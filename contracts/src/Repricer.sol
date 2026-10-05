@@ -96,7 +96,6 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         if (wad > r.prepaid) revert InsufficientPrepaid(amount, r.prepaid / scale);
         registry.debitPrepaid(msg.sender, uint128(wad));
         asset.safeTransfer(msg.sender, amount);
-        _flush();
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -111,7 +110,6 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         if (r.flags & registry.FLAG_ACTIVE() == 0) revert IPositionRegistry.NotActive(borrower);
         _sample(registry.assetConfig(registry.assetAt(r.collateralId)).pythFeedId);
         _charge(borrower, r, true, c);
-        _flush();
     }
 
     /// @notice Reprice many borrowers in one transaction; inactive ones are skipped. Each feed is sampled once.
@@ -134,7 +132,6 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
             }
             _charge(borrowers[i], r, true, c);
         }
-        _flush();
     }
 
     /// @notice Final accrual before an exit: charges up to this block and stops the rate. Executor only.
@@ -143,7 +140,24 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         IPositionRegistry.Record memory r = registry.record(borrower);
         _sample(registry.assetConfig(registry.assetAt(r.collateralId)).pythFeedId);
         _charge(borrower, r, false, _ctx());
-        _flush();
+    }
+
+    /// @notice Moves accrued premium, in whole asset units, to the vault; the remainder waits. Anyone may call it,
+    /// and the vault calls it whenever it moves money. Repricing itself never transfers tokens, so its gas stays
+    /// the same block after block.
+    function sweep() external nonReentrant returns (uint256 amount) {
+        uint256 pending = pendingToVault;
+        amount = pending / scale;
+        if (amount == 0) return 0;
+        pendingToVault = pending - amount * scale;
+        asset.safeTransfer(address(vault), amount);
+        vault.notifyPremium(amount);
+        emit PremiumForwarded(amount);
+    }
+
+    /// @notice Premium accrued for the vault and not yet swept, in asset units.
+    function pendingPremium() external view returns (uint256) {
+        return pendingToVault / scale;
     }
 
     // ---------------------------------------------------------------- owner
@@ -278,17 +292,6 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
             PremiumMath.annualPremium(debtBase, hf, r.trigger, c.dMin, cfg.k, sigma, c.assetPrice);
         rate = PremiumMath.perBlock(annual, blockTimeMs);
         if (rate > type(uint96).max) rate = type(uint96).max;
-    }
-
-    /// @dev Sends whole asset units of accrued premium to the vault; the remainder waits for the next call.
-    function _flush() private {
-        uint256 pending = pendingToVault;
-        uint256 amount = pending / scale;
-        if (amount == 0) return;
-        pendingToVault = pending - amount * scale;
-        asset.safeTransfer(address(vault), amount);
-        vault.notifyPremium(amount);
-        emit PremiumForwarded(amount);
     }
 
     function _applyPythUpdate(bytes[] calldata update) private {

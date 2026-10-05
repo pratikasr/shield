@@ -4,7 +4,7 @@ pragma solidity 0.8.37;
 import {PositionRegistry} from "../../src/PositionRegistry.sol";
 import {ShieldVault} from "../../src/ShieldVault.sol";
 import {IShieldVault} from "../../src/interfaces/IShieldVault.sol";
-import {MockAaveOracle, MockAavePool} from "../mocks/MockAave.sol";
+import {MockAaveOracle, MockAavePool, MockRepricer} from "../mocks/MockAave.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IAaveOracle} from "aave-v3-origin/contracts/interfaces/IAaveOracle.sol";
@@ -21,7 +21,7 @@ contract ShieldVaultTest is Test {
     MockERC20 internal aWeth;
     address internal constant WETH = address(0xE7);
     address internal executor = makeAddr("executor");
-    address internal repricer = makeAddr("repricer");
+    address internal repricer = address(new MockRepricer());
     address internal lp = makeAddr("lp");
     address internal attacker = makeAddr("attacker");
 

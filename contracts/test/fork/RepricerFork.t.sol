@@ -91,6 +91,9 @@ contract RepricerForkTest is ForkBase {
         vm.warp(block.timestamp + 60_000);
         d.repricer.reprice(borrower, _none());
         assertGt(d.vault.totalAssets(), navBefore, "premium raises NAV");
-        assertEq(d.vault.totalPremiumEarned(), d.vault.totalAssets() - navBefore);
+        assertEq(d.vault.premiumEarned(), d.vault.totalAssets() - navBefore);
+        uint256 swept = d.repricer.sweep();
+        assertEq(d.vault.totalPremiumEarned(), swept);
+        assertEq(d.vault.totalAssets() - navBefore, swept, "sweeping does not change NAV");
     }
 }

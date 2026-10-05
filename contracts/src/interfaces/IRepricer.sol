@@ -32,6 +32,8 @@ interface IRepricer {
     function settleForExit(address borrower) external;
     function topUp(uint256 amount) external;
     function withdrawUnused(uint256 amount) external;
+    function sweep() external returns (uint256 amount);
+    function pendingPremium() external view returns (uint256);
 
     function quote(address borrower)
         external

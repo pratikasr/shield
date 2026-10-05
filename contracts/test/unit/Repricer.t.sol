@@ -43,6 +43,7 @@ contract RepricerTest is Test {
         oracle = new MockAaveOracle();
         oracle.setPrice(address(usdc), 1e8);
         oracle.setPrice(WETH, 2700e8);
+        pool.setReserve(WETH, address(new MockERC20("Aave WETH", "aWETH", 18)), address(0), 8400, 10_550, 18);
         pyth = new MockPyth(3600, 0);
         reg = new PositionRegistry(address(this));
         reg.setAsset(WETH, FEED, K, 0.8e18, true);
@@ -156,9 +157,45 @@ contract RepricerTest is Test {
         vm.roll(block.number + 100);
         rp.reprice(alice, _none());
         uint256 owed = rate * 100;
+        // Repricing moves no tokens; the premium is pending and already counts toward NAV.
+        assertEq(usdc.balanceOf(address(vault)), 0);
+        assertEq(rp.pendingToVault(), owed);
+        assertEq(vault.totalAssets(), owed / 1e12);
+        assertEq(vault.premiumEarned(), owed / 1e12);
+        // A sweep (anyone, or the vault itself when it pays out) moves whole units and keeps the remainder.
+        assertEq(rp.sweep(), owed / 1e12);
         assertEq(usdc.balanceOf(address(vault)), owed / 1e12);
         assertEq(rp.pendingToVault(), owed % 1e12);
         assertEq(vault.totalPremiumEarned(), owed / 1e12);
+        assertEq(rp.sweep(), 0, "nothing left to sweep");
+    }
+
+    function test_vaultPullsPendingPremiumWhenPayingOut() public {
+        pool.setAccount(alice, 1_300_000e8, 1_000_000e8, 1.09e18);
+        rp.reprice(alice, _none());
+        vm.roll(block.number + 1000);
+        rp.reprice(alice, _none());
+        uint256 pending = rp.pendingPremium();
+        assertGt(pending, 0);
+        assertEq(vault.availableLiquidity(), pending);
+        vm.prank(executor);
+        vault.fundExit(pending);
+        assertEq(usdc.balanceOf(executor), pending, "exit funded from swept premium");
+        assertEq(vault.totalPremiumEarned(), pending);
+    }
+
+    function test_repriceGas_doesNotDependOnSweepThreshold() public {
+        pool.setAccount(alice, 1_300_000e8, 1_000_000e8, 1.09e18);
+        rp.reprice(alice, _none());
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _none()); // first charge: pendingToVault slot goes from zero (one-time state growth)
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _none());
+        uint256 g1 = vm.lastCallGas().gasTotalUsed;
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _none());
+        uint256 g2 = vm.lastCallGas().gasTotalUsed;
+        assertEq(g1, g2, "steady-state reprice gas is constant");
     }
 
     // ------------------------------------------------------------ lapse and top-up

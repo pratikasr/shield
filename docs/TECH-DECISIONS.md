@@ -154,11 +154,23 @@ Decision: `ShieldVault` is an ERC-4626 over USDC with a 6-decimal virtual-share 
 
 Why: on Monad, unwinding a large WETH amount immediately would cost more than the 1% discount (3.8% slippage for 1 WETH on 5 Oct 2026), so forcing an unwind inside the exit would hand the LPs a loss. Holding aWETH earns Aave supply yield and the oracle valuation is the same one Aave uses for HF. The SPEC's "unwind immediately" becomes "unwind when the swap clears the slippage bound".
 
-## ADR-025 Keeper repricing cadence is configurable (5 Oct 2026)
+## ADR-025 Keeper repricing cadence is configurable (5 Oct 2026, measured figures added the same day)
 
 Decision: the keeper reprices every proposed block by default (`REPRICE_EVERY_N_BLOCKS=1`) and batches all active records into one `repriceMany` call per block. A `REPRICE_WINDOW_BLOCKS` setting bounds a continuous every-block run (used to capture the consecutive repricing transactions for the proof), after which the keeper falls back to `REPRICE_IDLE_EVERY_N_BLOCKS`. The health-factor watch and exits always run every block.
 
-Why: on 5 Oct 2026 the base fee is 100 gwei and MON is $0.0334, so one reprice transaction at a 150,000 gas limit costs about 0.015 MON, and running one every 300 ms costs about 4,300 MON per day. Accrual is charged per elapsed block, so a slower cadence changes how often the number updates, not what the borrower pays.
+Why: measured on a mainnet fork, a steady-state `repriceMany` for one borrower uses 192,094 gas with the keeper's access list; with the 15% buffer and 25,000 headroom the limit is about 246,000 gas, about 0.025 MON at the 100 gwei base fee (MON at $0.0334 on 5 Oct 2026). One every 300 ms is about 8,500 MON a day. Accrual is charged per elapsed block, so a slower cadence changes how often the number updates, not what the borrower pays.
+
+## ADR-026 Repricing moves no tokens; the vault pulls premium (5 Oct 2026)
+
+Decision: supersedes the "premiums arrive on every reprice" line of ADR-024. `reprice` and `repriceMany` only update accounting; accrued premium waits in the Repricer as `pendingToVault`. `Repricer.sweep()` moves whole USDC units to the vault; anyone may call it, and the vault calls it itself before it pays out (exit funding, LP withdrawals). The vault counts pending premium in `totalAssets()` and `availableLiquidity()`, so NAV and the LP dashboard still move every block.
+
+Why: on the fork rehearsal the per-block transfer to the vault fired whenever pending premium crossed one USDC unit, which touched the USDC proxy, its implementation and the vault cold and added about 61,000 gas the previous block's estimate had not seen; several `repriceMany` calls ran out of gas. Without the transfer, steady-state reprice gas is constant (58 of 61 consecutive fork reprices used exactly 193,018 gas) and the cold single-borrower figure fell from 618,956 to 523,162.
+
+## ADR-027 Keeper access lists are built from the node and Shield's own pages (5 Oct 2026)
+
+Decision: every keeper transaction carries an EIP-2930 access list: the node's `eth_createAccessList` result merged with the registry record page and the volatility-window page (from the contracts' `recordSlot` and `volSlot` views), reduced to one key per (address, 128-slot page).
+
+Why: under MIP-8 an access-list address costs 2,400 and a key 1,900, against 10,100 for a cold account and 8,100 for a cold page. Measured on the fork: `repriceMany` 523,194 gas without a list, 192,094 with it (63% less); `exit` 1,203,849 without, 682,349 with (43% less). This is the "page-warmed registry" claim in numbers.
 
 ## Verified facts
 
@@ -195,3 +207,9 @@ Append one line per fact, with the date checked and the source. Agents append he
 - 5 Oct 2026: Aave V3 is not on Monad testnet: monad-crypto/protocols `testnet/` lists no Aave entry and the address book has no Monad testnet market. Source: GitHub API listing.
 - 5 Oct 2026: the testnet faucet (faucet.monad.xyz) sits behind a Vercel security checkpoint and returns HTTP 429 to scripted requests; testnet MON must be claimed by a person in a browser.
 - 5 Oct 2026: Envio prize on the public prizes page: "Two months of Cloud hosting free, then a third month at 50% off. Up to $5,000 USD". The bounty requirement text is behind the portal login; the version quoted by other entrants reads: "Meaningfully use Envio's HyperIndex, HyperSync, or HyperRPC to power real on-chain data driving a core feature in your app", with evidence being a working indexer, its endpoints consumed by the app, and documentation. VERIFY: log in at hackathon.monad.xyz/tracks and read the Envio bounty card.
+- 5 Oct 2026: contract verification. MonadVision: `forge verify-contract <addr> <name> --chain 143 --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/` (no API key). Monadscan: `--verifier etherscan --etherscan-api-key <key>` (Etherscan v2 key). Source: docs.monad.xyz/guides/verify-smart-contract/foundry.
+- 5 Oct 2026: Anvil 1.8.4 forking Monad mainnet supports `eth_sendRawTransactionSync`, `eth_createAccessList`, `newHeads` subscriptions and `anvil_dealERC20`, but not `monadNewHeads`; interval mining at `--block-time 0.3` gives about 300 ms blocks. Source: direct requests against a local fork.
+- 5 Oct 2026: `eth_createAccessList` is served by rpc.monad.xyz; `eth_maxPriorityFeePerGas` returns 2 gwei. Source: direct requests.
+- 5 Oct 2026: gas under Monad execution (Foundry 1.8.4, cold state, fork of block 110,596,951): `exit` funded by the vault 1,109,278; through the flash-loan fallback 1,714,904; `reprice` of one borrower 618,956; `repriceMany` of three 827,870. Most of it is cold account (10,100) and cold page (8,100) access across Aave, its oracles and token proxies. Source: `contracts/snapshots/`.
+- 5 Oct 2026: access-list effect under Monad execution (Anvil 1.8.4 fork of block 110,596,951): `repriceMany` for one borrower 523,194 gas without an access list, 192,094 with one (20 addresses, 31 keys); `exit` 1,203,849 without, 682,349 with (51 keys). Source: `pnpm --filter keeper measure` against the fork.
+- 5 Oct 2026: `monadNewHeads` subscriptions work on the testnet WebSocket (wss://testnet-rpc.monad.xyz) as on mainnet. Source: keeper live smoke test.

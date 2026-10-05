@@ -6,8 +6,8 @@ import {Script, console2} from "forge-std/Script.sol";
 
 /// @title Deploy
 /// @notice Deploys Shield to Monad mainnet (or a fork of it) and writes the addresses to
-/// deployments/<chainId>.json. Run through scripts/deploy-mainnet.sh, which passes the key from the
-/// environment. KEEPER_ADDRESS (optional) becomes the vault's unwinder.
+/// deployments/<DEPLOYMENT_NAME>.json (default: the chain id). Run through scripts/deploy-mainnet.sh, which
+/// passes the key from the environment. KEEPER_ADDRESS (optional) becomes the vault's unwinder.
 contract Deploy is Script {
     function run() external returns (ShieldDeployment.Deployed memory d) {
         address keeper = vm.envOr("KEEPER_ADDRESS", address(0));
@@ -26,8 +26,8 @@ contract Deploy is Script {
         vm.serializeAddress(key, "Repricer", address(d.repricer));
         vm.serializeAddress(key, "Executor", address(d.executor));
         string memory json = vm.serializeAddress(key, "UniswapV3Swapper", address(d.swapper));
-        string memory path =
-            string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), ".json");
+        string memory name = vm.envOr("DEPLOYMENT_NAME", vm.toString(block.chainid));
+        string memory path = string.concat(vm.projectRoot(), "/deployments/", name, ".json");
         vm.writeJson(json, path);
 
         console2.log("PositionRegistry", address(d.registry));

@@ -79,3 +79,22 @@ contract MockAaveOracle {
         return prices[asset];
     }
 }
+
+/// @notice Test-only Repricer stand-in for vault unit tests: a settable pending premium the vault can sweep.
+contract MockRepricer {
+    uint256 public pendingPremium;
+    address public vault;
+
+    function setVault(address vault_) external {
+        vault = vault_;
+    }
+
+    function setPending(uint256 amount) external {
+        pendingPremium = amount;
+    }
+
+    function sweep() external returns (uint256 amount) {
+        amount = pendingPremium;
+        pendingPremium = 0;
+    }
+}
