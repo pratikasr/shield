@@ -1,7 +1,10 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
 # Shield on Monad mainnet (chain 143): positions, repricing, exits and vault flows (ADR-005, Envio bounty).
 # Hosted: HyperSync with ENVIO_API_TOKEN. Local rehearsal against a fork: ENVIO_RPC_URL=http://127.0.0.1:8545
-# and ENVIO_RPC_FOR=sync. Contract addresses and the start block come from ENVIO_* variables (see .env.example).
+# and ENVIO_RPC_FOR=sync. The contract addresses and the start block have no defaults: ENVIO_START_BLOCK and the
+# four ENVIO_*_ADDRESS variables must be set (indexer/.env, written by scripts/stack.sh on a fork, or the hosted
+# env from scripts/deploy-indexer.sh), so a missing value stops the indexer instead of indexing the wrong place.
+# Unit tests and codegen read test.env instead (see package.json).
 name: shield-indexer
 description: Shield positions, repricing, exits and vault flows on Monad
 contracts:
@@ -32,22 +35,23 @@ contracts:
     events:
       - event: Deposit
       - event: Withdraw
+      - event: Transfer
       - event: PremiumReceived
       - event: ExitFunded
       - event: CollateralReceived
       - event: Unwound
 chains:
   - id: 143
-    start_block: ${ENVIO_START_BLOCK:-0}
+    start_block: ${ENVIO_START_BLOCK}
     rpc:
       - url: ${ENVIO_RPC_URL:-https://rpc.monad.xyz}
         for: ${ENVIO_RPC_FOR:-fallback}
     contracts:
       - name: PositionRegistry
-        address: "${ENVIO_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000001}"
+        address: "${ENVIO_REGISTRY_ADDRESS}"
       - name: Repricer
-        address: "${ENVIO_REPRICER_ADDRESS:-0x0000000000000000000000000000000000000002}"
+        address: "${ENVIO_REPRICER_ADDRESS}"
       - name: Executor
-        address: "${ENVIO_EXECUTOR_ADDRESS:-0x0000000000000000000000000000000000000003}"
+        address: "${ENVIO_EXECUTOR_ADDRESS}"
       - name: ShieldVault
-        address: "${ENVIO_VAULT_ADDRESS:-0x0000000000000000000000000000000000000004}"
+        address: "${ENVIO_VAULT_ADDRESS}"

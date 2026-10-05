@@ -6,6 +6,7 @@ import { createLogger } from "../src/log.js";
 class FakeSocket {
   static instances: FakeSocket[] = [];
   static behaviour: "accept" | "reject-monad" | "fail" = "accept";
+  static chainId = "0x8f";
   onopen?: () => void;
   onmessage?: (m: { data: string }) => void;
   onerror?: () => void;
@@ -27,8 +28,12 @@ class FakeSocket {
 
   send(data: string): void {
     this.sent.push(data);
-    const req = JSON.parse(data) as { id: number; params: string[] };
+    const req = JSON.parse(data) as { id: number; method: string; params: string[] };
     setTimeout(() => {
+      if (req.method === "eth_chainId") {
+        this.onmessage?.({ data: JSON.stringify({ id: req.id, result: FakeSocket.chainId }) });
+        return;
+      }
       if (FakeSocket.behaviour === "reject-monad" && req.params[0] === "monadNewHeads") {
         this.onmessage?.({ data: JSON.stringify({ id: req.id, error: { code: -32602, message: "invalid params" } }) });
         return;
@@ -76,6 +81,7 @@ const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
 afterEach(() => {
   FakeSocket.instances = [];
   FakeSocket.behaviour = "accept";
+  FakeSocket.chainId = "0x8f";
   vi.useRealTimers();
 });
 
@@ -152,6 +158,71 @@ describe("HeadWatcher", () => {
     w.start();
     await tick(40);
     expect(w.currentMode).toBe("poll");
+    expect(heads.map((h) => h.number)).toEqual([5n]);
+    w.stop();
+  });
+
+  it("bridges to polling and reconnects when the subscription goes quiet (audit M13)", async () => {
+    let n = 1_000n;
+    const lines: string[] = [];
+    const { w, heads } = watcher({
+      staleHeadMs: 150,
+      pollBlockNumber: async () => (n += 1n),
+      logger: createLogger("debug", (l) => lines.push(l)),
+    });
+    w.start();
+    await tick(20);
+    FakeSocket.instances[0]!.push(100, "Proposed");
+    await tick(400); // the socket stays open but sends nothing
+    expect(w.drops).toBe(1);
+    expect(heads.length).toBeGreaterThan(1);
+    expect(heads.slice(1).every((h) => h.source === "poll")).toBe(true);
+    expect(FakeSocket.instances.length).toBe(2); // a fresh socket replaced the quiet one
+    expect(lines.map((l) => JSON.parse(l).event)).toContain("heads.stalled");
+    // The new subscription delivers again: polling stops.
+    FakeSocket.instances[1]!.push(Number(n) + 5, "Proposed");
+    const polledBefore = n;
+    await tick(100);
+    expect(n - polledBefore).toBeLessThanOrEqual(1n);
+    expect(heads.at(-1)!.source).toBe("monadNewHeads");
+    expect(lines.map((l) => JSON.parse(l).event)).toContain("heads.resumed");
+    w.stop();
+  });
+
+  it("counts a subscription that closes after it was established as a drop", async () => {
+    const { w } = watcher();
+    w.start();
+    await tick(20);
+    FakeSocket.instances[0]!.close();
+    expect(w.drops).toBe(1);
+    w.stop();
+  });
+
+  it("checks the WebSocket's chain id before subscribing and polls instead on a mismatch", async () => {
+    FakeSocket.chainId = "0x1";
+    const lines: string[] = [];
+    const { w, heads } = watcher({
+      expectedChainId: 143,
+      pollBlockNumber: async () => 9n,
+      logger: createLogger("debug", (l) => lines.push(l)),
+    });
+    w.start();
+    await tick(40);
+    const ws = FakeSocket.instances[0]!;
+    expect(ws.sent.map((d) => JSON.parse(d).method)).toEqual(["eth_chainId"]); // never subscribed
+    expect(w.currentMode).toBe("poll");
+    expect(heads.map((h) => h.number)).toEqual([9n]);
+    expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === "heads.ws_wrong_chain")?.level).toBe("error");
+    w.stop();
+  });
+
+  it("subscribes after the chain id matches", async () => {
+    const { w, heads } = watcher({ expectedChainId: 143 });
+    w.start();
+    await tick(20);
+    const ws = FakeSocket.instances[0]!;
+    expect(ws.sent.map((d) => JSON.parse(d).method)).toEqual(["eth_chainId", "eth_subscribe"]);
+    ws.push(5, "Proposed");
     expect(heads.map((h) => h.number)).toEqual([5n]);
     w.stop();
   });

@@ -146,3 +146,102 @@ describe("Shield indexer", () => {
     expect(kinds).toEqual(["CollateralReceived", "Deposit", "ExitFunded", "Premium", "Withdraw"]);
   });
 });
+
+describe("audit regressions (5 Oct 2026)", () => {
+  const TX = "0x" + "77".repeat(32);
+  const exited = (borrower: `0x${string}`, repaid: bigint) => ({
+    contract: "Executor" as const,
+    event: "Exited" as const,
+    // Both logs in one transaction. The handler selects the hash per event, so the simulate type does not list it.
+    transaction: { hash: TX } as never,
+    params: {
+      borrower,
+      collateral: WETH as `0x${string}`,
+      repaid,
+      seized: 1n,
+      savedVsAave: 1n,
+      healthFactorBefore: 1_040_000_000_000_000_000n,
+      healthFactorAfter: 1_100_000_000_000_000_000n,
+      flashLoanAmount: 0n,
+    },
+  });
+
+  it("keeps one Exit row per log when two borrowers are exited in the same transaction", async () => {
+    // exit() is permissionless, so a contract can exit several borrowers in one transaction.
+    const indexer = createTestIndexer();
+    const a = Addresses.mockAddresses[1]!;
+    const b = Addresses.mockAddresses[2]!;
+    await indexer.process({ chains: { 143: { simulate: [exited(a, 10_000_000n), exited(b, 20_000_000n)] } } });
+    const exits = await indexer.Exit.getAll();
+    expect(exits).toHaveLength(2);
+    expect(exits.map((e) => e.borrower).sort()).toEqual([a.toLowerCase(), b.toLowerCase()].sort());
+    expect(new Set(exits.map((e) => e.id)).size).toBe(2);
+    expect(exits.every((e) => e.txHash === TX)).toBe(true);
+  });
+
+  it("follows vault shares that move between accounts by Transfer", async () => {
+    // LP1 deposits, sends half the shares to LP2, LP2 redeems them. LP1 still holds 50 shares.
+    const indexer = createTestIndexer();
+    const lp1 = Addresses.mockAddresses[1]!;
+    const lp2 = Addresses.mockAddresses[2]!;
+    const zero = "0x0000000000000000000000000000000000000000" as const;
+    await indexer.process({
+      chains: {
+        143: {
+          simulate: [
+            { contract: "ShieldVault", event: "Transfer", params: { from: zero, to: lp1, value: 100n } },
+            { contract: "ShieldVault", event: "Deposit", params: { sender: lp1, owner: lp1, assets: 100_000_000n, shares: 100n } },
+            { contract: "ShieldVault", event: "Transfer", params: { from: lp1, to: lp2, value: 50n } },
+          ],
+        },
+      },
+    });
+    let stats = await indexer.VaultStats.getOrThrow("vault");
+    expect(stats.depositors).toBe(2);
+    expect((await indexer.Depositor.getOrThrow(lp1.toLowerCase())).shares).toBe(50n);
+    expect((await indexer.Depositor.getOrThrow(lp2.toLowerCase())).shares).toBe(50n);
+
+    await indexer.process({
+      chains: {
+        143: {
+          simulate: [
+            {
+              contract: "ShieldVault",
+              event: "Withdraw",
+              params: { sender: lp2, receiver: lp2, owner: lp2, assets: 50_000_000n, shares: 50n },
+            },
+            { contract: "ShieldVault", event: "Transfer", params: { from: lp2, to: zero, value: 50n } },
+          ],
+        },
+      },
+    });
+    stats = await indexer.VaultStats.getOrThrow("vault");
+    expect(stats.depositors).toBe(1);
+    expect((await indexer.Depositor.getOrThrow(lp1.toLowerCase())).shares).toBe(50n);
+    expect((await indexer.Depositor.getOrThrow(lp2.toLowerCase())).shares).toBe(0n);
+  });
+
+  it("sets the status of a borrower first seen through Repriced from the event's lapsed flag", async () => {
+    // Happens when ENVIO_START_BLOCK is later than the OptedIn, for example a redeployed indexer.
+    const indexer = createTestIndexer();
+    const borrower = Addresses.mockAddresses[3]!;
+    const repriced = (n: number, lapsed: boolean) => ({
+      contract: "Repricer" as const,
+      event: "Repriced" as const,
+      block: { number: n },
+      params: {
+        borrower,
+        charged: 1n,
+        premiumPerBlock: 1n,
+        healthFactor: 10n ** 18n,
+        sigma: 1n,
+        prepaid: lapsed ? 0n : WAD,
+        lapsed,
+      },
+    });
+    await indexer.process({ chains: { 143: { simulate: [repriced(10, false)] } } });
+    expect((await indexer.Position.getOrThrow(borrower.toLowerCase())).status).toBe("Protected");
+    await indexer.process({ chains: { 143: { simulate: [repriced(11, true)] } } });
+    expect((await indexer.Position.getOrThrow(borrower.toLowerCase())).status).toBe("Unprotected");
+  });
+});

@@ -6,9 +6,9 @@
     "codegen": "envio codegen",
     "dev": "envio dev",
     "start": "envio start",
-    "test": "vitest run --test-timeout=20000",
-    "build": "envio codegen && tsc --noEmit",
-    "lint": "envio codegen && tsc --noEmit"
+    "test": "vitest run",
+    "build": "node --env-file=test.env node_modules/envio/bin.mjs codegen && tsc --noEmit",
+    "lint": "node --env-file=test.env node_modules/envio/bin.mjs codegen && tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

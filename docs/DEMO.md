@@ -18,6 +18,8 @@ Demo path (ADR-015): a real Aave V3 Monad position, WETH collateral and USDC deb
 
 Playwright (`web/e2e/video-script.spec.ts`) then walks the video script in a real browser and checks each claim against the fork's receipts and logs. Afterwards `scripts/e2e.sh` adds the keeper's receipt time, latency and gas for each transaction from the keeper's JSON log.
 
+Fork rehearsals deploy with a 20-second waiting period (`STACK_MIN_COVER_SECONDS`, passed to the deployment as `SHIELD_MIN_COVER_SECONDS`) instead of mainnet's 900 seconds, so a scripted run reaches its exit within about 90 seconds; the records below predate the waiting period.
+
 ### Click path
 
 | # | Where | Action | What the page shows |
@@ -105,78 +107,127 @@ The keeper saw HF 1.0449 at block 110644686 and decided to exit at 03:27:28.164Z
 
 ## Part 2: the mainnet runbook
 
-Everything here spends real MON and moves real tokens, so it is run by the repo owner. Use four fresh accounts. Keys go in environment variables only, never in a file inside the repo.
+Everything here spends real MON and moves real tokens, so it is run by the repo owner. Use four fresh accounts. No key is ever typed on a command line, exported in the shell or stored inside the repo: three accounts live in encrypted Foundry keystores (`~/.foundry/keystores`) and the keeper's key lives in a chmod 600 file outside the repo, because the keeper is TypeScript and reads a raw key. The `*_PRIVATE_KEY` variables still work and are what the fork scripts use; do not use them on mainnet.
 
 ### Accounts and funding
 
 Prices on 5 Oct 2026: gas 102 gwei on mainnet, WETH $2,726.39 on Aave's oracle, MON $0.0334.
 
-| Account | Env var for its key | Send to it on Monad mainnet (chain 143) | What it pays for |
+| Account | How the scripts sign | Send to it on Monad mainnet (chain 143) | What it pays for |
 | --- | --- | --- | --- |
-| Deployer | `DEPLOYER_PRIVATE_KEY` | 5 MON | The deploy script estimates 17,602,721 gas for the five contracts and wiring; at 102 gwei with forge's 1.3x limit that is about 2.3 MON |
-| Keeper | `KEEPER_PRIVATE_KEY` | 100 MON | About 0.025 MON per every-block reprice of one borrower (limit about 246,000 gas) and about 0.08 MON per exit. Three 600-block (3-minute) recording windows cost about 45 MON; idle repricing every 200 blocks costs about 36 MON a day, so stop the keeper between sessions |
-| Borrower | `DEMO_PRIVATE_KEY` | 0.05 WETH (`0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242`) and 5 MON | Supplies the WETH to Aave and borrows about $107 USDC itself, which pays the 5 USDC prepay; MON covers about seven transactions |
-| LP | `LP_PRIVATE_KEY` | 100 USDC (`0x754704Bc059F8C67012fEd69BC8A327a5aafb603`) and 1 MON | Seeds the vault, which funds the exit (about $27 at this size) |
+| Deployer | keystore `shield-deployer` (`DEPLOYER_ACCOUNT`) | 5 MON | The deploy script estimates 17,602,721 gas for the five contracts and wiring; at 102 gwei with forge's 1.3x limit that is about 2.3 MON |
+| Keeper | key file `~/.shield/keeper.key` (`KEEPER_PRIVATE_KEY_FILE`) | 100 MON | About 0.025 MON per every-block reprice of one borrower (limit about 246,000 gas) and about 0.08 MON per exit. Three 600-block (3-minute) recording windows cost about 45 MON; idle repricing every 200 blocks costs about 36 MON a day, so stop the keeper between sessions. Below 0.2 MON (`MIN_BALANCE_FOR_EXIT_WEI`) the keeper stops repricing and keeps the rest for exits, so top it up before then |
+| Borrower | keystore `shield-borrower` (`DEMO_ACCOUNT`), and the browser wallet used on camera | 0.05 WETH (`0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242`) and 5 MON | Supplies the WETH to Aave and borrows about $107 USDC itself, which pays the 5 USDC prepay; MON covers about seven transactions |
+| LP | keystore `shield-lp` (`LP_ACCOUNT`) | 100 USDC (`0x754704Bc059F8C67012fEd69BC8A327a5aafb603`) and 1 MON | Seeds the vault, which funds the exit (about $27 at this size) |
 
-Create each account with `cast wallet new` and export its key in the shell that runs the commands. The keeper address also becomes the vault's unwinder.
+Create the accounts once:
+
+```bash
+export PATH="$HOME/.foundry/bin:$PATH"                   # Foundry 1.8 or later; the scripts stop with the fix if not
+mkdir -p ~/.foundry/keystores
+cast wallet new ~/.foundry/keystores shield-deployer     # asks for a password, prints only the address
+cast wallet new ~/.foundry/keystores shield-lp
+# The borrower also signs in the browser wallet on camera: create it in MetaMask or Rabby, export its key once and
+# paste it at the hidden prompt.
+cast wallet import shield-borrower --interactive
+# The keeper key, written straight to a chmod 600 file outside the repo; only the address is printed.
+mkdir -p ~/.shield && chmod 700 ~/.shield
+cast wallet new --json | node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+  const w = JSON.parse(s).data[0], dir = process.env.HOME + "/.shield/";
+  require("fs").writeFileSync(dir + "keeper.key", w.private_key + "\n", { mode: 0o600, flag: "wx" });
+  require("fs").writeFileSync(dir + "keeper.address", w.address + "\n", { flag: "wx" });
+  console.log("keeper address", w.address); });'
+```
+
+forge and cast ask for a keystore's password at a hidden prompt each time they use it, so it never reaches shell history. To run one step unattended, keep that account's password in a chmod 600 file outside the repo and name it for that command only, for example `ETH_PASSWORD=~/.shield/lp.pw bash scripts/demo-position.sh seed`. Do not export `ETH_PASSWORD`: it applies to every keystore, and while it is set forge and cast refuse `--private-key` (the fork scripts clear it for that reason).
+
+The keeper address also becomes the vault's unwinder. `scripts/deploy-mainnet.sh` refuses to run without `KEEPER_ADDRESS`, and refuses when it does not match the key in `KEEPER_PRIVATE_KEY_FILE`.
 
 Position size sets the dollar figures on screen. At 0.05 WETH the exit repays about $27 and the penalty avoided is about $1.20 (4.5% of the amount repaid: Aave's 5.5% bonus minus Shield's 1% discount). Both scale with the position: 1 WETH gives about $545 repaid and $24 avoided, and then the LP seed must be at least $600 USDC so the vault, not the flash-loan fallback, funds the exit. Set `DEMO_WETH` (wei) and `VAULT_SEED` (USDC units, 6 decimals) to change them.
+
+### The waiting period
+
+New cover cannot exit for 15 minutes after the opt-in (`Executor.minCoverSeconds`, 900 seconds on mainnet; the deploy script prints the value it deploys with). Repricing is not affected. That sets the order of the recording:
+
+1. Start the keeper just before the opt-in. It reprices every block for its first 600 blocks (`REPRICE_WINDOW_BLOCKS`, the default, about 3 minutes), then every 200 blocks. An opt-in inside that window gets its three repricing transactions in consecutive blocks straight away. If the window has closed, stop the keeper (Ctrl-C) and start it again to open a new one; it runs as a single instance and refuses a second start while the first runs.
+2. Wait out the 15 minutes. The nudge refuses until then and prints the seconds left.
+3. Nudge. The keeper exits within a few blocks.
 
 ### Commands, in order
 
 ```bash
-export PATH="$HOME/.foundry/bin:$PATH"        # Foundry 1.8 or later; the scripts stop with the fix if not
-export MONAD_RPC_URL=https://rpc.monad.xyz MONAD_WS_URL=wss://rpc.monad.xyz
-export DEPLOYER_PRIVATE_KEY=0x... KEEPER_PRIVATE_KEY=0x... DEMO_PRIVATE_KEY=0x... LP_PRIVATE_KEY=0x...
-export KEEPER_ADDRESS=$(cast wallet address --private-key "$KEEPER_PRIVATE_KEY")
-export DEMO_ADDRESS=$(cast wallet address --private-key "$DEMO_PRIVATE_KEY")
+export PATH="$HOME/.foundry/bin:$PATH"
+export MONAD_RPC_URL=https://rpc.monad.xyz MONAD_WS_URL=wss://rpc.monad.xyz   # mainnet scripts refuse local URLs and any chain but 143
+export DEPLOYER_ACCOUNT=shield-deployer DEMO_ACCOUNT=shield-borrower LP_ACCOUNT=shield-lp
+export DEPLOYER_ADDRESS=$(cast wallet address --account shield-deployer)     # each asks for that keystore's password once;
+export DEMO_ADDRESS=$(cast wallet address --account shield-borrower)         # with the addresses set, forge refuses a
+export LP_ADDRESS=$(cast wallet address --account shield-lp)                 # keystore that does not match them
+export KEEPER_PRIVATE_KEY_FILE=~/.shield/keeper.key KEEPER_ADDRESS=$(cat ~/.shield/keeper.address)
 
-# 1. Deploy and verify on MonadVision (add ETHERSCAN_API_KEY to also verify on Monadscan)
-bash scripts/deploy-mainnet.sh                  # writes contracts/deployments/143.json
+# 1. Deploy. Refuses when contracts/deployments/143.json exists (--force replaces it and keeps a timestamped backup).
+#    Writes 143.json only after the broadcast succeeded and every contract has code on chain.
+bash scripts/deploy-mainnet.sh
+#    If forge stops part way (RPC error, timeout, low balance), finish the same deployment rather than starting over:
+#    bash scripts/deploy-mainnet.sh --resume
 
-# 2. Indexer on Envio's hosted service (one-time: npx envio-cloud login, Envio GitHub app on the repo)
-ENVIO_ORG=<your Envio org> ENVIO_API_TOKEN=<HyperSync token> bash scripts/deploy-indexer.sh
+# 2. Verify on MonadVision. A separate step that sends nothing, so repeat it until every contract is verified; a
+#    failure never means a redeploy. For Monadscan too, first: read -rs ETHERSCAN_API_KEY && export ETHERSCAN_API_KEY
+bash scripts/verify-mainnet.sh                  # retry by name, for example: bash scripts/verify-mainnet.sh Executor
 
-# 3. Web app against the mainnet deployment
-NEXT_PUBLIC_ENVIO_GRAPHQL_URL=<endpoint from step 2> bash scripts/web-env.sh
+# 3. Indexer on Envio's hosted service (one-time: npx envio-cloud login, Envio GitHub app on the repo). The token is
+#    read without echo: read -rs ENVIO_API_TOKEN && export ENVIO_API_TOKEN
+ENVIO_ORG=<your Envio org> bash scripts/deploy-indexer.sh
+
+# 4. Web app against the mainnet deployment
+NEXT_PUBLIC_ENVIO_GRAPHQL_URL=<endpoint from step 3> bash scripts/web-env.sh
 pnpm --filter web build && pnpm --filter web start   # http://localhost:3000; NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID adds WalletConnect
 
-# 4. LP deposit
+# 5. LP deposit (asks for the LP password)
 bash scripts/demo-position.sh seed
 
-# 5. Borrower position at HF 1.07 without cover (the opt-in happens on camera)
+# 6. Borrower position at HF 1.07 without cover; the opt-in happens on camera (asks for the borrower password)
 bash scripts/demo-position.sh position
 
-# 6. Keeper, in its own terminal, started just before recording; logs to keeper.log. It reprices every block for
-#    600 blocks (3 minutes) from its start, then every 200 blocks; restart it to open a new window
-REPRICE_WINDOW_BLOCKS=600 bash scripts/demo-position.sh keeper
+# 7. Keeper, in its own terminal with MONAD_RPC_URL, MONAD_WS_URL and KEEPER_PRIVATE_KEY_FILE exported, started just
+#    before the opt-in. Logs to keeper.log at the repo root
+bash scripts/demo-position.sh keeper
 ```
 
-Then record the video (below). When the borrower is protected, move the HF under the trigger with a real extra borrow:
+Then record the video (below). After the opt-in and the 15-minute waiting period, move the HF under the trigger with a real extra borrow:
 
 ```bash
 DEMO_NUDGE_HF_BPS=10450 bash scripts/demo-position.sh nudge   # HF 1.045, under a 1.05 trigger
 ```
+
+The nudge checks first and borrows nothing when a required check fails:
+
+- the borrower's cover is active and has not lapsed;
+- the waiting period is over: the opt-in time plus `minCoverSeconds` is at or before the latest block's timestamp (if not, it prints the seconds left);
+- the borrower's aWETH approval to the Executor covers the whole aWETH balance;
+- the vault's available liquidity covers the borrower's USDC debt (a warning only: the flash-loan fallback covers the rest);
+- the keeper's log (`KEEPER_LOG`, default `keeper.log`, the file step 7 writes) has a line from the last 10 seconds (a warning only).
+
+`--force-nudge` borrows even when a check fails. After the borrow the script prints the Executor's `previewExit` status and the HF. `Ready` means the keeper exits within a few blocks. `PythStale` or `OracleDeviation` means the on-chain Pyth price is old or far from Aave's: with `PYTH_HERMES_API_KEY` set the keeper retries the exit with a fresh Pyth update every few blocks, and without one it waits for Pyth's push feed to update.
 
 Borrowing alone cannot take a WETH position below HF 1.0435 (Aave allows borrowing up to the LTV, 80.5%, and liquidates at the threshold, 84%), so the trigger for the nudge path must be 1.05 or higher. A trigger of 1.04, as in the SPEC.md script, is reached only by the market.
 
 After the exit:
 
 ```bash
-ENVIO_GRAPHQL_URL=<endpoint from step 2> bash scripts/proof.sh   # README Deployments and Proof rows, each checked on chain
+ENVIO_GRAPHQL_URL=<endpoint from step 3> bash scripts/proof.sh   # README Deployments and Proof rows, each checked on chain
 ```
 
-Paste the output into the README Deployments and Proof tables.
+`scripts/proof.sh` counts only keeper log lines whose `to` is this deployment's Repricer (reprices) or Executor (the exit), so a `keeper.log` that also holds older runs is safe. Paste the output into the README Deployments and Proof tables.
 
-To run the opt-in from the command line instead of the browser, replace step 5 with `bash scripts/demo-position.sh open` (trigger `DEMO_TRIGGER_BPS`, default 10500, prepay `DEMO_PREPAY`, default 5 USDC).
+To run the opt-in from the command line instead of the browser, replace step 6 with `bash scripts/demo-position.sh open` (trigger `DEMO_TRIGGER_BPS`, default 10500, prepay `DEMO_PREPAY`, default 5 USDC).
 
 ### Video, 3 minutes
 
 The SPEC.md script with the mainnet steps above:
 
 1. Borrower page at the web app: connect a browser wallet (MetaMask or Rabby) holding the borrower key, on Monad mainnet. HF 1.07, WETH collateral, USDC debt. Set the trigger to 1.05 with the slider, prepay 5 USDC, run the four steps. The premium quote ticks every block; the comparison line reads "Aave penalty if liquidated: $X. Shield: $Y."
-2. MonadVision: the opt-in transaction, then three repricing transactions in consecutive blocks (the keeper log has the hashes; `scripts/proof.sh` prints them).
-3. Run the nudge. HF falls to 1.045; the keeper exits within a few blocks (three on the fork). Show the `Exited` event on MonadVision and the borrower page reading "penalty avoided".
+2. MonadVision: the opt-in transaction, then three repricing transactions in consecutive blocks right after it (the keeper log has the hashes; `scripts/proof.sh` prints them).
+3. After the 15-minute waiting period (cut in the edit), run the nudge. HF falls to 1.045; the keeper exits within a few blocks (three on the fork). Show the `Exited` event on MonadVision and the borrower page reading "penalty avoided".
 4. LP page: premium earned, exits executed, average discount captured.
 5. The comparison table on the landing page, 10 seconds.
 6. One sentence on why Monad: per-block repricing and a page-warmed registry.

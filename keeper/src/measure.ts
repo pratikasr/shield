@@ -5,6 +5,7 @@
  *
  *   pnpm --filter keeper measure        (same environment as the keeper)
  */
+import { pathToFileURL } from "node:url";
 import { createPublicClient, encodeFunctionData, http, type AccessList, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { executorAbi } from "./abi/Executor.js";
@@ -84,7 +85,7 @@ async function main(): Promise<void> {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

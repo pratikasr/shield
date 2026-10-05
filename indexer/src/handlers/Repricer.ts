@@ -19,7 +19,9 @@ indexer.onEvent({ contract: "Repricer", event: "Repriced", fields }, async ({ ev
     txHash: event.transaction.hash,
     logIndex: event.logIndex,
   });
-  const live = p.status === "Protected" || p.status === "Unprotected";
+  // The Repricer only emits Repriced for an active record, and in an opt-out or exit transaction it comes before
+  // OptedOut or Exited. So the event's lapsed flag always sets the status, including for a borrower first seen
+  // here because the indexer started after the OptedIn.
   context.Position.set({
     ...p,
     prepaid,
@@ -29,7 +31,7 @@ indexer.onEvent({ contract: "Repricer", event: "Repriced", fields }, async ({ ev
     sigma,
     repriceCount: p.repriceCount + 1,
     lastRepricedBlock: BigInt(event.block.number),
-    status: live ? (lapsed ? "Unprotected" : "Protected") : p.status,
+    status: lapsed ? "Unprotected" : "Protected",
   });
 });
 

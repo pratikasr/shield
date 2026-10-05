@@ -109,7 +109,7 @@ The exit is permissionless: anyone may call `Executor.exit` when the conditions 
 
 ## Deployments (Monad mainnet, chain id 143)
 
-Not deployed yet. `bash scripts/deploy-mainnet.sh` deploys, verifies on MonadVision (and Monadscan with `ETHERSCAN_API_KEY`) and writes `contracts/deployments/143.json`; the addresses go here.
+Not deployed yet. `bash scripts/deploy-mainnet.sh` deploys and writes `contracts/deployments/143.json` once every address holds code (it refuses to run again while that file exists, unless `--force`); `bash scripts/verify-mainnet.sh` verifies on MonadVision (and Monadscan with `ETHERSCAN_API_KEY`) and can be rerun on its own. The addresses go here.
 
 | Contract | Address |
 | --- | --- |
@@ -171,13 +171,20 @@ Open http://localhost:3200, choose "Fork test wallet" in Connect, set a trigger,
 
 ### On Monad mainnet
 
+Keys stay in Foundry keystores and, for the keeper, in a `chmod 600` key file outside the repo; none goes on a command line or in the shell's environment (docs/DEMO.md shows how to create them).
+
 ```bash
-MONAD_RPC_URL=https://rpc.monad.xyz DEPLOYER_PRIVATE_KEY=0x... KEEPER_ADDRESS=0x... bash scripts/deploy-mainnet.sh
-LP_PRIVATE_KEY=0x... MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/demo-position.sh seed
-DEMO_PRIVATE_KEY=0x... MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/demo-position.sh open
-KEEPER_PRIVATE_KEY=0x... MONAD_RPC_URL=https://rpc.monad.xyz MONAD_WS_URL=wss://rpc.monad.xyz bash scripts/demo-position.sh keeper
+export MONAD_RPC_URL=https://rpc.monad.xyz MONAD_WS_URL=wss://rpc.monad.xyz
+export DEPLOYER_ACCOUNT=shield-deployer DEMO_ACCOUNT=shield-borrower LP_ACCOUNT=shield-lp
+export KEEPER_PRIVATE_KEY_FILE=~/.shield/keeper.key KEEPER_ADDRESS=$(cat ~/.shield/keeper.address)
+bash scripts/deploy-mainnet.sh            # refuses local RPCs, any chain but 143, and an existing 143.json
+bash scripts/verify-mainnet.sh            # sends nothing; rerun until every contract is verified
+bash scripts/demo-position.sh seed
+bash scripts/demo-position.sh open
+bash scripts/demo-position.sh keeper
+bash scripts/demo-position.sh nudge       # after the 15-minute waiting period; checks the cover first
 bash scripts/web-env.sh && pnpm --filter web build && pnpm --filter web start
-MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/proof.sh   # Deployments and Proof rows, each checked on chain
+bash scripts/proof.sh                     # Deployments and Proof rows, each checked on chain
 ```
 
 The full runbook, account funding, the video steps and the fork rehearsals are in [docs/DEMO.md](docs/DEMO.md).
@@ -188,8 +195,8 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 | --- | --- | --- |
 | Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 101 tests pass |
 | Static analysis | Slither 0.11.6, Aderyn 0.6.8 | every high and medium fixed or justified in [docs/SECURITY.md](docs/SECURITY.md) |
-| Keeper | `pnpm --filter keeper test` | 33 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
-| Indexer | `pnpm --filter shield-indexer test` | 2 tests pass |
+| Keeper | `pnpm --filter keeper test` | 81 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
+| Indexer | `pnpm --filter shield-indexer test` | 5 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
 | Lighthouse (mobile) | landing, borrower, LP | performance 94, 94, 91; accessibility and best practices 100 on all |

@@ -4,7 +4,8 @@ import { fields, loadPosition } from "./shared.js";
 indexer.onEvent({ contract: "Executor", event: "Exited", fields }, async ({ event, context }) => {
   const p = await loadPosition(context, event.params.borrower);
   context.Exit.set({
-    id: event.transaction.hash,
+    // One row per log: exit() is permissionless, so one transaction can exit several borrowers.
+    id: `${event.transaction.hash}-${event.logIndex}`,
     position_id: p.id,
     borrower: p.borrower,
     collateral: event.params.collateral.toLowerCase(),
