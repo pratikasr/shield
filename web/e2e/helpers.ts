@@ -61,7 +61,8 @@ async function setWethPriceOnce(price8: bigint) {
     abi: unknown[];
     bytecode: { object: Hex };
   };
-  const hash = await admin.deployContract({ abi: artifact.abi, bytecode: artifact.bytecode.object, args: [price8] });
+  // Fixed gas limits: the fork's gas estimate is the call that most often fails fetching upstream state.
+  const hash = await admin.deployContract({ abi: artifact.abi, bytecode: artifact.bytecode.object, args: [price8], gas: 500_000n });
   const agg = (await client.waitForTransactionReceipt({ hash })).contractAddress!;
   await testClient.impersonateAccount({ address: ACL_ADMIN });
   await testClient.setBalance({ address: ACL_ADMIN, value: 10n ** 20n });
@@ -70,6 +71,7 @@ async function setWethPriceOnce(price8: bigint) {
     abi: oracleAbi,
     functionName: "setAssetSources",
     args: [[WETH], [agg]],
+    gas: 300_000n,
   });
   await client.waitForTransactionReceipt({ hash: tx });
   await testClient.stopImpersonatingAccount({ address: ACL_ADMIN });
