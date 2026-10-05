@@ -2,10 +2,13 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Eye, ShieldCheck, Wallet } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress, type Address } from "viem";
 import { useAccount } from "wagmi";
-import { CoverManage, CoverSetup, CoverUnavailable, ExitSummary } from "@/components/borrow/cover-panel";
+import { CoverManage } from "@/components/borrow/cover-manage";
+import { CoverSetup, CoverUnavailable } from "@/components/borrow/cover-setup";
+import { ExitSummary, PrepaidCard, WatchedCover } from "@/components/borrow/cover-extras";
+import { AAVE_APP, KEEPER_IDLE_BLOCKS } from "@/components/borrow/cover-shared";
 import { ActivityPanel, exitRows, useBorrowerHistory } from "@/components/borrow/history";
 import { PositionHeader, PositionPanel, PositionSkeleton, ReservesTable, pickCollateral } from "@/components/borrow/position-panel";
 import { SourcesPanel } from "@/components/borrow/sources-panel";
@@ -14,11 +17,16 @@ import { TokenPair } from "@/components/data/token";
 import { useWrongNetwork } from "@/components/shell/network-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAavePosition } from "@/hooks/useAavePosition";
 import { useChainExit } from "@/hooks/useChainExit";
+import { useLiveBlock, useNow } from "@/hooks/useLiveBlock";
+import { useShieldConfig } from "@/hooks/useShieldConfig";
 import { useShieldPosition } from "@/hooks/useShieldPosition";
-import { isDeployed } from "@/lib/env";
-import { formatUsd, toNumber, truncateHex } from "@/lib/format";
+import { useTx } from "@/hooks/useTx";
+import { LOADING_ARM, computeArm } from "@/lib/cover-status";
+import { collateralName, isDeployed } from "@/lib/env";
+import { firstLine, formatUsd, toNumber, truncateHex } from "@/lib/format";
 
 function Notice({ icon, title, children, action, footer }: { icon?: React.ReactNode; title: string; children: React.ReactNode; action?: React.ReactNode; footer?: React.ReactNode }) {
   return (
@@ -34,23 +42,44 @@ function Notice({ icon, title, children, action, footer }: { icon?: React.ReactN
   );
 }
 
+/**
+ * The `?address=` parameter. All-lowercase or all-uppercase hex is accepted and normalised; mixed case must carry a
+ * valid checksum, so a mistyped address is refused rather than silently read.
+ */
+export function parseWatchParam(raw: string): { address?: Address; invalid: boolean } {
+  const v = raw.trim();
+  if (!v) return { invalid: false };
+  if (!/^0x[0-9a-fA-F]{40}$/.test(v)) return { invalid: true };
+  const hex = v.slice(2);
+  const oneCase = hex === hex.toLowerCase() || hex === hex.toUpperCase();
+  if (!oneCase && !isAddress(v, { strict: true })) return { invalid: true };
+  return { address: getAddress(v.toLowerCase()), invalid: false };
+}
+
 /** Read-only view of any address, for anyone without that wallet (a judge checking the demo position). */
 function WatchForm() {
   const [value, setValue] = useState("");
-  const valid = isAddress(value.trim());
+  const parsed = parseWatchParam(value);
   return (
     <form
       className="mx-auto mt-5 flex max-w-xl gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) window.location.assign(`/app/borrow?address=${getAddress(value.trim())}`);
+        if (parsed.address) window.location.assign(`/app/borrow?address=${parsed.address}`);
       }}
     >
       <label htmlFor="watch" className="sr-only">
         Address to view
       </label>
-      <Input id="watch" className="h-11 bg-card num" placeholder="Or view any address read only, 0x..." value={value} onChange={(e) => setValue(e.target.value)} />
-      <Button type="submit" variant="outline" className="h-11 bg-card" disabled={!valid}>
+      <Input
+        id="watch"
+        className="h-11 bg-card num"
+        placeholder="Or view any address read only, 0x..."
+        value={value}
+        aria-invalid={parsed.invalid || undefined}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <Button type="submit" variant="outline" className="h-11 bg-card" disabled={!parsed.address}>
         <Eye className="size-4" aria-hidden />
         View
       </Button>
@@ -58,32 +87,120 @@ function WatchForm() {
   );
 }
 
+function WatchBanner({ watching, connected }: { watching: Address; connected?: Address }) {
+  const other = connected !== undefined && connected.toLowerCase() !== watching.toLowerCase();
+  return (
+    <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
+      <p className="flex min-w-0 items-start gap-2">
+        <Eye className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        {/* One text run, so no flex gap lands before the comma. */}
+        <span className="min-w-0">
+          {other ? (
+            <>
+              Connected as <span className="font-medium num">{truncateHex(connected!)}</span>, viewing <span className="font-medium num">{truncateHex(watching)}</span> read
+              only.
+            </>
+          ) : (
+            <>
+              Viewing <span className="font-medium num">{truncateHex(watching)}</span>, read only.{" "}
+              {connected ? "Stop viewing to manage it from this wallet." : "Connect that wallet to change its cover."}
+            </>
+          )}
+        </span>
+      </p>
+      <a href="/app/borrow" className="hit relative rounded-sm font-medium underline underline-offset-4">
+        Stop viewing
+      </a>
+    </div>
+  );
+}
+
+/** Blocks a condition has held for, counted from the first block it was seen. */
+function useBlocksSince(condition: boolean, block: bigint | undefined): number {
+  const since = useRef<bigint | undefined>(undefined);
+  if (!condition) since.current = undefined;
+  else if (since.current === undefined && block !== undefined) since.current = block;
+  return condition && since.current !== undefined && block !== undefined ? Number(block - since.current) : 0;
+}
+
 export function BorrowView() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, status } = useAccount();
   // Read after mount: useSearchParams would make Next skip server rendering of the whole page.
-  const [watchParam, setWatchParam] = useState("");
+  const [watch, setWatch] = useState({ read: false, raw: "" });
+  const [settled, setSettled] = useState(false);
   useEffect(() => {
-    const read = () => setWatchParam(new URLSearchParams(window.location.search).get("address") ?? "");
+    const read = () => setWatch({ read: true, raw: new URLSearchParams(window.location.search).get("address") ?? "" });
     read();
     window.addEventListener("popstate", read);
-    return () => window.removeEventListener("popstate", read);
+    // wagmi restores a wallet just after mount; wait a moment before offering to connect.
+    const t = setTimeout(() => setSettled(true), 400);
+    return () => {
+      window.removeEventListener("popstate", read);
+      clearTimeout(t);
+    };
   }, []);
-  const watching = !isConnected && isAddress(watchParam) ? (getAddress(watchParam) as Address) : undefined;
-  const viewer = isConnected ? address : watching;
+  const parsed = parseWatchParam(watch.raw);
+  const watching = parsed.address;
+  const connected = isConnected ? address : undefined;
+  // ?address= wins over the connected wallet: the page shows what the link says, read only.
+  const viewer = watching ?? connected;
+  const reconnecting = status === "reconnecting" || status === "connecting";
   const wrongNetwork = useWrongNetwork();
-  const { position, isLoading, error } = useAavePosition(viewer);
-  const collateral = position ? pickCollateral(position) : undefined;
-  const { cover, refetch } = useShieldPosition(viewer, collateral?.aToken);
+
+  const { config } = useShieldConfig();
+  const aavePos = useAavePosition(viewer);
+  const position = aavePos.position;
+  const coverableKey = config && position ? config.assets.map((a) => a.asset).join() + position.allReserves.length : "";
+  const coverable = useMemo(
+    () =>
+      config && position
+        ? config.assets.flatMap((a) => {
+            const r = position.allReserves.find((x) => x.asset.toLowerCase() === a.asset.toLowerCase());
+            return r ? [{ asset: a.asset, aToken: r.aToken }] : [];
+          })
+        : [],
+    // The list depends only on the registry's assets and the reserve list, not on balances that move every block.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [coverableKey],
+  );
+  const shieldPos = useShieldPosition(viewer, coverable);
+  const cover = shieldPos.cover;
+  const collateral = position ? pickCollateral(position, cover, config) : undefined;
   const history = useBorrowerHistory(viewer);
   const chainExit = useChainExit(viewer, cover);
+  const lifecycle = useTx();
+  const { data: block } = useLiveBlock();
+  const now = useNow(1000);
+  const chainNow = cover?.chainTime !== undefined ? cover.chainTime + Math.max(now - cover.readAt, 0) / 1000 : undefined;
+  const arm = !cover && shieldPos.isLoading ? LOADING_ARM : computeArm({ cover, position, collateral, config, chainNow, block });
+  const keeperIdle = useBlocksSince(arm.kind === "due", block) >= KEEPER_IDLE_BLOCKS;
   const [previewTrigger, setPreviewTrigger] = useState<number>();
   const onTrigger = useCallback((t: number) => setPreviewTrigger(t), []);
+  const refetchShield = shieldPos.refetch;
+  const refetchAave = aavePos.refetch;
+  const refetch = useCallback(() => Promise.all([refetchShield(), refetchAave()]), [refetchShield, refetchAave]);
 
   if (!isDeployed) {
     return (
       <Notice title="Shield is not configured">
-        This build has no contract addresses. Set NEXT_PUBLIC_SHIELD_REGISTRY, _REPRICER, _EXECUTOR and _VAULT, or run scripts/web-env.sh with a
-        deployment file.
+        This build has no contract addresses. Set NEXT_PUBLIC_SHIELD_REGISTRY, _REPRICER, _EXECUTOR and _VAULT, or run scripts/web-env.sh with a deployment file.
+      </Notice>
+    );
+  }
+  if (!watch.read || (!viewer && (reconnecting || !settled))) return <PositionSkeleton />;
+  if (parsed.invalid) {
+    return (
+      <Notice
+        icon={<Eye className="size-5" aria-hidden />}
+        title="Invalid address"
+        action={
+          <Button asChild variant="outline" className="bg-card">
+            <a href="/app/borrow">Stop viewing</a>
+          </Button>
+        }
+        footer={<WatchForm />}
+      >
+        <span className="break-all">&ldquo;{watch.raw}&rdquo;</span> is not a valid Monad address. Check it, including its upper and lower case letters, and try again.
       </Notice>
     );
   }
@@ -103,66 +220,122 @@ export function BorrowView() {
         }
         footer={<WatchForm />}
       >
-        Shield reads your Aave V3 position on Monad, shows how close it is to liquidation, and lets you set an early exit at 1% instead of
-        Aave&rsquo;s liquidation penalty.
+        Shield reads your Aave V3 position on Monad, shows how close it is to liquidation, and lets you set an early exit at 1% instead of Aave&rsquo;s
+        liquidation penalty.
       </Notice>
     );
   }
-  if (error) {
+
+  const banner = watching ? <WatchBanner watching={watching} connected={connected} /> : null;
+  if (!position) {
+    if (aavePos.error) {
+      return (
+        <div className="grid gap-8">
+          {banner}
+          <Notice title="Could not read Aave" action={<Button onClick={() => location.reload()}>Reload</Button>}>
+            The Monad RPC did not answer: {firstLine(aavePos.error.message)}. Check your connection and reload.
+          </Notice>
+        </div>
+      );
+    }
     return (
-      <Notice title="Could not read Aave" action={<Button onClick={() => location.reload()}>Reload</Button>}>
-        The Monad RPC did not answer: {error.message.split("\n")[0]}. Check your connection and reload.
-      </Notice>
+      <div className="grid gap-8">
+        {banner}
+        <PositionSkeleton />
+      </div>
     );
   }
-  if (isLoading || !position) return <PositionSkeleton />;
-  if (!position.hasPosition) {
+  const enabledNames =
+    config?.assets
+      .filter((a) => a.enabled)
+      .map((a) => collateralName(a.asset).symbol)
+      .join(" or ") || "WETH";
+  const needsPanel = Boolean(cover?.active || (cover && cover.prepaidWad > 0n));
+  if (!position.hasPosition && !needsPanel) {
     return (
-      <Notice
-        icon={<TokenPair a="AAVE" b="MON" size={26} />}
-        title="No Aave position on this wallet"
-        action={
-          <Button asChild size="lg" className="h-12 px-6">
-            <a href="https://app.aave.com/?marketName=proto_monad_v3" target="_blank" rel="noreferrer">
-              Open Aave on Monad
-            </a>
-          </Button>
-        }
-      >
-        Supply WETH or cbBTC and borrow USDC on Aave V3 Monad, then come back to set a trigger.
-      </Notice>
+      <div className="grid gap-8">
+        {banner}
+        <Notice
+          icon={<TokenPair a="AAVE" b="MON" size={26} />}
+          title={watching ? "No Aave position on this address" : "No Aave position on this wallet"}
+          action={
+            <Button asChild size="lg" className="h-12 px-6">
+              <a href={AAVE_APP} target="_blank" rel="noreferrer">
+                Open Aave on Monad
+              </a>
+            </Button>
+          }
+        >
+          Supply {enabledNames} and borrow USDC on Aave V3 Monad, then come back to set a trigger.
+        </Notice>
+      </div>
     );
   }
 
   const exits = exitRows(history.data, chainExit.data);
   const lastExit = exits[0];
   const exited = Boolean(cover?.exited && !cover.active && lastExit);
-  const premiumHistory = (history.data?.Reprice ?? []).slice().reverse().map((r) => toNumber(BigInt(r.premiumPerBlock), 18));
-  const canCover = position.eMode === 0 && collateral && (position.reserves.find((r) => r.symbol === "USDC")?.borrowed ?? 0) > 0;
+  const exitAsset = collateralName(lastExit?.collateral ?? cover?.collateral);
+  const premiumHistory = (history.data?.Reprice ?? [])
+    .slice()
+    .reverse()
+    .map((r) => toNumber(BigInt(r.premiumPerBlock), 18));
+  const collateralEnabled = Boolean(collateral && config?.assets.some((a) => a.enabled && a.asset.toLowerCase() === collateral.asset.toLowerCase()));
+  const canCover = position.eMode === 0 && collateral !== undefined && collateralEnabled && collateral.suppliedRaw > 0n && (position.usdc?.borrowedRaw ?? 0n) > 0n;
+
+  const panel = !config ? (
+    <Skeleton className="h-[28rem] w-full rounded-[14px]" />
+  ) : watching ? (
+    <WatchedCover cover={cover} arm={arm} borrower={viewer} canAct={Boolean(connected) && !wrongNetwork} keeperIdle={keeperIdle} refetch={refetch} />
+  ) : cover?.active && !collateral ? (
+    // An active cover is always managed here, never replaced by the "cannot be covered" panel.
+    <Skeleton className="h-[28rem] w-full rounded-[14px]" />
+  ) : cover?.active && collateral ? (
+    <CoverManage
+      user={viewer}
+      position={position}
+      cover={cover}
+      collateral={collateral}
+      config={config}
+      arm={arm}
+      disabled={wrongNetwork}
+      refetch={refetch}
+      lifecycle={lifecycle}
+      keeperIdle={keeperIdle}
+    />
+  ) : canCover && cover && collateral ? (
+    <CoverSetup
+      key={viewer}
+      user={viewer}
+      position={position}
+      collateral={collateral}
+      cover={cover}
+      config={config}
+      disabled={wrongNetwork}
+      onTriggerChange={onTrigger}
+      refetch={refetch}
+      lifecycle={lifecycle}
+    />
+  ) : cover || !shieldPos.isLoading ? (
+    <CoverUnavailable position={position} config={config} handoff={lifecycle.state} />
+  ) : (
+    <Skeleton className="h-[28rem] w-full rounded-[14px]" />
+  );
 
   return (
     <div className="grid gap-8">
-      {watching && (
-        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
-          <span className="flex items-center gap-2">
-            <Eye className="size-4 text-muted-foreground" aria-hidden />
-            Viewing <span className="font-medium num">{truncateHex(watching)}</span>, read only. Connect that wallet to change its cover.
-          </span>
-          <a href="/app/borrow" className="rounded-sm font-medium underline underline-offset-4">
-            Stop viewing
-          </a>
-        </div>
-      )}
+      {banner}
 
-      <PositionHeader position={position} cover={cover} title={watching ? "Aave position" : "Your Aave position"} />
+      <PositionHeader position={position} cover={cover} arm={arm} title={watching ? "Aave position" : "Your Aave position"} />
 
       {exited && lastExit && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-safe/30 bg-safe-soft px-5 py-4">
-          <p className="flex flex-wrap items-center gap-x-2 text-[0.9375rem]">
-            <ShieldCheck className="size-5 text-safe" aria-hidden />
+          <p className="flex items-start gap-2 text-[0.9375rem]">
+            <ShieldCheck className="mt-0.5 size-5 shrink-0 text-safe" aria-hidden />
             <span>
               Exited in block {Number(lastExit.blockNumber).toLocaleString("en-US")}: penalty avoided{" "}
-              <strong className="font-semibold text-safe num">{formatUsd(toNumber(BigInt(lastExit.savedVsAave), 6))}</strong>.
+              <strong className="font-semibold text-safe num">{formatUsd(toNumber(BigInt(lastExit.savedVsAave), 6))}</strong>, saved against Aave&rsquo;s bonus
+              on the same repayment.
             </span>
           </p>
           <HashLink value={lastExit.txHash} />
@@ -171,73 +344,39 @@ export function BorrowView() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_auto_1fr]">
         <div className="min-w-0 lg:col-start-1">
-          <PositionPanel position={position} cover={cover} previewTrigger={cover?.active ? undefined : previewTrigger} premiumHistory={premiumHistory} />
+          <PositionPanel
+            position={position}
+            cover={cover}
+            collateral={collateral}
+            config={config}
+            arm={arm}
+            previewTrigger={cover?.active || !canCover || watching ? undefined : previewTrigger}
+            premiumHistory={premiumHistory}
+          />
         </div>
         <aside className="grid min-w-0 gap-4 self-start lg:sticky lg:top-24 lg:col-start-2 lg:row-span-3 lg:row-start-1" aria-label="Cover">
-          {exited && lastExit && collateral && (
+          {exited && lastExit && (
             <ExitSummary
               savedUsd={toNumber(BigInt(lastExit.savedVsAave), 6)}
               repaidUsd={toNumber(BigInt(lastExit.repaid), 6)}
+              feeUsd={config ? (toNumber(BigInt(lastExit.repaid), 6) * config.exitDiscountBps) / 10_000 : undefined}
               hfBefore={toNumber(BigInt(lastExit.healthFactorBefore), 18)}
               hfAfter={toNumber(BigInt(lastExit.healthFactorAfter), 18)}
-              symbol={collateral.symbol}
+              collateralTaken={BigInt(lastExit.seized || "0") > 0n ? toNumber(BigInt(lastExit.seized), exitAsset.decimals) : undefined}
+              symbol={exitAsset.symbol}
             />
           )}
-          {watching ? (
-            <WatchedCover cover={cover} />
-          ) : !canCover ? (
-            <CoverUnavailable position={position} />
-          ) : cover?.active ? (
-            <CoverManage user={address!} cover={cover} collateral={collateral!} disabled={wrongNetwork} onDone={() => void refetch()} />
-          ) : (
-            <CoverSetup
-              user={address!}
-              position={position}
-              collateral={collateral!}
-              cover={cover}
-              disabled={wrongNetwork}
-              onTriggerChange={onTrigger}
-              onDone={() => void refetch()}
-            />
-          )}
+          {panel}
+          {!watching && cover && !cover.active && cover.prepaidWad > 0n && <PrepaidCard cover={cover} disabled={wrongNetwork} refetch={refetch} />}
         </aside>
         <div className="min-w-0 lg:col-start-1">
-          <ActivityPanel history={history.data} isLoading={history.isLoading} error={history.error} chainExit={chainExit.data} />
+          <ActivityPanel history={history.data} isLoading={history.isLoading} error={history.error} chainExit={chainExit.data} active={Boolean(cover?.active)} />
         </div>
         <div className="grid min-w-0 gap-6 self-start lg:col-start-1">
           <ReservesTable position={position} />
-          <SourcesPanel collateral={collateral} />
+          <SourcesPanel collateral={collateral} config={config} />
         </div>
       </div>
     </div>
-  );
-}
-
-function WatchedCover({ cover }: { cover?: import("@/hooks/useShieldPosition").Cover }) {
-  const state = !cover?.active ? (cover?.exited ? "Exited" : "No cover") : cover.lapsed ? "Unprotected" : "Protected";
-  return (
-    <section className="panel p-5 sm:p-6" aria-label="Cover">
-      <h2 className="text-lg font-semibold">Shield cover</h2>
-      <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <dt className="text-muted-foreground">Status</dt>
-          <dd className={state === "Protected" ? "font-semibold text-safe" : state === "Unprotected" ? "font-semibold text-caution" : "font-semibold"}>{state}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Trigger</dt>
-          <dd className={cover?.active ? "reading font-semibold text-caution" : "reading font-semibold text-muted-foreground"}>
-            {cover?.active ? cover.trigger.toFixed(2) : "Not set"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Prepaid</dt>
-          <dd className="reading font-semibold">{formatUsd(cover?.prepaidUsd ?? 0)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Premium paid</dt>
-          <dd className="reading font-semibold">{formatUsd(cover?.premiumPaidUsd ?? 0)}</dd>
-        </div>
-      </dl>
-    </section>
   );
 }

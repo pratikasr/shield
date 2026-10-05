@@ -1,3 +1,5 @@
+import { parseAbi } from "viem";
+
 /** Minimal Aave V3 and ERC-20 ABIs for the reads and writes the app makes. Shield ABIs are generated. */
 export { executorAbi } from "./abi/Executor";
 export { positionRegistryAbi } from "./abi/PositionRegistry";
@@ -78,7 +80,50 @@ export const aaveDataProviderAbi = [
       { name: "isFrozen", type: "bool" },
     ],
   },
+  {
+    type: "function",
+    name: "getUserReserveData",
+    stateMutability: "view",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "user", type: "address" },
+    ],
+    outputs: [
+      { name: "currentATokenBalance", type: "uint256" },
+      { name: "currentStableDebt", type: "uint256" },
+      { name: "currentVariableDebt", type: "uint256" },
+      { name: "principalStableDebt", type: "uint256" },
+      { name: "scaledVariableDebt", type: "uint256" },
+      { name: "stableBorrowRate", type: "uint256" },
+      { name: "liquidityRate", type: "uint256" },
+      { name: "stableRateLastUpdated", type: "uint40" },
+      { name: "usageAsCollateralEnabled", type: "bool" },
+    ],
+  },
 ] as const;
+
+/** Pyth's on-chain price read (the push feed the exit checks). */
+export const pythAbi = parseAbi(["function getPriceUnsafe(bytes32 id) view returns ((int64 price, uint64 conf, int32 expo, uint256 publishTime))"]);
+
+/** Multicall3's block timestamp, read in the same call as the cover so countdowns use chain time. */
+export const multicall3Abi = parseAbi(["function getCurrentBlockTimestamp() view returns (uint256 timestamp)"]);
+
+/**
+ * Errors raised below Shield's contracts (Aave's Pool and OpenZeppelin tokens), added to every simulation so a revert
+ * deep inside an exit or a transfer decodes to a name the app can explain.
+ */
+export const externalErrorsAbi = parseAbi([
+  "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
+  "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
+  "error HealthFactorLowerThanLiquidationThreshold()",
+  "error LtvValidationFailed()",
+  "error UserHasAssetWithZeroLtv()",
+  "error NotEnoughAvailableUserBalance()",
+  "error ReservePaused()",
+  "error ReserveFrozen()",
+  "error InvalidAmount()",
+  "error NoDebtOfSelectedType()",
+]);
 
 export const erc20Abi = [
   {

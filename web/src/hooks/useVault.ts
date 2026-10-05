@@ -12,8 +12,15 @@ import { useOnBlock } from "./useLiveBlock";
 const chainId = monadMainnet.id;
 
 export interface VaultState {
+  /** totalAssets: what the shares are worth now (gross assets less exit gains still unlocking). */
   nav: number;
+  /** grossAssets: idle USDC, premium at the Repricer and seized collateral at Aave's oracle. */
+  gross: number;
+  /** Exit gains not yet in the share price; they unlock linearly over six hours. */
+  lockedProfit: number;
+  /** availableLiquidity: USDC the vault can pay out now, including premium not yet swept. */
   idle: number;
+  /** Seized collateral valued at Aave's oracle. */
   collateralHeld: number;
   premiumEarned: number;
   premiumPending: number;
@@ -21,34 +28,49 @@ export interface VaultState {
   exitsExecuted: number;
   averageDiscountBps: number;
   sharePrice: number;
-  user?: { shares: bigint; assets: number; maxWithdraw: number; usdcBalance: number; usdcAllowance: bigint };
+  profitUnlockSeconds: number;
+  /** Most a sale of seized collateral may fall short of Aave's price, in bps. */
+  maxSwapSlippageBps: number;
+  user?: {
+    shares: bigint;
+    assets: number;
+    maxWithdraw: bigint;
+    maxRedeem: bigint;
+    usdcBalance: bigint;
+    usdcAllowance: bigint;
+  };
 }
 
 /** The ShieldVault's live readings and, when connected, the wallet's share of it. Refreshed every block. */
 export function useVault(user?: Address) {
   const v = shield.vault;
   const calls: (ContractFunctionParameters & { chainId?: number })[] = v
-      ? [
-          { address: v, abi: shieldVaultAbi, functionName: "totalAssets", chainId },
-          { address: v, abi: shieldVaultAbi, functionName: "availableLiquidity", chainId },
-          { address: v, abi: shieldVaultAbi, functionName: "premiumEarned", chainId },
-          { address: v, abi: shieldVaultAbi, functionName: "exitsExecuted", chainId },
-          { address: v, abi: shieldVaultAbi, functionName: "averageDiscountBps", chainId },
-          { address: v, abi: shieldVaultAbi, functionName: "convertToAssets", args: [10n ** 12n], chainId },
-          { address: v, abi: shieldVaultAbi, functionName: "totalPremiumEarned", chainId },
-          ...(user
-            ? ([
-                { address: v, abi: shieldVaultAbi, functionName: "balanceOf", args: [user], chainId },
-                { address: v, abi: shieldVaultAbi, functionName: "maxWithdraw", args: [user], chainId },
-                { address: aave.usdc, abi: erc20Abi, functionName: "balanceOf", args: [user], chainId },
-                { address: aave.usdc, abi: erc20Abi, functionName: "allowance", args: [user, v], chainId },
-              ] as const)
-            : []),
-        ]
-      : [];
+    ? [
+        { address: v, abi: shieldVaultAbi, functionName: "totalAssets", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "availableLiquidity", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "premiumEarned", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "exitsExecuted", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "averageDiscountBps", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "convertToAssets", args: [10n ** 12n], chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "totalPremiumEarned", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "grossAssets", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "lockedProfit", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "PROFIT_UNLOCK_SECONDS", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "maxSwapSlippageBps", chainId },
+        ...(user
+          ? [
+              { address: v, abi: shieldVaultAbi, functionName: "balanceOf", args: [user], chainId },
+              { address: v, abi: shieldVaultAbi, functionName: "maxWithdraw", args: [user], chainId },
+              { address: v, abi: shieldVaultAbi, functionName: "maxRedeem", args: [user], chainId },
+              { address: aave.usdc, abi: erc20Abi, functionName: "balanceOf", args: [user], chainId },
+              { address: aave.usdc, abi: erc20Abi, functionName: "allowance", args: [user, v], chainId },
+            ]
+          : []),
+      ]
+    : [];
   const reads = useReadContracts({ allowFailure: true, contracts: calls, query: { enabled: Boolean(v) } });
   useOnBlock(() => {
-    if (v) void reads.refetch();
+    if (v) void reads.refetch({ cancelRefetch: false });
   });
 
   const state = useMemo<VaultState | undefined>(() => {
@@ -57,26 +79,35 @@ export function useVault(user?: Address) {
     const n = (i: number) => (d[i]?.status === "success" ? (d[i]!.result as bigint) : 0n);
     const nav = toNumber(n(0), 6);
     const idle = toNumber(n(1), 6);
-    const shares = n(7);
+    const grossRead = d[7]?.status === "success";
+    const gross = grossRead ? toNumber(n(7), 6) : nav;
+    const lockedProfit = toNumber(n(8), 6);
+    const shares = n(11);
     const premiumEarned = toNumber(n(2), 6);
     const premiumPending = Math.max(premiumEarned - toNumber(n(6), 6), 0);
     return {
       nav,
+      gross,
+      lockedProfit,
       idle,
-      collateralHeld: Math.max(nav - idle, 0),
+      // Collateral is what gross assets hold beyond the USDC the vault can pay out (which includes pending premium).
+      collateralHeld: Math.max(gross - idle, 0),
       premiumEarned,
       premiumPending,
       usdcOnHand: Math.max(idle - premiumPending, 0),
       exitsExecuted: Number(n(3)),
       averageDiscountBps: Number(n(4)),
       sharePrice: toNumber(n(5), 6),
+      profitUnlockSeconds: Number(n(9)) || 6 * 3600,
+      maxSwapSlippageBps: d[10]?.status === "success" ? Number(n(10)) : 300,
       user: user
         ? {
             shares,
             assets: toNumber(shares, 12) * toNumber(n(5), 6),
-            maxWithdraw: toNumber(n(8), 6),
-            usdcBalance: toNumber(n(9), 6),
-            usdcAllowance: n(10),
+            maxWithdraw: n(12),
+            maxRedeem: n(13),
+            usdcBalance: n(14),
+            usdcAllowance: n(15),
           }
         : undefined,
     };

@@ -6,21 +6,22 @@ import type { Wallet } from "@rainbow-me/rainbowkit";
 import { injectedWallet, metaMaskWallet, rabbyWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { monadTestnet } from "viem/chains";
 import { createConfig, createConnector, http, WagmiProvider } from "wagmi";
 import { mock } from "wagmi/connectors";
 import { monadMainnet, supportedChains } from "@/lib/chains";
+import { isFork } from "@/lib/env";
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
 
 /**
  * Test builds against a local fork set NEXT_PUBLIC_E2E_ACCOUNT to one of Anvil's unlocked accounts; this adds a
- * wallet that sends through the fork's own signer so Playwright can drive the real flows. Production builds
- * leave the variable empty and never include it.
+ * wallet that sends through the fork's own signer so Playwright can drive the real flows. It is included only when
+ * the RPC is also local (127.0.0.1 or localhost), so a stray variable in a production build cannot add it.
  */
-const e2eAccount = process.env.NEXT_PUBLIC_E2E_ACCOUNT as `0x${string}` | undefined;
+const e2eAccount = isFork && /^0x[0-9a-fA-F]{40}$/.test(process.env.NEXT_PUBLIC_E2E_ACCOUNT ?? "") ? (process.env.NEXT_PUBLIC_E2E_ACCOUNT as `0x${string}`) : undefined;
 /** Fork test builds only: start the test wallet on Monad testnet to exercise the wrong-network guard. */
 const e2eWrongChain = process.env.NEXT_PUBLIC_E2E_WRONG_CHAIN === "1";
 const forkTestWallet = (): Wallet => ({
@@ -62,7 +63,10 @@ export const wagmiConfig = createConfig({
 
 function Rainbow({ children }: { children: ReactNode }) {
   const { resolvedTheme } = useTheme();
-  const dark = resolvedTheme === "dark";
+  // The server renders light; switching RainbowKit's theme before hydration would make its style tags mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const dark = mounted && resolvedTheme === "dark";
   const accent = { accentColor: dark ? "#f2f4f7" : "#0b1220", accentColorForeground: dark ? "#0b0d12" : "#ffffff", borderRadius: "medium" as const, fontStack: "system" as const };
   return (
     <RainbowKitProvider

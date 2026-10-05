@@ -15,45 +15,63 @@ const NAV = [
   { href: "#faq", label: "Questions" },
 ];
 const DOCS_LINK = DOCS.readme;
+/** External links open in a new tab and send no referrer. */
+const EXT = { target: "_blank", rel: "noreferrer" } as const;
 
 type Cell = string | boolean;
 const comparison: { row: string; cells: [Cell, Cell, Cell, Cell] }[] = [
   { row: "Covers Aave V3", cells: [true, false, false, true] },
   { row: "Available on Monad", cells: [true, true, true, false] },
   { row: "What happens at the trigger", cells: ["A vault repays part of the debt and takes collateral at a 1% discount", "Any liquidator repays at the market's pre-liquidation incentive", "Liquidators bid in a reverse Dutch auction from a 0% discount", "Your own collateral is swapped to repay debt"] },
-  { row: "Cost to the borrower", cells: ["A premium per block, plus 1% of what is repaid", "The pre-liquidation incentive", "A discount that rises over time", "About 0.08% plus swap slippage"] },
+  {
+    row: "Cost to the borrower",
+    cells: [
+      "A premium per block, plus 1% of what is repaid",
+      "The pre-liquidation incentive",
+      "A discount that rises as health worsens",
+      "About 0.3% per automated repay (0.25% service fee plus 0.05% automation fee), plus gas and slippage",
+    ],
+  },
   { row: "Who funds the exit", cells: ["Vault LPs, with an Aave flash loan as fallback", "Any liquidator", "Any liquidator", "Your collateral"] },
-  { row: "Best when", cells: ["Collateral costs more than 1% to sell", "You borrow on Morpho", "You borrow on Euler", "Collateral is cheap to swap"] },
+  {
+    row: "Best when",
+    cells: [
+      "You want an exit enforced on chain at a trigger you set, at a known 1%, without watching the market; larger positions and moments when liquidity thins",
+      "You borrow on Morpho",
+      "You borrow on Euler",
+      "You borrow on a chain it supports and want your own collateral sold to repay",
+    ],
+  },
 ];
 
 const faqs: { q: string; a: React.ReactNode }[] = [
   {
     q: "Is Shield audited?",
-    a: "Not yet. Shield was built for Monad Metropolis 2026. The contracts have 101 Foundry tests, including fork tests against real Aave on Monad and fuzzed invariants, and every high and medium finding from Slither and Aderyn is fixed or explained in the open. That is not an audit; use amounts you can afford to lose.",
+    a: "Not yet. Shield was built for Monad Metropolis 2026. The contracts have unit, fuzz, invariant and fork tests against real Aave on Monad, and every high and medium finding from Slither and Aderyn is fixed or explained in the open. That is not an audit; use amounts you can afford to lose.",
   },
   {
     q: "What can the owner change?",
-    a: "Bounded parameters only: the exit discount (at most 5%, and never above the maximum you accepted), the exit buffer, pricing inputs, the swap route and its price bounds. No owner function can move borrower or vault funds, the contracts are not upgradeable, and ownership transfers in two steps.",
+    a: "Parameters within set bounds: the exit discount (at most 5% and never above your maximum), the exit buffer, the premium floor, each collateral's pricing constant (at most ten times the launch value) and fallback volatility (10% to 500%), the waiting period (up to 7 days), the oracle and slippage bounds, and which swap adapter sells the vault's collateral (every sale is checked by the USDC actually received, within at most 10% of Aave's price). With these the owner can raise your premium within those bounds or pause exits. No owner function can transfer your aTokens or the vault's USDC, the contracts are not upgradeable, and ownership transfers in two steps.",
   },
   {
     q: "What if the vault is empty when I reach my trigger?",
-    a: "The exit falls back to an Aave flash loan and sells only part of the seized collateral, within a price bound tied to Aave's oracle. If that also fails, the exit reverts and your position stays exactly as it was on Aave.",
+    a: "The exit falls back to an Aave flash loan that sells part of the seized WETH through one Uniswap V3 pool (about 2.25 WETH deep) within 3% of Aave's price, and the exit reverts unless the vault gets back at least what it paid. That fits small exits only. Otherwise the exit reverts and your position stays as it was.",
   },
   {
     q: "What exactly happens at my trigger?",
-    a: "When your Aave health factor reaches the trigger, anyone can call the exit. The Executor repays enough of your USDC debt to bring the health factor back to the trigger plus 0.06, and moves aWETH worth 1.01 times the repaid amount from you to the vault. It reverts unless your health factor ends above 1.00 and higher than it started.",
+    a: "Once your cover has armed, 15 minutes after you opt in, and your Aave health factor reaches the trigger, anyone can call the exit. The Executor repays enough of your USDC debt to bring the health factor back to the trigger plus 0.06, and moves aWETH worth 1.01 times the repaid amount from you to the vault. It reverts unless your health factor ends above 1.00 and higher than it started.",
   },
   {
     q: "How is the premium priced?",
-    a: "Each 300 ms block, the Repricer sets your rate from your debt, ETH volatility measured from recent Pyth prices, and how far your health factor sits above the trigger. Closer means more expensive. The rate is charged per block against your prepaid USDC; unused balance can be withdrawn at any time.",
+    a: "Each 300\u00a0ms block, the Repricer sets your rate from your debt, ETH volatility measured from recent Pyth prices, and how far your health factor sits above the trigger. Closer means more expensive, and at or below the trigger the rate is the highest. The rate is charged per block against your prepaid USDC (at least 1 USDC to opt in); unused balance can be withdrawn at any time.",
   },
   {
     q: "What if the keeper is offline?",
-    a: "The keeper is a convenience. The exit is permissionless, so any address can call it when the conditions hold, and the contract checks every condition itself. If nobody calls it, your position is exactly as safe as an uncovered Aave position.",
+    a: "The keeper is a convenience. The exit is permissionless, so any address can call it when the conditions hold, and the contract checks every condition itself. The app offers to run it from your own wallet when the keeper is late. If nobody calls it, your position is exactly as safe as an uncovered Aave position.",
   },
   {
     q: "Can Shield take my collateral at any other time?",
-    a: "No. The approval you give lets the Executor move your aToken only inside an exit, only when your health factor is at or below your trigger, and only up to the debt it repays plus the discount you accepted (1% today). Revoking the approval at any time disarms the cover.",
+    a: "No. The approval you give lets the Executor move your aToken only inside an exit, only when your health factor is at or below your trigger, and only up to the debt it repays plus the discount you accepted (1% today). Revoking the approval disarms the cover; the premium keeps accruing until you opt out.",
   },
   {
     q: "Does Shield beat liquidators to a crash?",
@@ -61,11 +79,11 @@ const faqs: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "Which positions can be covered?",
-    a: "Aave V3 Monad positions with WETH or cbBTC collateral and USDC debt, outside eMode. eMode's liquidation penalty on Monad is 1%, so there is nothing to save there.",
+    a: "Aave V3 Monad positions with WETH collateral and USDC debt. Shield covers positions outside eMode only. cbBTC is listed and its cover arrives once a cbBTC swap route exists on Monad.",
   },
   {
     q: "How do liquidity providers earn?",
-    a: "LPs deposit USDC into an ERC-4626 vault. The vault earns every covered borrower's premium, block by block, and takes collateral worth 1% more than it repays at each exit. Collateral is sold back to USDC within a bounded price range.",
+    a: "LPs deposit USDC into an ERC-4626 vault. The vault earns every covered borrower's premium, block by block, and takes collateral worth 1% more than it repays at each exit. Seized collateral stays in Aave until the owner or the unwinder sells it through the swap adapter for no less than Aave's price minus 3% (the owner can set at most 10%); a sale can cost more than the 1% earned, and collateral cannot be withdrawn until it is sold. Exit gains reach the share price over 6 hours.",
   },
 ];
 
@@ -101,6 +119,9 @@ function SectionHeading({ id, title, lede }: { id: string; title: string; lede?:
 export default function Landing() {
   return (
     <div className="min-h-dvh overflow-x-clip">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2">
+        Skip to content
+      </a>
       <header className="sticky top-0 z-40 border-b border-transparent bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
         <div className="mx-auto flex h-16 max-w-[76rem] items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-10">
@@ -109,17 +130,17 @@ export default function Landing() {
             </Link>
             <nav className="hidden items-center gap-1 md:flex" aria-label="Sections">
               {NAV.map((n) => (
-                <a key={n.href} href={n.href} className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                <a key={n.href} href={n.href} className="hit relative rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
                   {n.label}
                 </a>
               ))}
             </nav>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <a href={DOCS_LINK} className="hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline">
+            <a href={DOCS_LINK} {...EXT} className="hit relative hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline">
               Docs
             </a>
-            <a href={REPO} className="hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline">
+            <a href={REPO} {...EXT} className="hit relative hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline">
               GitHub
             </a>
             <ThemeToggle />
@@ -137,8 +158,8 @@ export default function Landing() {
           <div>
             <h1 className="display text-[2.75rem] font-medium sm:text-[4.25rem]">Leave before liquidation.</h1>
             <p className="mt-6 max-w-[33rem] text-lg leading-relaxed text-muted-foreground sm:text-xl">
-              An opt-in early exit for Aave borrowers on Monad. At a health factor you choose, a vault repays part of your debt for 1%, instead of
-              Aave&rsquo;s 5.5% liquidation penalty.
+              An opt-in early exit for Aave borrowers on Monad. At a health factor you choose, a vault repays part of your debt for a 1% discount plus a
+              per-block premium, instead of Aave&rsquo;s 5.5% liquidation penalty.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
               <Button asChild size="lg" className="h-12 px-6 text-[0.9375rem]">
@@ -163,7 +184,7 @@ export default function Landing() {
               </li>
               <li className="inline-flex items-center gap-2">
                 <TokenIcon symbol="MON" size={18} />
-                Repriced every 300 ms on Monad
+                Repriced every 300&nbsp;ms on Monad
               </li>
               <li className="inline-flex items-center gap-2">
                 <Code2 className="size-4" aria-hidden />
@@ -190,14 +211,14 @@ export default function Landing() {
           <dl className="mx-auto grid max-w-[76rem] grid-cols-2 gap-px px-4 sm:px-6 lg:grid-cols-4">
             {[
               { v: "1% vs 5.5%", l: "Shield's exit fee against Aave's WETH liquidation penalty", href: "#savings" },
-              { v: "300 ms", l: "How often the premium is repriced: every Monad block", href: "#monad" },
-              { v: "63% less gas", l: "Per reprice, measured with and without Shield's access lists", href: `${REPO}#proof` },
-              { v: "101 tests", l: "Unit, fork, fuzz and invariant tests against real Aave", href: DOCS.tests },
+              { v: "300\u00a0ms", l: "How often the premium is repriced: every Monad block", href: "#monad" },
+              { v: "63% less gas", l: "Per reprice on a mainnet fork, with Shield's access lists against without", href: `${REPO}#proof` },
+              { v: "Fork-tested", l: "Unit, fuzz, invariant and fork tests against real Aave on Monad", href: DOCS.tests },
             ].map((s) => (
               <div key={s.v} className="py-8 pr-6 lg:py-10">
                 <dt className="sr-only">{s.l}</dt>
                 <dd className="reading text-[1.75rem] font-medium sm:text-[2rem]">
-                  <a href={s.href} className="rounded-sm hover:text-brand">
+                  <a href={s.href} {...(s.href.startsWith("#") ? {} : EXT)} className="rounded-sm hover:text-brand">
                     {s.v}
                   </a>
                 </dd>
@@ -211,7 +232,7 @@ export default function Landing() {
           <SectionHeading
             id="savings"
             title="What an early exit saves"
-            lede="A liquidation takes 5.5% of the debt it repays, from your collateral. An exit at your trigger takes 1%, and repays only what it needs to."
+            lede="A liquidation takes a 5.5% bonus on the debt it repays, from your collateral. Shield's exit runs at a trigger you set, enforced on chain without you watching the market, takes a known 1%, and repays only what it needs to."
           />
           <div className="mt-12">
             <SavingsCalculator />
@@ -226,12 +247,12 @@ export default function Landing() {
                 {
                   icon: Gauge,
                   title: "Choose a trigger",
-                  body: "Pick a health factor between 1.01 and 2.00 and prepay some USDC. Approve Shield on your aToken; it can only be used inside an exit.",
+                  body: "Pick a health factor between 1.01 and 1.50 in the app and prepay at least 1 USDC. Approve Shield on your aToken; it can only be used inside an exit. Cover arms 15 minutes after you opt in.",
                 },
                 {
                   icon: ScanSearch,
                   title: "Priced every block",
-                  body: "Each 300 ms block the premium is recomputed from Pyth volatility, your debt and your distance to the trigger, and charged against your prepaid balance.",
+                  body: "Each 300\u00a0ms block the premium is recomputed from Pyth volatility, your debt and your distance to the trigger, and charged against your prepaid balance.",
                 },
                 {
                   icon: ShieldCheck,
@@ -259,7 +280,7 @@ export default function Landing() {
               </div>
               <ol className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4">
                 {[
-                  { t: "Prices agree", d: "Aave's oracle and Pyth must be within 2%, with a fresh, tight Pyth price." },
+                  { t: "Prices agree", d: "Aave's oracle and Pyth must be within 2%, with a Pyth price at most an hour old with a tight confidence band." },
                   { t: "Vault funds it", d: "The vault sends USDC. If it is short, an Aave flash loan covers the rest." },
                   { t: "Debt repaid", d: "Aave's Pool takes the repayment on your behalf, enough to restore trigger plus 0.06." },
                   { t: "Collateral moves", d: "aWETH worth the repayment plus the 1% discount goes to the vault." },
@@ -293,9 +314,15 @@ export default function Landing() {
             </div>
             <dl className="grid gap-x-10 gap-y-10 sm:grid-cols-2">
               {[
-                { t: "300 ms blocks", d: "The premium is repriced every block. On a 12-second chain it would move forty times less often, and an exit would land minutes late." },
-                { t: "Storage laid out for Monad", d: "Each borrower's record and each price history fits one storage page, which Monad prices as a unit. A reprice costs 63% less gas and an exit 43% less." },
-                { t: "Receipts in about 300 ms", d: "The keeper watches health factors on the block being proposed and gets each receipt back in about 300 ms, so it can act on the very next block." },
+                { t: "300\u00a0ms blocks", d: "The premium is repriced every block. On a 12-second chain it would move forty times less often, and an exit could wait up to 12 seconds for the next block." },
+                {
+                  t: "Storage laid out for Monad",
+                  d: "Every keeper transaction lists the storage pages it will touch, Aave's and Shield's, which Monad prices far below cold access; on a mainnet fork a reprice used 63% less gas and an exit 43% less with the list than without.",
+                },
+                {
+                  t: "Receipts from the proposed block",
+                  d: "The keeper watches health factors on the block being proposed, and the RPC returns the receipt from the proposed block (about 290\u00a0ms on a local fork; mainnet timing published after deployment).",
+                },
                 { t: "Gas charged on the limit", d: "Monad bills the gas limit, not the gas used, so every keeper transaction carries a measured limit instead of a padded guess." },
               ].map((f) => (
                 <div key={f.t} className="border-t border-white/15 pt-5">
@@ -311,7 +338,7 @@ export default function Landing() {
           <SectionHeading
             id="compare"
             title="Compared with what exists"
-            lede="Pre-liquidation is not new. Covering Aave, the largest lender on Monad, is. If your collateral is cheap to sell, a swap-based tool will cost you less, and we would rather say so."
+            lede="Pre-liquidation is not new. Covering Aave on Monad, its largest lender, is. Selling collateral yourself is cheap today: aggregators sell 1 WETH on Monad within 0.06% of Aave's price (KyberSwap quote, 5 Oct 2026). Shield is for an exit enforced on chain at a trigger you set, without watching the market, at a known 1%."
           />
           <div className="panel relative mt-12 overflow-x-auto">
             <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
@@ -359,11 +386,19 @@ export default function Landing() {
             />
             <ul className="mt-14 grid gap-px overflow-hidden rounded-[14px] border bg-border sm:grid-cols-2 lg:grid-cols-3">
               {[
-                { icon: ShieldCheck, t: "The exit checks itself", d: "An exit reverts unless your health factor ends above 1.00 and higher than it started. A fuzzed invariant test on a mainnet fork checks this across random price moves and borrowing." },
-                { icon: KeyRound, t: "Your collateral, only at your trigger", d: "The aToken approval is usable only inside an exit, at or below your trigger, and only up to the debt repaid plus the discount you accepted. Revoke it any time." },
-                { icon: Eye, t: "Two price sources", d: "Exits check Aave's oracle against Pyth and refuse a gap above 2%, a stale Pyth price, or a confidence band that is too wide." },
+                {
+                  icon: ShieldCheck,
+                  t: "The exit checks itself",
+                  d: "An exit reverts unless your health factor ends above 1.00 and higher than it started. An invariant test checks this across random price moves, block gaps and repricing on a mainnet fork, plus a fuzz test over position size and price drop.",
+                },
+                {
+                  icon: KeyRound,
+                  t: "Your collateral, only at your trigger",
+                  d: "The aToken approval is usable only inside an exit, at or below your trigger, and only up to the debt repaid plus the discount you accepted. Revoking it disarms the cover; the premium keeps accruing until you opt out.",
+                },
+                { icon: Eye, t: "Two price sources", d: "Exits check Aave's oracle against Pyth and refuse a gap above 2%, a Pyth price older than an hour, or a confidence band that is too wide." },
                 { icon: Code2, t: "Permissionless and open", d: "Anyone can execute an exit when its conditions hold; the keeper is a convenience. Every contract is open source under MIT." },
-                { icon: FileCheck2, t: "Tested in public", d: "101 Foundry tests including fork tests against real Aave on Monad, 27 adversarial scenarios, and Slither and Aderyn findings resolved in the open." },
+                { icon: FileCheck2, t: "Tested in public", d: "Unit, fuzz, invariant and fork tests against real Aave on Monad, adversarial scenarios, and Slither and Aderyn findings resolved in the open." },
                 { icon: TriangleAlert, t: "Not audited yet", d: "Shield is new software built for Monad Metropolis and has not had an external audit. Use amounts you can afford to lose." },
               ].map((f) => (
                 <li key={f.t} className="bg-card p-6 sm:p-7">
@@ -375,13 +410,17 @@ export default function Landing() {
             </ul>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild variant="outline" className="bg-card">
-                <a href={DOCS.security}>Read the trust model</a>
+                <a href={DOCS.security} {...EXT}>
+                  Read the trust model
+                </a>
               </Button>
               <Button asChild variant="outline" className="bg-card">
-                <a href={DOCS.tests}>See the test report</a>
+                <a href={DOCS.tests} {...EXT}>
+                  See the test report
+                </a>
               </Button>
               <Button asChild variant="ghost">
-                <a href={REPO}>
+                <a href={REPO} {...EXT}>
                   Source code
                   <ArrowRight className="size-4" aria-hidden />
                 </a>

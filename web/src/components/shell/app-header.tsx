@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { AddressAvatar } from "@/components/data/avatar";
 import { TokenIcon } from "@/components/data/token";
 import { Button } from "@/components/ui/button";
-import { useLiveBlock } from "@/hooks/useLiveBlock";
+import { useChainFreshness } from "@/hooks/useLiveBlock";
 import { isFork } from "@/lib/env";
 import { truncateHex } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -20,22 +20,30 @@ const NAV = [
 
 /** The network the app reads, with the latest proposed block: proof the page is live, not a mock. */
 function NetworkChip() {
-  const { data: block } = useLiveBlock();
+  const { block, stale } = useChainFreshness();
+  const live = block !== undefined && !stale;
   return (
     <span
       className={cn(
         "hidden h-9 items-center gap-2 rounded-full border bg-card px-3 text-[0.8125rem] md:inline-flex num",
-        isFork && "border-caution/50 bg-caution-soft",
+        (isFork || stale) && "border-caution/50 bg-caution-soft",
       )}
-      title={isFork ? "Reading a local fork of Monad mainnet (test rehearsal)" : "Latest proposed block on Monad mainnet"}
+      title={
+        stale
+          ? "No new block for over two seconds: reconnecting to the Monad RPC"
+          : isFork
+            ? "Reading a local fork of Monad mainnet (test rehearsal)"
+            : "Latest proposed block on Monad mainnet"
+      }
     >
       <TokenIcon symbol="MON" size={16} />
-      <span className={cn("font-medium", isFork && "text-caution")}>{isFork ? "Local fork" : "Monad"}</span>
+      <span className={cn("font-medium", (isFork || stale) && "text-caution")}>{isFork ? "Local fork" : "Monad"}</span>
       <span className="relative flex size-1.5" aria-hidden>
-        {block && <span className="absolute inline-flex size-full animate-ping rounded-full bg-safe opacity-50" />}
-        <span className={cn("relative inline-flex size-1.5 rounded-full", block ? "bg-safe" : "bg-muted-foreground")} />
+        {/* The dot pings only while blocks arrive; a frozen block never pulses green. */}
+        {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-safe opacity-50" />}
+        <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-safe" : stale ? "bg-caution" : "bg-muted-foreground")} />
       </span>
-      <span className="text-muted-foreground">{block ? block.toLocaleString("en-US") : "connecting"}</span>
+      <span className="text-muted-foreground">{block !== undefined ? `${stale ? "Reconnecting, " : ""}${block.toLocaleString("en-US")}` : "connecting"}</span>
     </span>
   );
 }
@@ -86,7 +94,7 @@ export function AppHeader() {
                   href={n.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    "hit relative rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                   )}
                 >

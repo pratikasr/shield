@@ -1,5 +1,6 @@
 "use client";
 
+import { formatHf } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export interface RiskRailProps {
@@ -11,8 +12,10 @@ export interface RiskRailProps {
   exitTarget?: number;
   /** Recent HF readings, oldest first, drawn as a faint trail. */
   trail?: number[];
-  /** Whether the trigger is armed (cover active and paid for). */
+  /** Whether the trigger is armed: every condition an exit needs holds (lib/cover-status.ts). */
   armed?: boolean;
+  /** Legend text for the trigger mark, for example "Trigger, arms in 12:04". */
+  triggerNote?: string;
   className?: string;
   compact?: boolean;
   /** Hide the legend under the gauge (when the surrounding panel already explains the marks). */
@@ -52,17 +55,18 @@ const pct = (p: number) => `${(p * 100).toFixed(3)}%`;
  * The health-factor gauge: Aave's liquidation line at 1.00, the borrower's trigger above it, where an exit
  * restores HF to, and the live reading that moves with every block.
  */
-export function RiskRail({ healthFactor, trigger, exitTarget, trail = [], armed = true, className, compact, hideLegend }: RiskRailProps) {
+export function RiskRail({ healthFactor, trigger, exitTarget, trail = [], armed = true, triggerNote, className, compact, hideLegend }: RiskRailProps) {
   const s = scaleFor([healthFactor, trigger ?? 1.04, exitTarget ?? 1.1]);
   const finite = Number.isFinite(healthFactor);
   const at = finite ? s.at(healthFactor) : 1;
-  const offScale = finite && healthFactor > s.ceiling;
   const tone = hfTone(healthFactor);
   const toneBg = tone === "danger" ? "bg-danger" : tone === "caution" ? "bg-caution" : "bg-safe";
+  const note = triggerNote ?? (armed ? "Trigger" : "Trigger, not armed");
 
   const label = [
-    `Health factor ${finite ? healthFactor.toFixed(3) : "with no debt"}`,
-    trigger !== undefined ? `trigger ${trigger.toFixed(2)}${armed ? "" : " (not armed)"}` : "no trigger set",
+    // Floored like the header, so the gauge and the header never disagree in the last digit.
+    `Health factor ${finite ? formatHf(healthFactor) : "with no debt"}`,
+    trigger !== undefined ? `${note.toLowerCase()} ${trigger.toFixed(2)}` : "no trigger set",
     `Aave liquidates at ${LIQUIDATION.toFixed(2)}`,
     exitTarget !== undefined ? `an exit restores ${exitTarget.toFixed(2)}` : "",
   ]
@@ -81,7 +85,7 @@ export function RiskRail({ healthFactor, trigger, exitTarget, trail = [], armed 
         >
           <span className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-[0.75rem] font-semibold text-background shadow-sm num">
             <span className={cn("size-1.5 rounded-full", toneBg)} />
-            HF {finite ? (offScale ? `${healthFactor.toFixed(2)}` : healthFactor.toFixed(3)) : "no debt"}
+            HF {finite ? formatHf(healthFactor) : "no debt"}
           </span>
         </div>
 
@@ -155,7 +159,7 @@ export function RiskRail({ healthFactor, trigger, exitTarget, trail = [], armed 
           {trigger !== undefined && (
             <span className="inline-flex items-center gap-2">
               <span className={cn("h-3 w-[3px] rounded-full", armed ? "bg-caution" : "bg-muted-foreground")} aria-hidden />
-              {armed ? "Trigger" : "Trigger, not armed"} <span className="font-medium text-foreground num">{trigger.toFixed(2)}</span>
+              {note} <span className="font-medium text-foreground num">{trigger.toFixed(2)}</span>
             </span>
           )}
           {exitTarget !== undefined && (

@@ -5,7 +5,7 @@ import { getAddress, type Address } from "viem";
  * writes them from contracts/deployments/<name>.json.
  */
 function addr(value: string | undefined): Address | undefined {
-  return value && /^0x[0-9a-fA-F]{40}$/.test(value) ? getAddress(value) : undefined;
+  return value && /^0x[0-9a-fA-F]{40}$/.test(value) ? getAddress(value.toLowerCase()) : undefined;
 }
 
 export const shield = {
@@ -22,8 +22,10 @@ export const envioUrl = process.env.NEXT_PUBLIC_ENVIO_GRAPHQL_URL || undefined;
 /** Explorer for links; MonadVision by default. */
 export const explorerUrl = (process.env.NEXT_PUBLIC_EXPLORER_URL || "https://monadvision.com").replace(/\/$/, "");
 
+const rpcUrl = process.env.NEXT_PUBLIC_MONAD_RPC_URL || "";
+
 /** True when the app reads a local fork (test rehearsals only); the UI says so in the header. */
-export const isFork = (process.env.NEXT_PUBLIC_MONAD_RPC_URL || "").includes("127.0.0.1");
+export const isFork = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(rpcUrl);
 
 /** Aave V3 Monad, verified 5 Oct 2026 (docs/TECH-DECISIONS.md). */
 export const aave = {
@@ -35,8 +37,18 @@ export const aave = {
   cbbtc: getAddress("0xd18B7EC58Cdf4876f6AFebd3Ed1730e4Ce10414b"),
 };
 
-/** Collateral Shield covers (ADR-016) and the Pyth feeds that price it. */
-export const coveredCollateral = [
-  { address: aave.weth, symbol: "WETH", decimals: 18 },
-  { address: aave.cbbtc, symbol: "cbBTC", decimals: 8 },
-] as const;
+/** Pyth on Monad mainnet, verified 5 Oct 2026 (docs/TECH-DECISIONS.md). */
+export const pythAddress = getAddress("0x2880aB155794e7179c9eE2e38200202908C17B43");
+
+/** Multicall3, deployed on Monad mainnet at the canonical address; its timestamp read gives chain time. */
+export const multicall3 = getAddress("0xcA11bde05977b3631167028862bE2a173976CA11");
+
+/** Display names for collateral the registry lists, and the asset Pyth prices it in. */
+export const collateralInfo: Record<string, { symbol: string; decimals: number; priceName: string }> = {
+  [aave.weth.toLowerCase()]: { symbol: "WETH", decimals: 18, priceName: "ETH" },
+  [aave.cbbtc.toLowerCase()]: { symbol: "cbBTC", decimals: 8, priceName: "BTC" },
+};
+
+export function collateralName(asset: string | undefined): { symbol: string; decimals: number; priceName: string } {
+  return (asset && collateralInfo[asset.toLowerCase()]) || { symbol: "collateral", decimals: 18, priceName: "the collateral" };
+}

@@ -92,8 +92,9 @@ test.describe("design review captures", () => {
     for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight");
 
     const panel = page.locator("aside");
+    const armed = panel.getByRole("heading", { name: "Protected", exact: true });
     for (let i = 0; i < 4; i++) {
-      if (await panel.getByRole("heading", { name: "Protected" }).isVisible().catch(() => false)) break;
+      if (await armed.isVisible().catch(() => false)) break;
       const action = panel.getByRole("button", { name: /^(Approve WETH|Approve USDC|Prepay|Opt in at)/ });
       await expect(action).toBeEnabled({ timeout: 60_000 });
       const label = await action.innerText();
@@ -101,7 +102,11 @@ test.describe("design review captures", () => {
       if (!label.startsWith("Opt in")) await expect(panel.getByText(/finalised in block/)).toBeVisible({ timeout: 60_000 });
       if (i === 0) await shoot(page, "borrow-tx-finalised", ["light"], [375, 1440]);
     }
-    await expect(panel.getByRole("heading", { name: "Protected" })).toBeVisible({ timeout: 60_000 });
+    // The cover arms after the waiting period (20 s on the fork stack): capture the countdown if it is still running,
+    // then the armed state.
+    const arming = panel.getByRole("heading", { name: /^Cover arms in/ });
+    if (await arming.waitFor({ timeout: 15_000 }).then(() => true, () => false)) await shoot(page, "borrow-arming", ["light"], [375, 1440]);
+    await expect(armed).toBeVisible({ timeout: 90_000 });
     await expect.poll(async () => usd(await statValue(page, "Premium paid so far")), { timeout: 90_000 }).toBeGreaterThan(0);
     await shoot(page, "borrow-protected", ["dark", "light"]);
 

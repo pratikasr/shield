@@ -13,11 +13,27 @@ const unusedOptionalModules = [
   "encoding",
 ];
 
+/**
+ * Headers for every route. No page may be framed (clickjacking a wallet prompt), and the browser sends no full URL to
+ * other sites. There is deliberately no script-src policy: wallet extensions and WalletConnect inject scripts and
+ * frames that a strict one would break.
+ */
+const securityHeaders = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // A second server (a dev build for screenshots) can use its own directory next to a production build.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   devIndicators: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
