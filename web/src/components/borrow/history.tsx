@@ -57,6 +57,33 @@ function Empty({ children, tone }: { children: React.ReactNode; tone?: "caution"
   );
 }
 
+/**
+ * The health-factor history panel while its code or data loads: the same title row, readout line, chart heights and
+ * legend as the loaded panel, so nothing below it moves when it arrives. `bare` is the body alone, inside the panel.
+ */
+export function HfHistorySkeleton({ bare }: { bare?: boolean }) {
+  const body = (
+    <div aria-busy="true" aria-label="Loading the health factor history">
+      <Skeleton className="h-4 w-full max-w-md" />
+      <Skeleton className="mt-[1.875rem] h-[216px] w-full sm:mt-[1.125rem]" />
+      <Skeleton className="mt-2 h-[124px] w-full" />
+      <Skeleton className="mt-4 h-5 w-64" />
+      <Skeleton className="mt-7 h-5 w-44" />
+    </div>
+  );
+  if (bare) return body;
+  return (
+    <Panel
+      title="Health factor history"
+      labelledBy="hf-history-heading"
+      description="From each reprice the Envio indexer recorded"
+      action={<Skeleton className="h-8 w-[17rem] rounded-lg" />}
+    >
+      {body}
+    </Panel>
+  );
+}
+
 /** The saved figure's column header, the same words everywhere an exit is listed. */
 export const SAVED_LABEL = "Saved against Aave's bonus on the same repayment";
 

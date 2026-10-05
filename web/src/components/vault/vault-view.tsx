@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useShieldConfig } from "@/hooks/useShieldConfig";
+import { VaultIncome, headlineUsd } from "@/components/vault/vault-income";
+import { lpPremiumShare, useShieldConfig } from "@/hooks/useShieldConfig";
 import { useTx } from "@/hooks/useTx";
 import { useVault, type VaultState } from "@/hooks/useVault";
 import { erc20Abi, shieldVaultAbi } from "@/lib/abis";
@@ -224,7 +225,7 @@ function DepositWithdraw() {
       <p className="flex items-start gap-2 border-t bg-raised/60 px-5 py-4 text-[0.75rem] text-muted-foreground sm:px-6">
         <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          ERC-4626 vault. It pays out only to fund exits and to withdrawing depositors; premiums and exit discounts accrue to every share. Collateral from exits
+          ERC-4626 vault. It pays out only to fund exits and to withdrawing depositors; its share of premiums and the exit discounts accrue to every share. Collateral from exits
           leaves only when the owner or the unwinder sells it through the swap adapter within the slippage bound, and a sale can cost more than the discount
           earned.
         </span>
@@ -318,7 +319,9 @@ export function VaultView() {
   const indexerDown = Boolean(envioUrl && history.error);
   const rates = h?.protectedRates ?? [];
   const activeRatePerBlock = rates.reduce((sum, p) => sum + toNumber(BigInt(p.premiumPerBlock ?? "0"), 18), 0);
-  const premiumRate = vault && vault.nav > 0 ? (activeRatePerBlock * BLOCKS_PER_YEAR) / vault.nav : undefined;
+  // What the vault keeps of what covers pay: the protocol's share goes to the treasury (ADR-037).
+  const premiumRate = vault && config && vault.nav > 0 ? (activeRatePerBlock * lpPremiumShare(config) * BLOCKS_PER_YEAR) / vault.nav : undefined;
+  const sharePct = config ? config.protocolShareBps / 100 : undefined;
   const premiumRateText = !envioUrl || indexerDown ? "Unavailable" : !h ? undefined : activeRatePerBlock === 0 ? "No active covers" : premiumRate !== undefined ? `${formatPct(premiumRate)} a year` : undefined;
   const flashUsed = (h?.flashExits.length ?? 0) > 0;
   const listState = (rows: unknown[] | undefined, empty: string): { text: string; tone?: "caution" } | null =>
@@ -350,8 +353,9 @@ export function VaultView() {
           </p>
           <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.02em]">Earn by funding exits</h1>
           <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
-            The vault repays covered borrowers&rsquo; debt at their trigger and takes collateral worth {discount} more, held in Aave until it is sold. It also earns
-            every premium, block by block.
+            The vault repays covered borrowers&rsquo; debt at their trigger and takes collateral worth {discount} more, held in Aave until it is sold. It also keeps{" "}
+            {/* A fixed-width slot, so the sentence does not reflow when the registry answers. */}
+            <span className="inline-block min-w-[1.9em] num">{sharePct !== undefined ? `${100 - sharePct}%` : " "}</span> of every premium, block by block.
           </p>
         </div>
         {/* Phones: a wrapped label must not push its value below its neighbour's. Desktop: labels share one height. */}
@@ -374,8 +378,9 @@ export function VaultView() {
               <>
                 Premium rate, variable
                 <Info>
-                  What every Protected cover pays per block right now, times a year of 300&nbsp;ms blocks, over the vault&rsquo;s value. Variable: it moves with
-                  health factors, volatility and how many borrowers are covered. Read from the indexer. The exit discount comes on top.
+                  What every Protected cover pays per block right now, less the protocol&rsquo;s {sharePct !== undefined ? `${sharePct}% ` : ""}share, times a year of 300&nbsp;ms blocks,
+                  over the vault&rsquo;s value. Variable: it moves with health factors, volatility and how many borrowers are covered. Read from the indexer.
+                  The exit discount comes on top.
                 </Info>
               </>
             }
@@ -414,7 +419,7 @@ export function VaultView() {
               <>
                 <Composition vault={vault} />
                 <dl className="mt-6 grid grid-cols-1 gap-x-6 gap-y-5 border-t pt-5 sm:grid-cols-3">
-                  <Stat label="Premium earned" value={formatUsd(vault.premiumEarned)} hint="Counts every block" />
+                  <Stat label="Premium earned" value={headlineUsd(vault.premiumEarned)} hint="The vault's share, counted every block" />
                   <Stat
                     label="Exits executed"
                     value={vault.exitsExecuted.toLocaleString("en-US")}
@@ -443,7 +448,8 @@ export function VaultView() {
           <DepositWithdraw />
         </aside>
 
-        <div className="min-w-0 lg:col-start-1">
+        <div className="grid min-w-0 gap-6 self-start lg:col-start-1">
+          <VaultIncome vault={vault} config={config} />
           <Panel bodyClassName="p-0 sm:p-0" className="overflow-hidden">
             <Tabs defaultValue="exits">
               <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-6">

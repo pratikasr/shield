@@ -6,11 +6,13 @@ import { Info } from "@/components/data/info";
 import { Sparkline } from "@/components/data/sparkline";
 import { Panel, Stat } from "@/components/data/stat";
 import { TokenIcon, TokenPair } from "@/components/data/token";
+import { ExitChance, PriceSimulator } from "@/components/risk/price-simulator";
 import { RiskRail, hfTone } from "@/components/risk/risk-rail";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AavePosition, ReserveLine } from "@/hooks/useAavePosition";
 import { useLiveBlock } from "@/hooks/useLiveBlock";
-import type { ShieldConfig } from "@/hooks/useShieldConfig";
+import { assetConfigOf, type ShieldConfig } from "@/hooks/useShieldConfig";
+import { useSigma } from "@/hooks/useSigma";
 import type { Cover } from "@/hooks/useShieldPosition";
 import { headerStatus, livePrepaid, type ArmState } from "@/lib/cover-status";
 import { BLOCKS_PER_YEAR, aaveLiquidation, formatRunway, runwayDays, shieldExit, type AaveLiquidation, type ShieldExit } from "@/lib/economics";
@@ -184,6 +186,10 @@ export function PositionPanel({
   const trigPrice = collateral && trigger ? priceAtHf(position, collateral, trigger) : Number.NaN;
   const liqChange = collateral ? change(collateral.priceUsd, liqPrice) : undefined;
   const trigChange = collateral ? change(collateral.priceUsd, trigPrice) : undefined;
+  // The active cover's own quote (read every block) when it covers this collateral; else what the Repricer would use.
+  const ownSigma = active && cover && collateral && cover.collateral?.toLowerCase() === collateral.asset.toLowerCase() ? cover.sigma : undefined;
+  const sigma = useSigma(assetConfigOf(config, collateral?.asset), ownSigma);
+  const sharePct = config ? config.protocolShareBps / 100 : undefined;
 
   return (
     <Panel
@@ -231,6 +237,10 @@ export function PositionPanel({
         </dl>
       )}
 
+      {collateral && !noDebt && trigger !== undefined && Number.isFinite(trigPrice) && trigPrice > 0 && (
+        <ExitChance symbol={collateral.symbol} priceUsd={collateral.priceUsd} exitPriceUsd={trigPrice} sigma={sigma} preview={!active} />
+      )}
+
       {collateral && costs && trigger && config && costs.aave.penaltyUsd > 0 && (
         <div className="mt-6">
           <CostCompare aave={costs.aave} exit={costs.exit} trigger={trigger} bonus={collateral.liquidationBonus} discountBps={config.exitDiscountBps} symbol={collateral.symbol} />
@@ -247,6 +257,8 @@ export function PositionPanel({
                   k x volatility x debt / max(HF minus trigger, {config?.dMin.toFixed(2) ?? "0.01"}), for one 300&nbsp;ms block. At or below the trigger the
                   distance is the floor, the most expensive rate. Each reprice charges the blocks since the last one at the higher of the stored and the
                   live rate.
+                  {sharePct !== undefined &&
+                    ` Of what you pay, ${100 - sharePct}% goes to the vault's liquidity providers and ${sharePct}% to the protocol treasury; the split does not change your rate.`}
                 </Info>
               </p>
               <p className="reading mt-1 text-[1.25rem] font-semibold">
@@ -276,6 +288,10 @@ export function PositionPanel({
             </p>
           )}
         </div>
+      )}
+
+      {collateral && config && !noDebt && Number.isFinite(hf) && collateral.suppliedRaw > 0n && (
+        <PriceSimulator position={position} collateral={collateral} config={config} trigger={trigger} preview={!active} />
       )}
     </Panel>
   );

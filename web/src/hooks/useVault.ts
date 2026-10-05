@@ -22,7 +22,9 @@ export interface VaultState {
   idle: number;
   /** Seized collateral valued at Aave's oracle. */
   collateralHeld: number;
+  /** The vault's share of every premium charged so far (ADR-037), swept in or not, in whole USDC units. */
   premiumEarned: number;
+  /** The vault's share charged and still waiting at the Repricer for a sweep. */
   premiumPending: number;
   usdcOnHand: number;
   exitsExecuted: number;
