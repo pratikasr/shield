@@ -1,8 +1,9 @@
 name: CI
 
+# Paused during the build at the owner's request: runs only when started by hand. The final commit restores
+# the push and pull_request triggers.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   contracts:
