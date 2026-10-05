@@ -24,7 +24,7 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
   expect(Number(hfText)).toBeGreaterThan(1.06);
 
   // 2. Opt in through the UI: trigger 1.06, prepay 5 USDC, the four steps.
-  const slider = page.getByRole("slider").first();
+  const slider = page.getByRole("slider", { name: "Trigger health factor" });
   await slider.focus();
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");

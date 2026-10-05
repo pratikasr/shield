@@ -91,7 +91,7 @@ test.describe("design review captures", () => {
     await page.getByLabel("Prepay, USDC").fill("5");
     await shoot(page, "borrow-setup", ["dark", "light"]);
 
-    const slider = page.getByRole("slider").first();
+    const slider = page.getByRole("slider", { name: "Trigger health factor" });
     await slider.focus();
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("ArrowLeft");
