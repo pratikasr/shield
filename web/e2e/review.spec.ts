@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { AAVE_ORACLE, WETH, borrower, client, connectTestWallet, ensureConnected, oracleAbi, setWethPrice, statValue, usd } from "./helpers";
 
 /**
- * Design review captures (docs/DESIGN.md, review log): every screen state at 375, 768 and 1440 px, dark, plus light
+ * Design review captures (docs/DESIGN.md, review log): every screen state at 375, 768 and 1440 px, light, plus dark
  * for the key screens. Runs only with REVIEW_DIR set, against the stack from scripts/stack.sh.
  *   REVIEW_DIR=../docs/screenshots/pass-1 pnpm exec playwright test review
  * REVIEW_WRONG=1 captures only the wrong-network state (needs a build with NEXT_PUBLIC_E2E_WRONG_CHAIN=1).
@@ -19,7 +19,7 @@ async function theme(page: Page, t: "dark" | "light") {
   }, t);
 }
 
-async function shoot(page: Page, name: string, themes: ("dark" | "light")[] = ["dark"], widths = WIDTHS) {
+async function shoot(page: Page, name: string, themes: ("dark" | "light")[] = ["light"], widths = WIDTHS) {
   for (const t of themes) {
     await theme(page, t);
     for (const w of widths) {
@@ -28,7 +28,7 @@ async function shoot(page: Page, name: string, themes: ("dark" | "light")[] = ["
       await page.screenshot({ path: `${out}/${name}-${w}-${t}.png`, fullPage: true });
     }
   }
-  await theme(page, "dark");
+  await theme(page, "light");
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
@@ -37,7 +37,7 @@ async function afterExit(page: Page) {
   await ensureConnected(page);
   await expect(page.getByText(/penalty avoided/).first()).toBeVisible({ timeout: 120_000 });
   await page.waitForTimeout(2000);
-  await shoot(page, "borrow-exited");
+  await shoot(page, "borrow-exited", ["light", "dark"]);
 
   await page.goto("/app/vault");
   await ensureConnected(page);
@@ -64,7 +64,7 @@ test.describe("design review captures", () => {
     test.setTimeout(900_000);
 
     await page.goto("/");
-    await expect(page.getByText(/^Block [\d,]+/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Monad block [\d,]+/)).toBeVisible({ timeout: 30_000 });
     await shoot(page, "landing", ["dark", "light"]);
 
     await page.goto("/app/borrow");
@@ -88,7 +88,7 @@ test.describe("design review captures", () => {
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("ArrowLeft");
     await expect(page.getByText(/I understand a trigger this close/)).toBeVisible();
-    await shoot(page, "borrow-setup-near-one", ["dark"], [375, 1440]);
+    await shoot(page, "borrow-setup-near-one", ["light"], [375, 1440]);
     for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight");
 
     const panel = page.locator("aside");
@@ -99,7 +99,7 @@ test.describe("design review captures", () => {
       const label = await action.innerText();
       await action.click();
       if (!label.startsWith("Opt in")) await expect(panel.getByText(/finalised in block/)).toBeVisible({ timeout: 60_000 });
-      if (i === 0) await shoot(page, "borrow-tx-finalised", ["dark"], [375, 1440]);
+      if (i === 0) await shoot(page, "borrow-tx-finalised", ["light"], [375, 1440]);
     }
     await expect(panel.getByRole("heading", { name: "Protected" })).toBeVisible({ timeout: 60_000 });
     await expect.poll(async () => usd(await statValue(page, "Premium paid so far")), { timeout: 90_000 }).toBeGreaterThan(0);

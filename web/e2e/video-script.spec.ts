@@ -73,7 +73,7 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
   await expect.poll(async () => usd(await statValue(page, "Premium paid so far")), { timeout: 90_000 }).toBeGreaterThan(0);
   const paid0 = usd(await statValue(page, "Premium paid so far"));
   await expect.poll(async () => usd(await statValue(page, "Premium paid so far")), { timeout: 30_000 }).toBeGreaterThan(paid0);
-  result.premiumPerBlockShown = await page.locator("p", { hasText: "Cover this block" }).locator("xpath=following-sibling::p[1]").innerText();
+  result.premiumPerBlockShown = (await page.locator("p", { hasText: "Cover this block" }).first().innerText()).replace(/^Cover this block:\s*/, "");
   const reprices = await client.getContractEvents({
     address: deployment.Repricer as Address,
     abi: repricerAbi,

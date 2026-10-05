@@ -190,7 +190,7 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 | Indexer | `pnpm --filter shield-indexer test` | 2 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
-| Lighthouse (mobile) | landing, borrower, LP | performance 98, 92, 91; accessibility 100 on all |
+| Lighthouse (mobile) | landing, borrower, LP | performance 94, 94, 91; accessibility and best practices 100 on all |
 
 Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
 

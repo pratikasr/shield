@@ -1,173 +1,294 @@
 # Shield web design
 
-How the Shield web app looks and behaves, and why. Research behind it: [DESIGN-RESEARCH.md](DESIGN-RESEARCH.md) (Aave, Morpho, Euler, Summer.fi, DeFi Saver and Hyperliquid, studied 5 Oct 2026). Screenshots from each review pass: [screenshots/](screenshots/).
+How the Shield web app looks and behaves, and why. Research behind it: [DESIGN-RESEARCH.md](DESIGN-RESEARCH.md). Part 1 covers position, risk and automation screens in Aave, Morpho, Euler, Summer.fi, DeFi Saver and Hyperliquid. Part 2 covers what makes a financial product look legitimate or like a scam, across 26 DeFi and fintech sites. Screenshots from each review pass are in [screenshots/](screenshots/).
+
+## Version 2 (5 Oct 2026): why the design changed
+
+The owner reviewed the first version and said it read as "a little sus". The legitimacy research in Part 2 agreed and found specific causes:
+
+- **Anonymous and unverifiable.** The site had no footer, no disclosures, no security section, no docs links and no contract links.
+- **A crypto-styled palette.** Navy with neon status colours.
+- **A loud headline face.** An expanded, heavy typeface.
+- **An unreadable mark.** A 16 px traffic-light glyph as the logo.
+- **Tiny prices in display type.** Sub-cent dollar figures shown large, such as "$0.0000013" per block.
+- **No token or network logos.**
+- **Every section the same boxed card.**
+
+Version 2 keeps every function and the health-factor instrument, and changes how they present:
+
+| Before | After | Why (reference) |
+| --- | --- | --- |
+| Navy dark by default | Light by default (#f6f7f9 page, white panels, #0b1220 ink), with a neutral graphite dark theme | Stripe, Coinbase, Aave, Lido and Monad all lead with light; dark plus a sparse page reads as a token site |
+| Archivo at 125% width, semibold headlines | Instrument Sans, weight 500, tracking -0.03 em, tabular figures | No reference site uses an expanded H1; weight 300 to 550 is the norm |
+| Traffic-light glyph | A shield cut by one line (the trigger), ink above, brand blue below, 22 px; matching app icon | Marks are 24 to 36 px and read as a brand, not a widget |
+| No token icons | Token and network logos everywhere a token is named (USDC, ETH, cbBTC, MON, AAVE, Pyth) | Aave, Morpho, Euler, Spark |
+| Wallet as a hex string | Address with a gradient avatar | Every reference app |
+| Per-block price as the headline | Rate per year leads; per-block figure in small type | Lido "APR*", Aave "APY"; Sky's "$0.0958" is the anti-pattern |
+| Two-line comparison sentence | The sentence plus proportional bars and "You keep $X" | Aave's $10,000 growth chart, Liquity's rate table |
+| No disclosures | A hero disclosure line, an unaudited and not-affiliated disclaimer in both footers, "Is Shield audited?" first in the FAQ | Mercury's hero strip, Robinhood, Aave's "Does Aave have risks?" |
+| Five sections | 11 sections: hero with a live product card, proof strip, savings calculator, how it works, the exit as a transaction trace, why Monad, comparison, "Built to be checked", FAQ, call to action, full footer | Scam sites have "simpler web structures" (HICSS 2026); references run 7 to 15 sections |
+| Monad jargon (MIP-8, eth_sendRawTransactionSync) | Plain numbers ("63% less gas per reprice"), with links to the technical write-up | The CFTC lists jargon as a fraud flag; Monad's own tiles are plain |
 
 ## Who it is for and what it must do
 
-- **Borrowers** on Aave V3 Monad with WETH or cbBTC collateral and USDC debt. They need to see in one glance how close they are to liquidation, put an early exit above it, and know what that exit and its cover cost.
-- **LPs** who fund exits. They need the vault's value broken into its parts, where the yield comes from, and what they can withdraw now.
-- **Judges.** They need to see real Monad state move block by block without a wallet: the landing page reads mainnet live, and any position can be viewed read-only.
+- **Borrowers** on Aave V3 Monad with WETH or cbBTC collateral and USDC debt.
+  - See in one glance how close they are to liquidation.
+  - Put an early exit above it.
+  - Know what the exit and its cover cost.
+- **LPs** who fund exits.
+  - See the vault's value broken into its parts.
+  - See where the yield comes from.
+  - See what they can withdraw now.
+- **Judges.**
+  - See real Monad state move block by block without a wallet: the landing page reads mainnet live, and any position can be viewed read-only.
+  - Find every claim's evidence one click away.
 
 ## Principles
 
-1. **One instrument, everywhere.** The health-factor rail is the product: Aave's liquidation line at 1.00, the borrower's trigger above it (the amber tripwire), where an exit restores HF to, and the live HF marker. It appears on the landing page, the borrower page, and in the wordmark.
-2. **Colour means something or it is not used.** Teal, amber and red are the health bands. Amber is also the trigger. Monad violet appears only where Monad is named. Buttons and surfaces are neutral.
-3. **The danger zone is loud.** Shield lives between HF 1.0 and 1.1, so the rail is zoomed to that range (0.95 up) and HF uses Aave's own bands: red below 1.1 is the normal state of a protected position, not an alarm about Shield. (Research: avoid a calm UI near liquidation, avoid a danger zone that is a sliver of the scale.)
-4. **Every number is live and honest.** Readings refresh every proposed block (about 300 ms). Estimates say "est." and explain their assumptions in a tooltip. Fork rehearsals say "Local fork" in amber in the header.
-5. **Every state teaches the next action.** Empty, error and blocked states say what happened and what to do, in the interface's voice, without apologising.
+1. **One instrument, everywhere.** The health-factor gauge is the product, and it appears on the landing page's product card and on the borrower page. It shows:
+   - Aave's liquidation line at 1.00.
+   - The borrower's trigger above it.
+   - Where an exit restores the health factor to.
+   - The live reading, which moves every block.
+2. **Quiet surfaces, colour that means something.**
+   - Surfaces and buttons are neutral, and primary actions are ink black.
+   - Brand blue is used only for links, focus rings and the lower half of the mark.
+   - Green means protected or saved, amber is the trigger, and red is Aave's liquidation line and penalty.
+   - Monad violet appears only on the Monad logo.
+3. **Evidence over adjectives.**
+   - Every number on the landing page links to where it comes from: the test report, the gas figures, the calculator's assumptions.
+   - Contract addresses appear in the footer as soon as a deployment exists.
+   - The product card reads live mainnet prices and says so.
+4. **Say the risk first.**
+   - The hero names the hackathon and says the contracts are not audited.
+   - The FAQ answers "Is Shield audited?" and "What can the owner change?" before anything else.
+   - The footer says Shield is not affiliated with Aave, Pyth or Monad.
+5. **Every state teaches the next action.** Empty, error and blocked states say what happened and what to do, without apologising.
 
 ## Tokens
 
 ### Colour
 
-| Token | Dark (default) | Light | Use |
+| Token | Light | Dark | Use |
 | --- | --- | --- | --- |
-| background | #0e1424 | #f4f6fa | Page ground: a deep instrument navy, not neutral near-black |
-| card | #141b2e | #ffffff | Panels |
-| raised | #1a2339 | #eef1f7 | Panels inside panels (the "At the trigger" box) |
-| foreground | #e7ebf3 | #0e1424 | Text, primary buttons (inverted) |
-| muted-foreground | #97a1b9 | #4f5a73 | Labels and secondary text (AA on card in both themes) |
-| border | #27314b | #d6dce8 | Rules and panel edges |
-| safe | #3dd9a8 | #087a57 | HF of 3 and above, success, savings |
-| caution | #ffb224 | #9a5b00 | HF 1.1 to below 3, the trigger, warnings |
-| danger | #ff6b6b | #c62f2f | HF below 1.1, the liquidation line, errors, penalties |
-| monad | #a597ff | #5442d6 | The word Monad only |
-| *-soft | 12% (dark) or 9 to 10% (light) of the colour | | Zone fills on the rail, status banners |
+| background | #f6f7f9 | #0b0d12 | Page |
+| card | #ffffff | #12151b | Panels |
+| raised / muted | #f2f4f7 | #181c24 | Insets, tracks, skeletons |
+| foreground | #0b1220 | #f2f4f7 | Text, primary buttons |
+| muted-foreground | #586378 | #9aa3b2 | Labels, secondary text (AA on both surfaces) |
+| border | #e3e6eb | #242a34 | Hairlines |
+| brand | #2347e8 | #7b93ff | Links, focus, mark, sparkline, vault USDC share |
+| safe | #067647 | #47cd89 | Protected, saved, exit target |
+| caution | #b54708 | #fdb022 | Trigger, unprotected |
+| danger | #c4320a | #f97066 | Liquidation line, Aave penalty, HF below 1.1 |
+| monad | #6e54ff | #9d8cff | Monad mentions only |
 
-Text pairs meet WCAG AA (computed 5 Oct 2026): muted-foreground on card 6.6:1 dark and 6.9:1 light, on raised 6.0:1 and 6.1:1; caution text 9.5:1 dark and 5.4:1 light (the light theme uses #9a5b00 because the dark-mode amber fails on white); safe 9.5:1 and 5.3:1; danger 6.2:1 and 5.5:1; foreground on card 14.3:1.
+- Health-factor colours follow Aave's own bands (red below 1.1, amber below 3, green above), so a reading means the same here as on app.aave.com.
+- The "Why Monad" band and the call to action use a fixed ink (#0b1220) panel in light mode, and the card colour in dark mode.
 
 ### Type
 
-One family, Archivo (variable, Google Fonts), used at two widths: normal (100%) for reading text and expanded (112.5% to 125%) for headings and numeric readings, with tabular figures (`.num`, `.reading`). No monospace: figures align through `tnum`.
+Instrument Sans (Google Fonts, variable), chosen for its crisp grotesk shapes and true tabular figures. Schibsted Grotesk and Public Sans were compared and rejected because their tabular figures space out awkwardly.
 
-| Role | Size / line height | Width, weight |
-| --- | --- | --- |
-| Landing headline | 56 px (40 px mobile) / 1.15 | 125%, 600 |
-| Page title | 28 px / 1.15 | 112.5%, 600 |
-| Section title | 16 to 18 px | 112.5%, 600 |
-| Big reading (HF, vault value) | 36 px / 1 | 112.5%, 600, tabular |
-| Reading | 20 px | 112.5%, 600, tabular |
-| Body | 15 px / 1.55 | 100%, 400 |
-| Label, hint | 13 px | 100%, 400 |
-| Rail labels | 12 px | 100%, 500, tabular |
+| Role | Size and weight |
+| --- | --- |
+| Landing H1 | 44 px on phones, 68 px on desktop; weight 500; tracking -0.03 em; line height 1.02 |
+| Section heading | 32 to 44 px; weight 500; tracking -0.03 em |
+| App page title | 32 px, weight 600 |
+| Big reading (HF, vault value) | 28 to 40 px, weight 600, tabular |
+| Panel title | 16 px, weight 600 |
+| Body | 15 px app, 18 to 20 px landing lede |
+| Label | 13 px, muted |
+| Table header | 12 px, medium, muted |
 
-Sentence case everywhere. No all-caps labels, no eyebrows above headings, no arrows in button text, no middle-dot meta strings.
+Every number uses tabular figures (`.num`, `.reading`).
 
-### Spacing and shape
+### Shape, depth, spacing
 
-A 4 px grid: 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 64. Panels use 20 px (mobile) or 28 px padding. Radii follow hierarchy: 14 px panels, 10 px inner boxes, 6 px controls, full circles for the HF marker and step numbers. No drop shadows; panels separate by surface tone and a 1 px border. Touch targets are at least 40 px.
+- **Radius:** panels 14 px; inputs and buttons 8 px; chips and avatars fully round.
+- **Depth:** panels have a hairline border and a 1 to 3 px shadow in light mode; the hero product card has one deeper float shadow; dark mode uses borders only.
+- **Spacing:** 4 px base. Panels pad 20 to 24 px, app sections sit 24 px apart, and landing sections 96 to 128 px apart. Containers max out at 1,216 px.
 
 ### Motion
 
-One moving thing: the HF marker slides to its new position each block (300 ms, linear), so the rail visibly tracks the chain. Spinners only for in-flight transactions. `prefers-reduced-motion` turns all of it off.
+- The HF marker and its label slide to each new reading in 300 ms. The network dot pings while blocks arrive.
+- Nothing else moves on its own.
+- `prefers-reduced-motion` stops all of it.
 
 ## Components
 
-| Component | File | Notes |
-| --- | --- | --- |
-| Risk rail | `components/risk/risk-rail.tsx` | SVG track 0.95 to max(1.3, marks + 0.08); zones, ticks, liquidation, trigger, exit target, trail of the last 30 readings; HTML marker; labels align inward at the edges; exit label hidden below 640 px |
-| Stat | `components/data/stat.tsx` | Label, reading, hint; optional tone |
-| Sparkline | `components/data/sparkline.tsx` | Recent per-block premiums; decorative, the number carries the meaning |
-| Hash link | `components/data/hash-link.tsx` | `0x1234…abcd`, copy button, explorer link (MonadVision), full value on hover |
-| Info | `components/data/info.tsx` | Focusable tooltip that explains a derived number |
-| Transaction status | `components/tx/tx-status.tsx` | Confirm in wallet, sending, included in block N, finalised, or the error with its fix |
-| Header | `components/shell/app-header.tsx` | Wordmark, nav, live block pill (amber "Local fork" on a fork), theme toggle, connect |
-| Network guard | `components/shell/network-guard.tsx` | Banner plus "Switch to Monad to …" primary buttons |
-| Cover setup | `components/borrow/cover-panel.tsx` | Trigger slider with derived price, discount ceiling, prepay with runway, "At the trigger" box, near-1.00 acknowledgement, four numbered steps |
-| Cover manage | same | Status banner, trigger and ceiling, tabs: top up, withdraw, trigger, opt out |
-| Position panel | `components/borrow/position-panel.tsx` | HF, collateral, debt, threshold; rail; comparison line; premium ticker; prepaid and runway |
-| Vault view | `components/vault/vault-view.tsx` | NAV with components, premium rate (variable), earned, exits, average discount, share price; deposit and withdraw; exits, covers and activity tables |
-| Live demo | `components/landing/live-demo.tsx` | Landing instrument: mainnet block and Pyth ETH price, no wallet libraries |
-
-shadcn/ui (Radix base) supplies Button, Slider, Tabs, Tooltip, Input, Label, Skeleton and Badge, re-skinned through the tokens above.
+| Component | Notes |
+| --- | --- |
+| Mark and wordmark | `ShieldMark`, `Wordmark`; `app/icon.svg` is the same mark on an ink tile |
+| App header | Sticky and blurred: mark, "Protect" and "Earn" with an underline on the current page, Monad network chip (logo, live dot, block), theme toggle, wallet button (avatar and address, or "Connect wallet") |
+| Footers | Site: four columns (product; transparency, with contract addresses once deployed; built on), a disclaimer and the licence. App: the disclaimer and links to Security, Tests and GitHub |
+| Panel | The one surface style: hairline border, 14 px radius, optional title row. Panels never nest |
+| Stat | Label above a tabular value with an optional hint; `dt`/`dd` |
+| TokenIcon, TokenPair, TokenAmount | Logos from `public/tokens/` (Aave's own SVGs); a lettered fallback for unknown symbols |
+| Gauge (`RiskRail`) | Track from 0.95 up: red to 1.00, then amber to the trigger (hatched when not armed), then green to the exit target. Tick scale; floating "HF x.xxx" label over the knob; a legend instead of crowded inline labels; text label for screen readers |
+| Cost comparison | "Aave penalty if liquidated: $X. Shield: $Y." with bars to scale and "You keep $Z" |
+| Chip | Presets (triggers, prepay durations, loan sizes); pressed state is ink |
+| Amount input | Token icon inside, Max button, balance above, outcome below ("You receive N shUSDC", "Lasts about N days") |
+| Steps | Vertical stepper with a connector; done steps turn green; one primary button acts on the current step |
+| Transaction status | Wallet, sending, "included in block N, finalising", "finalised in block N" with the hash; errors in one sentence |
+| Tabs | Activity panels (Exits and Repricing; Exits, Covered positions and Vault flows) |
+| Hash link | Truncated hash, copy button, explorer link |
 
 ## Formatting rules
 
-- USD: two decimals; compact from $100,000 ($1.2M); below one cent, two significant digits in fixed notation ($0.0000014). Per-block premiums are tiny by design and are never rounded to $0.00.
-- Tokens: up to four decimals, grouped thousands, symbol after.
-- HF: rounded down (as Aave does) to three decimals so per-block moves show; "No debt" when there is none.
-- Percentages: two decimals by default; discounts in whole percents.
-- Hashes and addresses: first six and last four characters, copy, explorer link.
-- Times: relative in tables ("12s ago"), absolute in sentences.
+- **USD:**
+  - Two decimals; compact from $100,000 ($1.2M).
+  - Below one cent, two significant digits in fixed notation.
+  - Sub-cent figures appear only as small secondary text or in live meters, never as a headline.
+  - Premiums lead with a rate per year.
+- **Tokens:** up to four decimals, grouped thousands, symbol after, with the token's icon.
+- **HF:** rounded down (as Aave does) to three decimals so per-block moves show; "No debt" when there is none.
+- **Percentages:** two decimals by default; discounts in whole percents.
+- **Hashes and addresses:** first six and last four characters, with copy and an explorer link.
+- **Times:** relative in tables ("12s ago"), absolute in sentences.
 
 ## Screens and states
 
 ### Landing `/`
 
-Static except for the live demo, which reads Monad mainnet from the browser (no wallet code ships on this route). Sections: headline and two actions; live demo; how an exit works (three numbered steps, a real sequence); comparison with Morpho pre-liquidation, Euler V2 and DeFi Saver; why this needs Monad; what Shield does not do.
+Server-rendered except for two client islands: the hero product card, which reads Monad mainnet from the browser, and the savings calculator. No wallet code ships on this route.
+
+Sections, in order:
+
+1. Header.
+2. Hero, containing:
+   - The headline.
+   - A one-sentence lede.
+   - "Protect a position" and "Earn as a liquidity provider".
+   - A trust row (built on Aave V3 and Pyth, repriced every 300 ms, open source).
+   - The disclosure line.
+   - The live product card.
+3. Proof strip (1% vs 5.5%, 300 ms, 63% less gas, 101 tests), each figure linked to its evidence.
+4. "What an early exit saves" calculator.
+5. "How an exit works": three steps, then "Inside one exit transaction" as five steps.
+6. "Why this needs Monad".
+7. Comparison with Morpho pre-liquidation, Euler V2 and DeFi Saver.
+8. "Built to be checked": six facts, including "Not audited yet".
+9. FAQ.
+10. Call to action.
+11. Footer.
 
 | State | Shows |
 | --- | --- |
 | Loading | Placeholder readings and "Connecting to Monad" |
-| Live | Block number, Pyth ETH price, example HF, cover per block and per year, rail |
-| RPC unreachable | "Monad RPC unreachable, retrying"; retries every 600 ms while visible, 3 s when hidden |
+| Live | Block number, Pyth ETH price, example HF, gauge, cover per year, the liquidation and exit costs |
+| RPC unreachable | "Monad RPC unreachable, retrying"; retries every 600 ms while the page is visible, every 3 s when hidden |
 
 ### Borrower `/app/borrow`
+
+Layout:
+
+- **Header band:** market chip (Aave and Monad icons), page title, cover status (Not protected, Protected at x.xx, Unprotected, or Exited), and net worth, collateral, debt and health factor on the right.
+- **Left column:**
+  - "Liquidation risk": the gauge; collateral price now, liquidation price and exit price; the cost comparison; and, while protected, the cover rate, prepaid balance and premium paid.
+  - "Activity": Exits and Repricing tabs.
+  - "Your assets on Aave".
+  - "Sources and contracts": Aave's oracle price against Pyth, with the gap an exit allows (2%), and every contract that can act on the position, each linked to the explorer.
+- **Right column (sticky):** the cover panel.
+- **On phones**, the cover panel follows the risk panel.
 
 | State | Shows | Next action |
 | --- | --- | --- |
 | Not configured | "Shield is not configured" with the variables to set | Set the env |
-| Disconnected | What Shield does; connect; "view an address" | Connect or view |
+| Disconnected | Wallet icon, what Shield does, "Connect wallet", "view any address read only" | Connect or view |
 | Watching (`?address=`) | Full read-only page, banner "Viewing 0x…, read only" | Stop viewing or connect |
-| Wrong network | Banner with switch; page asks to switch | Switch to Monad |
-| Loading | Skeletons for readings, rail and side panel | Wait |
+| Wrong network | Banner with switch; actions ask to switch | Switch to Monad |
+| Loading | Skeletons that match the final layout | Wait |
 | RPC error | "Could not read Aave" with the RPC's message | Reload |
-| No Aave position | "No Aave position on this wallet" | Open Aave on Monad |
+| No Aave position | Aave and Monad icons, "No Aave position on this wallet" | Open Aave on Monad |
 | eMode | Why eMode is not covered (1% bonus) | Leave eMode on Aave |
 | No WETH or cbBTC collateral | What Shield takes | Supply on Aave |
 | No USDC debt | What Shield repays | Borrow USDC |
-| Not covered | Rail with the chosen trigger (dashed, "not armed"), comparison line, setup panel | Approve, approve, prepay, opt in |
-| Trigger at or above HF | Note: the exit would run at the next block | Raise HF or accept |
+| Not covered | Gauge with the chosen trigger (hatched, "not armed"), exit price, comparison, setup panel | Approve, approve, prepay, opt in |
+| Trigger at or above HF | Amber note: the exit would run at the next block | Raise HF or accept |
 | Trigger at 1.02 or below | Acknowledgement checkbox required | Confirm |
 | Pending transaction | Button reads "Check your wallet", status line below | Wait |
 | Confirmed | "Included in block N, finalising", then "finalised" with the hash | Next step |
 | Transaction error | The error in one sentence with its fix | Retry |
-| Protected | Teal banner, premium ticker, prepaid runway | Manage |
-| Unprotected, balance used up | Amber banner | Top up |
-| Unprotected, approval revoked | Red banner with "Approve again" | Approve |
-| Exit due | Amber banner: the keeper exits next block | Wait |
-| Waiting for a Pyth price | Amber banner | Wait |
-| Exited | "Exited … penalty avoided $X", exit row with hash, setup panel to protect again | Protect again |
-| Indexer missing or failing | History panels say which variable or what failed | Configure |
+| Protected | Neutral header with a green shield icon, "Protected"; trigger, max discount and collateral; cover rate per year with sparkline; prepaid runway; management tabs | Manage |
+| Unprotected, balance used up | Amber header | Top up |
+| Unprotected, approval revoked | Red header with "Approve again" | Approve |
+| Exit due | Amber header: the keeper exits next block | Wait |
+| Waiting for a Pyth price | Amber header | Wait |
+| Exited | Green banner "Exited in block N: penalty avoided $X" with the hash; "Exit completed" card (penalty avoided, debt repaid, HF before and after) above the form to protect again | Protect again |
+| Indexer missing or failing | Activity says which variable or what failed | Configure |
 
 ### LP `/app/vault`
 
+Layout:
+
+- **Header band:** "Shield vault, USDC" chip, title "Earn by funding exits", a one-line explanation, and vault value, premium rate now and share price on the right.
+- **Left column:**
+  - "Vault overview": a composition bar (USDC, collateral from exits, premium to sweep), then premium earned, exits executed and average discount captured.
+  - "Activity": Exits, Covered positions and Vault flows tabs.
+- **Right column (sticky):** deposit and withdraw.
+
 | State | Shows | Next action |
 | --- | --- | --- |
-| Disconnected | All vault readings and tables; side panel asks to connect | Connect |
-| Loading | Skeleton readings | Wait |
-| Live | Vault value with components, premium rate (variable), premium earned, exits, average discount, share price | Deposit |
-| No exits or covers yet | Each table says what will appear and when | |
+| Disconnected | All vault readings and tables; the side panel asks to connect | Connect |
+| Loading | Skeleton bar and readings | Wait |
+| Live | Readings above, refreshed every block | Deposit |
+| No exits or covers yet | Each tab says what will appear and when | |
 | Deposit over balance | Red hint with the wallet balance | Lower the amount |
-| Withdraw over the liquid amount | Explanation that seized collateral must be sold first | Lower the amount |
+| Withdraw over the liquid amount | "Available now" and why seized collateral must be sold first | Lower the amount |
 | Wrong network, pending, confirmed, error | As on the borrower page | |
 
 ## Flows
 
 ### Borrower
 
-1. Open `/app/borrow` and connect (or view an address read-only).
-2. Read the position: HF (Aave bands), collateral, debt, threshold, the rail and "Aave penalty if liquidated: $X. Shield: $Y."
-3. Choose a trigger with the slider. The rail moves the dashed tripwire; the text gives the collateral price that reaches it at today's debt and the HF an exit restores. At 1.02 or below an acknowledgement appears; at or above the current HF a note says the exit would run at once.
-4. Choose the most discount you accept (1% default).
-5. Set the prepay; the hint gives the per-block and yearly premium and how long it lasts.
-6. Check "At the trigger": debt repaid, collateral taken, your cost, Aave's penalty.
-7. Step 1, approve the aToken for the Executor (max). Step 2, approve USDC for the prepay. Step 3, prepay. Step 4, opt in. Each step shows wallet, sending, included in block N, finalised.
-8. The panel turns into the teal "Protected" banner; the rail's tripwire turns solid amber; the premium ticks every block.
-9. Manage: top up, withdraw unused, move the trigger, opt out.
-10. If HF reaches the trigger, the banner reads "Exit due", the keeper exits next block, and the page shows "Exited, penalty avoided $X" with the transaction.
+1. Open `/app/borrow` and connect, or view an address read-only.
+2. Read the position: the header band, the gauge, the liquidation price, and "Aave penalty if liquidated: $X. Shield: $Y."
+3. Choose a trigger with the slider or a preset chip.
+   - The gauge moves the hatched trigger.
+   - The panel gives the collateral price at which the exit runs, how far below today that is, and the HF an exit restores.
+   - At 1.02 or below an acknowledgement appears.
+   - At or above the current HF, a note says the exit would run at once.
+4. Read the cover cost per year, with the per-block rate below it.
+5. Set the prepay by typing an amount, pressing Max, or choosing 30 days, 90 days or 1 year. The hint says how long it lasts.
+6. Optionally open Advanced and set the most discount you accept (1% by default).
+7. Run the four steps, each with wallet, sending, included in block N and finalised:
+   1. Approve the aToken for the Executor.
+   2. Approve USDC.
+   3. Prepay.
+   4. Opt in.
+8. The panel shows the "Protected" header, the gauge's trigger turns solid amber, and the cover rate and premium tick every block.
+9. Manage the cover: top up, withdraw unused, move the trigger, or opt out.
+10. If the HF reaches the trigger:
+    - The header reads "Exit due".
+    - The keeper exits.
+    - The page shows the green exit banner and the "Exit completed" card with the transaction.
 
 ### LP
 
-1. Open `/app/vault`; read the vault value and its parts, the premium rate and the exits table without connecting.
-2. Connect; deposit: approve USDC, then deposit, each with transaction status.
+1. Open `/app/vault`. Read the vault value, its composition and the activity tabs without connecting.
+2. Connect and deposit: approve USDC, then deposit, each with its transaction status. "You receive" previews the shUSDC.
 3. Watch premium earned and the vault value move every block.
-4. Withdraw up to the liquid amount; the panel explains why collateral taken at exits is not instantly withdrawable.
+4. Withdraw up to "Available now"; the panel explains why collateral taken at exits is not instantly withdrawable.
 
 ## Accessibility
 
-Keyboard: every control is a native button, link or input, with a visible 2 px focus ring; a skip link leads to the content; tabs and slider come from Radix. The rail is an image with a full text label (HF, trigger, liquidation line, exit target). Live readings are `aria-live="off"` so screen readers are not flooded every 300 ms; transaction status is `aria-live="polite"`; errors use `role="alert"`. Contrast meets AA in both themes. Layouts work from 375 px with no horizontal page scroll; wide tables scroll inside their own panel.
+- **Keyboard:**
+  - Every control is a native button, link, input or `details`.
+  - Every control has a visible 2 px focus ring in brand blue.
+  - A skip link leads to the content.
+  - Tabs and sliders come from Radix.
+- **The gauge** is an image with a full text label (HF, trigger, liquidation line, exit target).
+- **Live regions:**
+  - Live readings are `aria-live="off"`, so screen readers are not flooded every 300 ms.
+  - Transaction status is `aria-live="polite"`.
+  - Errors use `role="alert"`.
+- **Contrast** meets AA in both themes.
+- **Layout:**
+  - Works from 375 px with no horizontal page scroll.
+  - Wide tables scroll inside their own panel.
+  - The comparison table keeps its first column fixed.
 
 ## Review log
 
-Pass 1 and pass 2 critiques, fixes and screenshots are listed in [screenshots/README.md](screenshots/README.md).
+Pass 1 and pass 2 (version 1) and pass 3 (version 2) critiques, fixes and screenshots are listed in [screenshots/README.md](screenshots/README.md).

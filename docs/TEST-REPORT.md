@@ -20,7 +20,7 @@ Five rounds, all run on 5 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (
 | Keeper live smoke | `LIVE_SMOKE=1 MONAD_SMOKE_WS_URL=wss://rpc.monad.xyz pnpm --filter keeper exec vitest run test/live.smoke.test.ts` (also testnet) | `monadNewHeads` part passes on mainnet and testnet; the `eth_sendRawTransactionSync` part waits for a funded testnet key |
 | Indexer | `pnpm --filter shield-indexer test` | 2 pass |
 | Workspace | `pnpm lint && pnpm test && pnpm -r build` | clean |
-| Lighthouse 12 (mobile emulation, production build) | `npx lighthouse http://localhost:3200/<route> --only-categories=performance,accessibility,best-practices` | landing 98 / 100 / 100; borrower 92 / 100 / 100; LP 91 / 100 / 100 (performance / accessibility / best practices) |
+| Lighthouse 12 (mobile emulation, production build) | `npx lighthouse http://localhost:3200/<route> --only-categories=performance,accessibility,best-practices` | version 1: landing 98 / 100 / 100; borrower 92 / 100 / 100; LP 91 / 100 / 100. Version 2 (redesign): landing 94 / 100 / 100; borrower 94 / 100 / 100; LP 91 / 100 / 100, CLS 0 on all three (performance / accessibility / best practices) |
 
 Defects found in this round and fixed, each with a regression test:
 
@@ -44,6 +44,7 @@ Defects found in this round and fixed, each with a regression test:
 | Run | Outcome | Duration |
 | --- | --- | --- |
 | Final run, 5 Oct 2026 | pass | 2.2 min for the Playwright part |
+| Re-run after the version 2 redesign (docs/DESIGN.md), 5 Oct 2026 | pass | 2.2 min |
 
 Defects found by this round and fixed: wagmi only watched blocks when the `watch` object also set `enabled`, so every "per block" read on the page was one-shot (the premium never ticked); the page now reads the exit from chain logs so it can show the penalty avoided before the indexer catches up; `envio dev` stalls without a terminal, so the stack starts Postgres and Hasura with `envio local docker up` and runs `envio start`; the E2E scripts now stop every process they start. The premium-tick and penalty-avoided assertions are the regression tests.
 

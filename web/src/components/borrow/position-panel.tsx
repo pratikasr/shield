@@ -1,16 +1,19 @@
 "use client";
 
+import { ShieldCheck, ShieldOff, ShieldAlert } from "lucide-react";
 import { useRef } from "react";
 import { Info } from "@/components/data/info";
 import { Sparkline } from "@/components/data/sparkline";
-import { Stat } from "@/components/data/stat";
+import { Panel, Stat } from "@/components/data/stat";
+import { TokenIcon, TokenPair } from "@/components/data/token";
 import { RiskRail, hfTone } from "@/components/risk/risk-rail";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AavePosition, ReserveLine } from "@/hooks/useAavePosition";
 import { useLiveBlock } from "@/hooks/useLiveBlock";
 import type { Cover } from "@/hooks/useShieldPosition";
-import { EXIT_BUFFER, aavePenaltyUsd, formatRunway, runwayDays, shieldExitUsd } from "@/lib/economics";
+import { BLOCKS_PER_DAY, EXIT_BUFFER, aavePenaltyUsd, formatRunway, runwayDays, shieldExitUsd } from "@/lib/economics";
 import { formatHf, formatPct, formatToken, formatUsd } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 /** The collateral reserve a cover seizes: the cover's own, else the largest covered one the wallet supplies. */
 export function pickCollateral(position: AavePosition, cover?: Cover): ReserveLine | undefined {
@@ -20,6 +23,82 @@ export function pickCollateral(position: AavePosition, cover?: Cover): ReserveLi
     if (own) return own;
   }
   return covered.sort((a, b) => b.suppliedUsd - a.suppliedUsd)[0];
+}
+
+/** The collateral price at which the health factor reaches `hf`, holding the debt and other collateral still. */
+export function priceAtHf(position: AavePosition, collateral: ReserveLine, hf: number): number {
+  if (!Number.isFinite(position.healthFactor) || collateral.supplied <= 0) return Number.NaN;
+  return collateral.priceUsd - ((position.healthFactor - hf) * position.debtUsd) / (collateral.supplied * collateral.liquidationThreshold);
+}
+
+function change(from: number, to: number) {
+  if (!Number.isFinite(to) || from <= 0) return "";
+  const p = (to - from) / from;
+  return `${p >= 0 ? "+" : "−"}${Math.abs(p * 100).toFixed(1)}%`;
+}
+
+/** The page header: which market, and the four numbers a borrower checks first. */
+export function PositionHeader({ position, title, cover }: { position: AavePosition; title: string; cover?: Cover }) {
+  const hf = position.healthFactor;
+  const status = !cover?.active
+    ? { icon: ShieldOff, text: cover?.exited ? "Exited" : "Not protected", cls: "text-muted-foreground" }
+    : cover.lapsed || cover.exitStatus === "AllowanceTooLow"
+      ? { icon: ShieldAlert, text: "Unprotected", cls: "text-caution" }
+      : { icon: ShieldCheck, text: `Protected at ${cover.trigger.toFixed(2)}`, cls: "text-safe" };
+  return (
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+      <div className="min-w-0">
+        <p className="inline-flex items-center gap-2 text-[0.8125rem] font-medium text-muted-foreground">
+          <TokenPair a="AAVE" b="MON" size={18} />
+          Aave V3, Monad market
+        </p>
+        <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.02em]">{title}</h1>
+        <p className={cn("mt-1 inline-flex items-center gap-1.5 text-sm font-medium", status.cls)}>
+          <status.icon className="size-4" aria-hidden />
+          {status.text}
+        </p>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 lg:flex lg:gap-x-10">
+        <Stat label="Net worth" value={formatUsd(position.collateralUsd - position.debtUsd)} />
+        <Stat label="Collateral" value={formatUsd(position.collateralUsd)} />
+        <Stat label="Debt" value={formatUsd(position.debtUsd)} />
+        <Stat label="Health factor" value={formatHf(hf)} tone={hfTone(hf)} />
+      </dl>
+    </div>
+  );
+}
+
+function CostCompare({ penalty, shieldCost, repayUsd, trigger, bonus }: { penalty: number; shieldCost: number; repayUsd: number; trigger: number; bonus: number }) {
+  const max = Math.max(penalty, shieldCost, 1e-9);
+  return (
+    <div className="rounded-lg bg-raised p-4 sm:p-5">
+      <p className="text-[0.9375rem]">
+        Aave penalty if liquidated: <strong className="font-semibold text-danger num">{formatUsd(penalty)}</strong>. Shield:{" "}
+        <strong className="font-semibold text-safe num">{formatUsd(shieldCost)}</strong>
+        <span className="text-muted-foreground">.</span>
+        <Info>
+          Aave: a liquidation just below 1.00 repays half your debt (all of it under $2,000) and pays the liquidator a{" "}
+          {(bonus * 100).toFixed(1)}% bonus from your collateral. Shield: the exit at {trigger.toFixed(2)} repays about {formatUsd(repayUsd)} to
+          bring the health factor back to {(trigger + EXIT_BUFFER).toFixed(2)}, and the vault takes 1% on that amount. The premium is separate.
+        </Info>
+      </p>
+      <div className="mt-4 grid gap-3 text-[0.8125rem]">
+        <div className="grid grid-cols-[7.5rem_1fr] items-center gap-3 sm:grid-cols-[9rem_1fr]">
+          <span className="text-muted-foreground">Aave liquidation</span>
+          <span className="h-2.5 rounded-full bg-danger/80" style={{ width: `${Math.max((penalty / max) * 100, 2)}%` }} aria-hidden />
+        </div>
+        <div className="grid grid-cols-[7.5rem_1fr] items-center gap-3 sm:grid-cols-[9rem_1fr]">
+          <span className="text-muted-foreground">Shield exit at {trigger.toFixed(2)}</span>
+          <span className="h-2.5 rounded-full bg-safe" style={{ width: `${Math.max((shieldCost / max) * 100, 2)}%` }} aria-hidden />
+        </div>
+      </div>
+      {penalty > shieldCost && (
+        <p className="mt-4 text-sm">
+          You keep <span className="font-semibold text-safe num">{formatUsd(penalty - shieldCost)}</span> more of your collateral if the exit runs first.
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function PositionPanel({
@@ -43,7 +122,6 @@ export function PositionPanel({
   const active = cover?.active ?? false;
   const trigger = active ? cover!.trigger : previewTrigger;
   const collateral = pickCollateral(position, cover);
-  const tone = hfTone(hf);
   const usdcDebt = position.reserves.find((r) => r.symbol === "USDC")?.borrowedUsd ?? 0;
 
   // Premium accrued since the last reprice keeps counting up block by block between keeper transactions.
@@ -56,130 +134,165 @@ export function PositionPanel({
     collateral && trigger
       ? shieldExitUsd({ debtUsd: usdcDebt, trigger, liquidationThreshold: collateral.liquidationThreshold, discountBps: 100 })
       : undefined;
+  const liqPrice = collateral ? priceAtHf(position, collateral, 1) : Number.NaN;
+  const trigPrice = collateral && trigger ? priceAtHf(position, collateral, trigger) : Number.NaN;
 
   return (
-    <section aria-labelledby="position-heading" className="rounded-xl border bg-card">
-      <div className="p-5 sm:p-7">
-        <h2 id="position-heading" className="sr-only">
-          Your Aave position
-        </h2>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+    <Panel
+      title="Liquidation risk"
+      labelledBy="risk-heading"
+      description={collateral ? `How far ${collateral.symbol} can fall before Aave liquidates, and where Shield steps in` : undefined}
+    >
+      <RiskRail
+        healthFactor={hf}
+        trigger={trigger}
+        exitTarget={trigger ? trigger + EXIT_BUFFER : undefined}
+        trail={trail.current}
+        armed={active && !cover?.lapsed}
+      />
+
+      {collateral && (
+        <dl className="mt-6 grid grid-cols-1 gap-x-6 gap-y-4 border-t pt-5 sm:grid-cols-3">
           <Stat
-            className="col-span-2 sm:col-span-1"
-            size="lg"
-            label="Health factor"
-            value={formatHf(hf)}
-            tone={tone}
-            hint={trigger ? `Trigger ${trigger.toFixed(2)}${active ? "" : ", not set yet"}` : "Aave liquidates at 1.00"}
+            size="sm"
+            label={
+              <>
+                <TokenIcon symbol={collateral.symbol} size={14} /> {collateral.symbol} now
+              </>
+            }
+            value={formatUsd(collateral.priceUsd)}
+            hint="Aave oracle price"
           />
-          <Stat label="Collateral" value={formatUsd(position.collateralUsd)} hint={collateral ? formatToken(collateral.supplied, collateral.symbol) : undefined} />
-          <Stat label="Debt" value={formatUsd(position.debtUsd)} hint={usdcDebt > 0 ? `${formatUsd(usdcDebt)} in USDC` : "No USDC debt"} />
+          <Stat size="sm" label="Liquidation price" value={Number.isFinite(liqPrice) && liqPrice > 0 ? formatUsd(liqPrice) : "n/a"} hint={`${change(collateral.priceUsd, liqPrice)} from now`} tone="danger" />
           <Stat
-            label="Liquidation threshold"
-            value={formatPct(position.liquidationThreshold, 1)}
-            hint={collateral ? `Bonus to a liquidator ${formatPct(collateral.liquidationBonus - 1, 1)}` : undefined}
+            size="sm"
+            label={trigger ? (active ? "Exit price" : "Exit price at this trigger") : "Exit price"}
+            value={trigger && Number.isFinite(trigPrice) && trigPrice > 0 ? formatUsd(trigPrice) : "No trigger"}
+            hint={trigger ? `${change(collateral.priceUsd, trigPrice)} from now, health factor ${trigger.toFixed(2)}` : "Set one to see it"}
+            tone={trigger ? "caution" : undefined}
           />
         </dl>
+      )}
 
-        <RiskRail
-          className="mt-10"
-          healthFactor={hf}
-          trigger={trigger}
-          exitTarget={trigger ? trigger + EXIT_BUFFER : undefined}
-          trail={trail.current}
-          armed={active && !cover?.lapsed}
-        />
-
-        {shieldCost && penalty > 0 && (
-          <p className="mt-8 text-base">
-            Aave penalty if liquidated: <strong className="reading font-semibold text-danger">{formatUsd(penalty)}</strong>. Shield:{" "}
-            <strong className="reading font-semibold text-safe">{formatUsd(shieldCost.costUsd)}</strong>
-            <span className="text-muted-foreground">
-              {" "}
-              (1% of the {formatUsd(shieldCost.repayUsd)} an exit at {trigger!.toFixed(2)} repays, plus the premium)
-            </span>
-            <Info>
-              Aave: a liquidation just below 1.00 repays half your debt (all of it under $2,000) and pays the liquidator a{" "}
-              {collateral ? ((collateral.liquidationBonus - 1) * 100).toFixed(1) : "5.5"}% bonus from your collateral. Shield: the exit
-              repays enough to bring HF back to trigger + 0.06 and takes 1% on that amount.
-            </Info>
-          </p>
-        )}
-      </div>
+      {collateral && shieldCost && penalty > 0 && trigger && (
+        <div className="mt-6">
+          <CostCompare penalty={penalty} shieldCost={shieldCost.costUsd} repayUsd={shieldCost.repayUsd} trigger={trigger} bonus={collateral.liquidationBonus - 1} />
+        </div>
+      )}
 
       {active && cover && (
-        <div className="grid gap-x-6 gap-y-5 border-t p-5 sm:grid-cols-3 sm:p-7">
+        <div className="mt-6 grid gap-x-6 gap-y-5 border-t pt-5 sm:grid-cols-3">
           <div>
-            <p className="flex items-center text-[0.8125rem] text-muted-foreground">
-              Cover this block
+            <p className="flex items-center gap-1 text-[0.8125rem] text-muted-foreground">
+              Cover rate
               <Info>
                 k x volatility x debt / max(HF - trigger, 0.01), for one 300 ms block. k is 0.00125, so a position 0.05 above its
                 trigger at 80% volatility pays 2% of its debt a year. The keeper reprices every block.
               </Info>
             </p>
-            <p className="reading mt-0.5 text-xl font-semibold" aria-live="off">
-              {cover.lapsed ? "Paused" : formatUsd(cover.livePremiumPerBlockUsd)}
+            <p className="reading mt-1 text-[1.25rem] font-semibold">
+              {cover.lapsed ? "Paused" : formatUsd(cover.livePremiumPerBlockUsd * BLOCKS_PER_DAY * 365)}
+              {!cover.lapsed && <span className="text-sm font-normal text-muted-foreground"> a year</span>}
             </p>
-            <Sparkline values={[...premiumHistory, cover.livePremiumPerBlockUsd]} className="mt-1 h-5 w-full max-w-36" />
-            <p className="mt-1 text-[0.8125rem] text-muted-foreground">{formatUsd(cover.annualPremiumUsd)} a year at this rate</p>
+            <Sparkline values={[...premiumHistory, cover.livePremiumPerBlockUsd]} className="mt-1.5 h-6 w-full max-w-40 text-brand" />
+            <p className="mt-1 text-[0.8125rem] text-muted-foreground" aria-live="off">
+              Cover this block: <span className="num">{cover.lapsed ? "paused" : formatUsd(cover.livePremiumPerBlockUsd)}</span>
+            </p>
           </div>
-          <Stat
-            label="Prepaid balance"
-            value={formatUsd(prepaidLive)}
-            tone={cover.lapsed ? "caution" : undefined}
-            hint={cover.lapsed ? "Used up: top up to re-arm" : `Lasts ${formatRunway(runwayDays(prepaidLive, cover.livePremiumPerBlockUsd))}`}
-          />
-          <Stat label="Premium paid so far" value={formatUsd(accruedLive)} hint={`Volatility ${formatPct(cover.sigma, 0)} a year, from Pyth`} />
+          <dl className="contents">
+            <Stat
+              label="Prepaid balance"
+              value={formatUsd(prepaidLive)}
+              tone={cover.lapsed ? "caution" : undefined}
+              hint={cover.lapsed ? "Used up: top up to re-arm" : `Lasts ${formatRunway(runwayDays(prepaidLive, cover.livePremiumPerBlockUsd))}`}
+            />
+            <Stat label="Premium paid so far" value={formatUsd(accruedLive)} hint={`Volatility ${formatPct(cover.sigma, 0)} a year, from Pyth`} />
+          </dl>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 
 export function ReservesTable({ position }: { position: AavePosition }) {
   return (
-    <section aria-labelledby="reserves-heading" className="rounded-xl border bg-card">
-      <h2 id="reserves-heading" className="px-5 pt-5 text-base font-semibold sm:px-7">
-        Aave reserves on this wallet
-      </h2>
-      <div className="relative overflow-x-auto px-2 pb-3 sm:px-4">
-        <table className="mt-3 w-full [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap min-w-[30rem] text-left text-sm">
+    <Panel title="Your assets on Aave" labelledBy="reserves-heading" bodyClassName="px-0 pb-2 sm:px-0 sm:pb-2">
+      <div className="relative overflow-x-auto">
+        <table className="w-full min-w-[32rem] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
           <thead>
-            <tr className="text-[0.8125rem] text-muted-foreground">
-              <th scope="col" className="px-3 py-2 font-normal">Asset</th>
-              <th scope="col" className="px-3 py-2 text-right font-normal">Supplied</th>
-              <th scope="col" className="px-3 py-2 text-right font-normal">Borrowed</th>
-              <th scope="col" className="px-3 py-2 text-right font-normal">Value</th>
+            <tr className="border-b text-[0.75rem] text-muted-foreground">
+              <th scope="col" className="px-5 pb-2.5 font-medium sm:px-6">Asset</th>
+              <th scope="col" className="px-3 pb-2.5 text-right font-medium">Supplied</th>
+              <th scope="col" className="px-3 pb-2.5 text-right font-medium">Borrowed</th>
+              <th scope="col" className="px-5 pb-2.5 text-right font-medium sm:px-6">Liquidation threshold</th>
             </tr>
           </thead>
           <tbody className="num">
             {position.reserves.map((r) => (
-              <tr key={r.asset} className="border-t">
-                <th scope="row" className="px-3 py-2.5 font-medium">{r.symbol}</th>
-                <td className="px-3 py-2.5 text-right">{r.supplied > 0 ? formatToken(r.supplied) : "None"}</td>
-                <td className="px-3 py-2.5 text-right">{r.borrowed > 0 ? formatToken(r.borrowed) : "None"}</td>
-                <td className="px-3 py-2.5 text-right">{formatUsd(r.suppliedUsd - r.borrowedUsd)}</td>
+              <tr key={r.asset} className="border-b last:border-b-0">
+                <th scope="row" className="px-5 py-3.5 font-medium sm:px-6">
+                  <span className="flex items-center gap-3">
+                    <TokenIcon symbol={r.symbol} size={28} />
+                    {r.symbol}
+                  </span>
+                </th>
+                <td className="px-3 py-3.5 text-right">
+                  {r.supplied > 0 ? (
+                    <>
+                      <span className="block">{formatToken(r.supplied)}</span>
+                      <span className="block text-[0.8125rem] text-muted-foreground">{formatUsd(r.suppliedUsd)}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground" aria-label="None">-</span>
+                  )}
+                </td>
+                <td className="px-3 py-3.5 text-right">
+                  {r.borrowed > 0 ? (
+                    <>
+                      <span className="block">{formatToken(r.borrowed)}</span>
+                      <span className="block text-[0.8125rem] text-muted-foreground">{formatUsd(r.borrowedUsd)}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground" aria-label="None">-</span>
+                  )}
+                </td>
+                <td className="px-5 py-3.5 text-right sm:px-6">
+                  {r.supplied > 0 ? formatPct(r.liquidationThreshold, 1) : <span className="text-muted-foreground" aria-label="Not collateral">-</span>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </section>
+    </Panel>
   );
 }
 
 export function PositionSkeleton() {
   return (
-    <div className="rounded-xl border bg-card p-5 sm:p-7" aria-busy="true" aria-label="Loading your Aave position">
-      <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="space-y-2">
-            <Skeleton className="h-3.5 w-24" />
-            <Skeleton className="h-7 w-28" />
-          </div>
-        ))}
+    <div className="grid gap-6" aria-busy="true" aria-label="Loading your Aave position">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-9 w-56" />
+        </div>
+        <div className="flex gap-10">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-7 w-24" />
+            </div>
+          ))}
+        </div>
       </div>
-      <Skeleton className="mt-10 h-14 w-full" />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="panel p-6">
+          <Skeleton className="h-5 w-36" />
+          <Skeleton className="mt-10 h-3 w-full" />
+          <Skeleton className="mt-8 h-16 w-full" />
+        </div>
+        <Skeleton className="h-[28rem] w-full rounded-[14px]" />
+      </div>
     </div>
   );
 }

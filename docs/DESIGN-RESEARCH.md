@@ -1,4 +1,8 @@
-# Shield web UI: design research on DeFi position, risk and automation screens
+# Shield web UI: design research
+
+Part 1 (below) studies DeFi position, risk and automation screens. Part 2 (at the end) studies what makes a financial product look legitimate or like a scam, and drove version 2 of the design (docs/DESIGN.md).
+
+# Part 1: DeFi position, risk and automation screens
 
 Researched 5 Oct 2026 by a research agent for Shield (opt-in early exit for Aave V3 borrowers on Monad). Covers Aave, Morpho, Euler, Summer.fi, DeFi Saver and Hyperliquid.
 
@@ -733,3 +737,149 @@ Each item names the Shield screen it applies to and the sources it borrows from.
 
 ### RainbowKit (Shield's chosen wallet kit, for the built-in strings Shield gets for free)
 - [R1] https://github.com/rainbow-me/rainbowkit/blob/main/packages/rainbowkit/src/locales/en_US.json ("Wrong network", "Wrong network detected, switch or disconnect to continue.", "Copy Address", "Copied!", "View more on explorer", "Recent Transactions")
+
+# Part 2: legitimacy, trust and the scam signals to avoid
+
+Researched 5 Oct 2026, after the owner said version 1 "feels a little sus". The method:
+
+- **Live captures.** 26 sites were captured live with Playwright at 1440 px (above the fold and full page) and 390 px.
+- **Typography.** It was read from each live page.
+- **Literature.** Published work on credibility and crypto scam sites was reviewed (sources at the end).
+
+The sites:
+
+- **DeFi apps:** Aave, Morpho, Euler, Spark, Compound, Uniswap, Fluid, Pendle.
+- **DeFi and protocol sites:** Aave, Morpho, Lido, Sky, Summer.fi, DeFi Saver, Euler, Spark, Monad, Liquity.
+- **Fintech:** Stripe, Coinbase, Mercury, Robinhood.
+
+## What made version 1 read as "sus"
+
+The copy was not the problem. It was plain, present tense and unusually honest. The structure and visual signals were:
+
+1. **No one behind it.** The footer was one line.
+   - An anonymous team is the most cited crypto scam flag (CFTC and SEC advisory, Zellic).
+   - Every reference names who is behind it: "Developed by Decenter", "© 2026 Euler", Aave Labs, Robinhood's street address.
+2. **Nothing to verify.** No contract links, security section, docs link, product shot or test evidence.
+3. **Sub-cent dollar figures in display type** ("$0.0000013" per block). Long-decimal dollar prices are what memecoin tickers look like; Sky's "$0.0958" is the closest example in the set.
+4. **A token-site headline.** It was set expanded and semibold; none of the references does this. They use normal width, weight 300 to 550 and tight tracking.
+5. **A 16 px traffic-light glyph as the logo.** It reads as a UI widget, not a brand.
+6. **A thin page:** 2,832 px against 4,400 to 14,600 px for the references.
+   - A study of rug-pull websites (Jakobs et al., HICSS 2026) found scam sites have "simpler and less complex web structures".
+7. **No risk disclosure** on a page that asks for an aToken approval.
+8. **Jargon on the landing page** (MIP-8 pages, eth_sendRawTransactionSync). The CFTC lists "complicated jargon" as a fraud red flag.
+
+## What the legitimate references share
+
+- **Light pages for the most trusted brands.**
+  - Stripe and Coinbase use white, near-black text and one flat accent; Aave, Lido and Monad lead with light too.
+  - Dark is fine (Euler, Mercury) when the page is dense with evidence.
+- **One accent colour.** It is used only on primary buttons and links. Red, amber and green appear only inside data.
+- **Headlines** at weight 300 to 550 with tracking tightened 2 to 5%. Body text at 16 to 20 px with line height 1.5 to 1.8.
+- **Real product screens as the main image:**
+  - Coinbase: a phone.
+  - Aave Pro: a browser frame.
+  - DeFi Saver: the full app.
+  - Euler: pieces of the app.
+- **Floating 3D coins** are the closest thing in the set to stock crypto art (Sky).
+- **Evidence near the top:**
+  - Numbers: deposits, years in operation, tests or audits.
+  - Logo walls labelled with the true relationship ("Backed by", "Built on").
+  - Security sections:
+    - Euler's "proven rules" written as sentences, and deployed bytecode matched to source.
+    - Aave's "Protocol Transparency": addresses, parameters, access controls.
+- **Disclosures in plain sight:**
+  - Mercury: "not a bank" in the hero.
+  - Robinhood: "Disclosures" under the hero.
+  - Lido: footnoted APR and TVL.
+  - Aave: "Does Aave have risks?" in its FAQ.
+- **Full footers:** product, developers (docs, GitHub, contracts), security, legal, and a disclaimer naming who operates what.
+- **Motion that is the product's claim:** Stripe's GDP counter, Morpho's deposits, Aave's rolling balance. Nothing bounces or glows.
+
+## What the DeFi apps share
+
+- **Neutral surfaces.**
+  - Aave and Morpho run near-black or white with grey panels.
+  - Spark's gradient buttons and banners are the most "crypto" of the set.
+- **Page header bands with key stats on the right.** For example Aave's reserve page: reserve size, available liquidity, utilisation, oracle price.
+- **A token icon** with name and symbol in every row; amounts with the USD value beneath.
+- **Filters and tables inside one rounded container.** Small table headers; 56 to 64 px rows.
+- **One filled primary button per view.**
+- **Wallet shown as an avatar with a short address.**
+- **Risk figures** (LTV, liquidation threshold, liquidation penalty) as labelled small cards or rows with info tooltips.
+
+## Inside the apps, with a read-only wallet
+
+To see positions rather than splash screens, the app agent did the following:
+
+- **A read-only injected wallet.** It refuses every signing method and was pointed at real Ethereum borrowers found from on-chain logs.
+- **Captures.** It used that wallet to capture Aave, Spark, Compound, Morpho, Euler and Fluid with live positions.
+- **Computed styles.** It read them from the live pages.
+
+What it found:
+
+- **Palette and type.**
+  - The institutional apps (Aave, Morpho) are greyscale with depth from tone, not shadows. Aave's page is #100f0f with #1a1919 cards; its primary button is plain white.
+  - They use Inter at 14 px with tabular figures everywhere.
+  - Morpho's big numbers are a light display grotesk (weight 300) with the units greyed, the most "private bank" detail in the set.
+- **Small values.** Shown as "< 0.01%" or "< $0.01", never as "$0.0000003". Empty cells read as a dash or a dimmed zero, never "None".
+- **Risk.**
+  - Aave's "Risk details" modal draws HF on a gradient bar with a pointer and a red 1.00 tick.
+  - Spark puts "Liquidation price" next to "Current ETH price".
+  - Compound says "Liquidation point" instead of "health factor".
+  - Before and after values are coloured by the resulting band.
+- **Transparency in the product.**
+  - Aave links its oracle price to the oracle contract.
+  - Morpho shows each market's oracle address beside DefiLlama's price, its timelocks and its bad debt.
+  - Euler shows oracle checks ("8 passed").
+- **Forms.**
+  - Aave's "Transaction overview" lists before and after values, and its approval is a button stacked above the disabled action.
+  - Morpho uses a sticky right column for actions.
+  - Risky actions need an "I acknowledge the risks involved" checkbox.
+- **Cheap in the set.** Spark's points banners and gradient buttons, Pendle's colour on every number, and "earn 3.6% APY!"-style copy.
+- **Cheap in Shield version 1.** Sub-cent tickers, a big green "Protected" slab that reads like antivirus scareware next to the name Shield, "None" in cells, no logos, expanded numerals on navy, and nothing to verify inside the app.
+
+## What Shield adopted (version 2)
+
+| Change | Reference |
+| --- | --- |
+| Light by default with a neutral dark theme; ink primary buttons; one brand blue | Stripe, Coinbase, Aave, Lido |
+| Instrument Sans at weight 500, tight tracking, tabular figures | Euler, Stripe, Morpho, Aave |
+| A real mark (a shield cut by the trigger line) and an app icon | Coinbase, Stripe, Morpho |
+| Token and network logos everywhere | Aave, Morpho, Euler |
+| A live product card in the hero, labelled as an example at the live price | Coinbase, Aave Pro, DeFi Saver |
+| Hero disclosure line; unaudited and not-affiliated disclaimer in both footers | Mercury, Robinhood, Aave |
+| Proof strip with each figure linked to its evidence | Morpho counters, Euler stats band |
+| Savings calculator with stated assumptions | Aave's $10,000 chart, Liquity's rate table |
+| The exit as a five-step transaction trace | DeFi Saver recipes, Aave's proposal timeline |
+| "Built to be checked" security section, including "Not audited yet" | Euler's proven rules, Aave Transparency, Lido |
+| FAQ with "Is Shield audited?" and "What can the owner change?" first | Aave, Mercury |
+| Rates per year lead; per-block figures in small type | Lido, Aave; Sky as the anti-pattern |
+| App header bands with stats right-aligned; panels with tabs; amount inputs with icon, Max and outcome | Aave reserve page, Morpho, Uniswap |
+| Monad engineering as plain numbers | Monad's own technology tiles |
+| "Sources and contracts" panel in the app: Aave's oracle price against Pyth with the gap the exit allows, and every contract that can act on the position, linked | Morpho's oracle versus DefiLlama, Euler's oracle checks, Aave's "Oracle price" link |
+| Calm status: the "Protected" header is neutral with a green icon; only warnings are tinted | The app agent's "antivirus scareware" finding |
+| Dashes for empty cells; share price to four decimals | Aave, Spark |
+
+## Deliberately not adopted
+
+- **Partner or "trusted by" logo walls.** There are no partners; Aave, Pyth, Envio and Monad are listed as "Built on", in text.
+- **3D coins or shields, gradient text, neon.**
+- **Countdowns or "live now" badges.**
+- **Testimonials.** There are no users yet.
+- **TVL, user counts, or a vault APY** without a date and a source.
+- **Monad's own visual system** (mono capitals, purple grid). Copying it would read as impersonating the chain's site.
+
+## Open decisions for the owner
+
+- **Name the builder in the footer.** A name or handle; the references show anonymity is the strongest scam signal.
+- **Add a security contact.**
+- **Add the README's mainnet contract addresses and transactions.** The footer shows the contracts automatically once a deployment's addresses are configured.
+
+## Sources (Part 2)
+
+- Live captures and page reads of the sites above, 5 Oct 2026.
+- Nielsen Norman Group, "Trustworthiness in Web Design: 4 Credibility Factors": https://www.nngroup.com/articles/trustworthy-design/
+- Stanford Web Credibility guidelines: https://credibility.stanford.edu/guidelines/index.html
+- CFTC and SEC investor alert on fraudulent crypto trading websites: https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/watch_out_for_digital_fraud.html
+- Jakobs, Haase, Gräf and Muntermann, "Hook, Line and Rug Pull: Untangling the Web of Crypto Scam Sites", HICSS 2026: https://d-nb.info/1395967555/34
+- Zellic, "Choosing a DeFi Protocol": https://www.zellic.io/blog/choosing-a-defi-protocol/

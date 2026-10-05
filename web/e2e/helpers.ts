@@ -86,6 +86,6 @@ export async function connectTestWallet(page: Page) {
 /** Full page loads drop the mock test wallet's session; reconnect when the header offers Connect. */
 export async function ensureConnected(page: Page) {
   await page.waitForTimeout(2500);
-  const connect = page.getByRole("button", { name: /^connect$/i }).first();
+  const connect = page.getByRole("button", { name: /^connect( wallet)?$/i }).first();
   if (await connect.isVisible().catch(() => false)) await connectTestWallet(page);
 }

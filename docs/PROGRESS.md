@@ -2,6 +2,42 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 5 Oct 2026, M4 web redesign (version 2)
+
+- **Why.** The owner said version 1 "feels a little sus".
+- **Research.**
+  - 26 DeFi and fintech sites captured live at desktop and phone widths: Aave, Morpho, Euler, Spark, Compound, Uniswap, Fluid, Pendle, Lido, Sky, DeFi Saver, Summer.fi, Liquity, Monad, Stripe, Coinbase, Mercury and Robinhood.
+  - Inside the lending apps with a read-only wallet pointed at real borrowers.
+  - Published work on credibility and crypto scam sites.
+  - Written up as Part 2 of docs/DESIGN-RESEARCH.md.
+- **Done (version 2, docs/DESIGN.md).**
+  - Light by default with a neutral graphite dark theme.
+  - Instrument Sans at weight 500 with tabular figures.
+  - A new mark and app icon (the default Next.js favicon is gone).
+  - Token and network logos everywhere.
+  - A wallet avatar.
+  - Rates per year in place of sub-cent headlines.
+  - A health-factor gauge with a scale and legend.
+  - A cost comparison with bars.
+  - Liquidation and exit prices.
+  - Trigger and prepay presets.
+  - A calm protected state.
+  - An exit summary card.
+  - A "Sources and contracts" panel (Aave oracle against Pyth, every contract linked).
+  - **Landing page:**
+    - A live product card in the hero, a disclosure line, and a proof strip linked to evidence.
+    - A savings calculator.
+    - The exit as a five-step transaction trace.
+    - A "Built to be checked" security section with "Not audited yet".
+    - An FAQ led by "Is Shield audited?" and "What can the owner change?".
+    - A full footer with an unaudited and not-affiliated disclaimer.
+- **Checks.**
+  - The video-script E2E passes on the redesign.
+  - Review pass 3 captured every state at 375, 768 and 1440 px (docs/screenshots/pass-3/), with no horizontal scroll at 375 px.
+  - Lighthouse (mobile): landing 94 / 100 / 100, borrower 94 / 100 / 100, LP 91 / 100 / 100, CLS 0.
+- **Fixed on the way.** `scripts/stack.sh down` never stopped the keeper (wrong process pattern), so stale keepers piled up on every new fork.
+- **Open for the owner.** Whether to name the builder in the footer, and a security contact. Both are recommended by the research as the strongest trust signals left.
+
 ## 5 Oct 2026, M4 Web, M5 Indexer, test rounds 1 to 5, M6 and M7 prepared
 
 - M4 done (`1138fb0`, `4945088`): landing at `/` (pitch, live block demo, comparison table, Why Monad, limits), borrower page `/app/borrow` (Aave position, opt-in with trigger slider, max discount, aToken approval, prepay, premium ticking per block with sparkline, "Aave penalty if liquidated: $X. Shield: $Y.", unprotected state, exit history with penalty avoided) and LP page `/app/vault` (deposit, withdraw, NAV, premium earned, exits, average discount, Envio tables). Design system in docs/DESIGN.md; two screenshot review passes at 375, 768 and 1440 px in docs/screenshots/. Lighthouse (mobile): performance 98, 92, 91 and accessibility 100 on all three routes.

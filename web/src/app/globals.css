@@ -2,15 +2,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Shield design tokens (docs/DESIGN.md). Dark is the default; `.light` on <html> switches. */
+/* Shield design tokens (docs/DESIGN.md). Light is the default; `.dark` on <html> switches. Neutral surfaces, one
+   brand blue for links, focus and the mark, and three colours that only ever carry meaning: green is protected or
+   saved, amber is the trigger, red is Aave's liquidation line. */
 @custom-variant dark (&:is(.dark *));
 @custom-variant light (&:is(.light *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -28,6 +30,8 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-raised: var(--raised);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
   --color-safe: var(--safe);
   --color-caution: var(--caution);
   --color-danger: var(--danger);
@@ -35,76 +39,82 @@
   --color-safe-soft: var(--safe-soft);
   --color-caution-soft: var(--caution-soft);
   --color-danger-soft: var(--danger-soft);
-  --radius-sm: 4px;
-  --radius-md: 6px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
   --radius-lg: 10px;
   --radius-xl: 14px;
+  --radius-2xl: 18px;
   --text-2xs: 0.75rem;
   --text-2xs--line-height: 1rem;
+  --shadow-panel: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.03);
+  --shadow-float: 0 24px 48px -12px rgb(16 24 40 / 0.14), 0 4px 12px rgb(16 24 40 / 0.05);
 }
 
-/* Dark, the default: a deep navy instrument ground. Colour carries meaning only: teal is safe, amber is the
-   trigger, red is Aave's liquidation line. */
 :root,
-.dark {
-  --background: #0e1424;
-  --foreground: #e7ebf3;
-  --card: #141b2e;
-  --card-foreground: #e7ebf3;
-  --raised: #1a2339;
-  --popover: #1a2339;
-  --popover-foreground: #e7ebf3;
-  --primary: #e7ebf3;
-  --primary-foreground: #0e1424;
-  --secondary: #1f2943;
-  --secondary-foreground: #e7ebf3;
-  --muted: #1a2339;
-  --muted-foreground: #97a1b9;
-  --accent: #1f2943;
-  --accent-foreground: #e7ebf3;
-  --destructive: #ff6b6b;
-  --border: #27314b;
-  --input: #2c3753;
-  --ring: #e7ebf3;
-  --safe: #3dd9a8;
-  --caution: #ffb224;
-  --danger: #ff6b6b;
-  --monad: #a597ff;
-  --safe-soft: rgb(61 217 168 / 0.12);
-  --caution-soft: rgb(255 178 36 / 0.12);
-  --danger-soft: rgb(255 107 107 / 0.12);
+.light {
+  --background: #f6f7f9;
+  --foreground: #0b1220;
+  --card: #ffffff;
+  --card-foreground: #0b1220;
+  --raised: #f2f4f7;
+  --popover: #ffffff;
+  --popover-foreground: #0b1220;
+  --primary: #0b1220;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f4;
+  --secondary-foreground: #0b1220;
+  --muted: #f2f4f7;
+  --muted-foreground: #586378;
+  --accent: #eef0f4;
+  --accent-foreground: #0b1220;
+  --destructive: #b42318;
+  --border: #e3e6eb;
+  --input: #d0d5dd;
+  --ring: #2347e8;
+  --brand: #2347e8;
+  --brand-soft: rgb(35 71 232 / 0.08);
+  --safe: #067647;
+  --caution: #b54708;
+  --danger: #c4320a;
+  --monad: #6e54ff;
+  --safe-soft: rgb(6 118 71 / 0.08);
+  --caution-soft: rgb(181 71 8 / 0.09);
+  --danger-soft: rgb(196 50 10 / 0.08);
   --radius: 0.625rem;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
-.light {
-  --background: #f4f6fa;
-  --foreground: #0e1424;
-  --card: #ffffff;
-  --card-foreground: #0e1424;
-  --raised: #eef1f7;
-  --popover: #ffffff;
-  --popover-foreground: #0e1424;
-  --primary: #0e1424;
-  --primary-foreground: #ffffff;
-  --secondary: #e6eaf2;
-  --secondary-foreground: #0e1424;
-  --muted: #eef1f7;
-  --muted-foreground: #4f5a73;
-  --accent: #e6eaf2;
-  --accent-foreground: #0e1424;
-  --destructive: #c62f2f;
-  --border: #d6dce8;
-  --input: #c9d1e0;
-  --ring: #0e1424;
-  --safe: #087a57;
-  --caution: #9a5b00;
-  --danger: #c62f2f;
-  --monad: #5442d6;
-  --safe-soft: rgb(8 122 87 / 0.1);
-  --caution-soft: rgb(154 91 0 / 0.1);
-  --danger-soft: rgb(198 47 47 / 0.09);
-  color-scheme: light;
+.dark {
+  --background: #0b0d12;
+  --foreground: #f2f4f7;
+  --card: #12151b;
+  --card-foreground: #f2f4f7;
+  --raised: #181c24;
+  --popover: #181c24;
+  --popover-foreground: #f2f4f7;
+  --primary: #f2f4f7;
+  --primary-foreground: #0b0d12;
+  --secondary: #1d222b;
+  --secondary-foreground: #f2f4f7;
+  --muted: #181c24;
+  --muted-foreground: #9aa3b2;
+  --accent: #1d222b;
+  --accent-foreground: #f2f4f7;
+  --destructive: #f97066;
+  --border: #242a34;
+  --input: #303744;
+  --ring: #7b93ff;
+  --brand: #7b93ff;
+  --brand-soft: rgb(123 147 255 / 0.12);
+  --safe: #47cd89;
+  --caution: #fdb022;
+  --danger: #f97066;
+  --monad: #9d8cff;
+  --safe-soft: rgb(71 205 137 / 0.1);
+  --caution-soft: rgb(253 176 34 / 0.1);
+  --danger-soft: rgb(249 112 102 / 0.1);
+  --shadow-panel: none;
+  color-scheme: dark;
 }
 
 @layer base {
@@ -119,6 +129,7 @@
     @apply bg-background text-foreground antialiased;
     font-size: 0.9375rem;
     line-height: 1.55;
+    font-feature-settings: "ss01" 1;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -132,22 +143,34 @@
   h1,
   h2,
   h3 {
-    font-stretch: 112.5%;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
     line-height: 1.15;
+  }
+  ::selection {
+    background: var(--brand-soft);
   }
 }
 
 @layer utilities {
-  /* Every figure lines up: tabular numerals in the expanded width used for readings. */
+  /* Every figure lines up: tabular numerals for readings, tables and amounts. */
   .num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
   }
   .reading {
     font-variant-numeric: tabular-nums;
-    font-stretch: 112.5%;
-    letter-spacing: -0.015em;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.02em;
+  }
+  .display {
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+  }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-panel);
   }
 }
 

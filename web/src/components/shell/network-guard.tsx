@@ -17,7 +17,7 @@ export function NetworkGuard() {
   if (!wrong) return null;
   return (
     <div role="alert" className="border-b border-danger/40 bg-danger-soft">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-[76rem] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <p className="text-sm">
           Your wallet is on {chain?.name ?? "another network"}. Shield runs on Monad; switch to see your position and act on it.
           {error && <span className="block text-danger">{error.message.split("\n")[0]}</span>}

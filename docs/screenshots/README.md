@@ -1,6 +1,6 @@
 # Design review log
 
-Screens captured by `web/e2e/review.spec.ts` against the local fork stack (`scripts/stack.sh up`), at 375, 768 and 1440 px, dark, with light for the key screens. File names: `<state>-<width>-<theme>.webp`. The fork is a test environment (ADR-020); it shows "Local fork" in the header.
+Screens captured by `web/e2e/review.spec.ts` against the local fork stack (`scripts/stack.sh up`), at 375, 768 and 1440 px. Passes 1 and 2 (version 1) are dark-first; pass 3 (version 2) is light-first with dark for the key screens. File names: `<state>-<width>-<theme>.webp`. The fork is a test environment (ADR-020); it shows "Local fork" in the header.
 
 ## Pass 1 (5 Oct 2026), `pass-1/`
 
@@ -25,3 +25,35 @@ Recaptured from a fresh fork stack after the pass 1 fixes and a Lighthouse round
 4. Confirmed fixed from pass 1: phone order (position, then cover, then history; vault readings, then deposit), the header at 375 px, the sparkline, neutral step numbers, the sticky comparison column, wrong network now showing the position with "Switch to Monad to opt in".
 
 Lighthouse after pass 2 (mobile emulation, production build): see docs/TEST-REPORT.md.
+
+## Pass 3 (5 Oct 2026), `pass-3/`: version 2
+
+The redesign is described in docs/DESIGN.md (version 2) and the research behind it in docs/DESIGN-RESEARCH.md (Part 2). Version 2 is light by default with Instrument Sans, a new mark, token logos, a hero product card, a savings calculator, a security section, FAQ and full footers. Captured from fresh fork stacks. The states are:
+
+- landing
+- borrow-disconnected
+- borrow-watching
+- borrow-setup
+- borrow-setup-near-one
+- borrow-tx-finalised
+- borrow-protected
+- borrow-exited
+- vault-covered (one exit funded and a new cover active)
+- vault-after-exit
+
+Critique and fixes:
+
+1. **The landing page scrolled sideways on phones (blocker).** The 375 px capture was 407 px wide. The soft glow behind the hero card extends past the viewport; found with a script that lists every element whose right edge passes 375 px outside a scroll container. Fix: the page clips horizontal overflow (`overflow-x: clip`, which keeps the sticky header working). All 375 px captures are now exactly 375 px wide.
+2. **Sub-cent figures as headlines.**
+   - The protected view led with "Cover this block $0.0000000095".
+   - Fix: the cover rate per year leads, and the per-block figure is a small line under the sparkline. The setup panel does the same ("$1.00 a year", then "$0.0000000095 per block").
+3. **The green "Protected" slab** read like antivirus scareware next to the name Shield (app research). Fix: a neutral header with a green shield icon; only warnings are tinted.
+4. **"None" in table cells.** Fix: a dash with an accessible label.
+5. **Nothing in the app to verify.** Fix: a "Sources and contracts" panel shows:
+   - Aave's oracle price against Pyth, with the gap an exit allows.
+   - Every contract that can act on the position, each with copy and an explorer link.
+6. **Layout shift on the LP page.** Lighthouse CLS was 0.37: the header readings appeared only after loading. Fix: the same readings render with skeletons sized to the real text, and the overview skeleton mirrors the loaded panel. CLS is now 0.
+7. **Slider without an accessible name** (Lighthouse accessibility 90 on the landing page). Radix puts `aria-label` on the root, not the thumb. Fix: the slider passes it to the thumb; the calculator's readings were also restructured into valid `dl` groups. Accessibility is now 100 on every route.
+8. **Kept as designed:** HF in Aave's red band while the page reads "Protected at 1.04", so a reading means the same as on app.aave.com; the gauge shows where Shield acts.
+
+**Found while capturing:** `scripts/stack.sh down` matched the keeper as `tsx ...` but it runs as node with tsx loader flags, so every earlier keeper survived. Several keepers then sent transactions to each new fork, which caused nonce errors and an intermittent failure of the review run's fork-only price move. The pattern now matches both command lines. The after-exit captures in this pass were taken after a hand-run price move with `cast` (fork only).

@@ -20,7 +20,8 @@ stop_ours() {
   # Servers outlive their wrapping subshells, so stop them by command line (only this repo's processes).
   pkill -f "next start -p $WEB_PORT" 2>/dev/null || true
   pkill -f "next dev --port $WEB_PORT" 2>/dev/null || true
-  pkill -f "tsx --env-file-if-exists=.env src/index.ts" 2>/dev/null || true
+  # The keeper runs as node with tsx loader flags, not as "tsx ...", so match the part both command lines share.
+  pkill -f -- "--env-file-if-exists=.env src/index.ts" 2>/dev/null || true
   pkill -f "$ROOT/indexer/node_modules/.bin/../envio/bin.mjs" 2>/dev/null || true
 }
 

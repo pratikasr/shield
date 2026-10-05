@@ -1,16 +1,23 @@
-/** Shield's mark: a track with the amber tripwire across it, the rail every screen is built around. */
-export function Wordmark({ className }: { className?: string }) {
+import { cn } from "@/lib/utils";
+
+/**
+ * Shield's mark: a shield cut by one horizontal line, the trigger that sits above the liquidation line. The upper
+ * part takes the ink colour, the lower part the brand blue.
+ */
+export function ShieldMark({ className, size = 22 }: { className?: string; size?: number }) {
   return (
-    <span className={`inline-flex items-center gap-2 ${className ?? ""}`}>
-      <svg width="26" height="18" viewBox="0 0 26 18" aria-hidden>
-        <rect x="1" y="8" width="24" height="2" rx="1" className="fill-muted-foreground" />
-        <rect x="4" y="7" width="2" height="4" rx="1" className="fill-danger" />
-        <rect x="11" y="1" width="3" height="16" rx="1.5" className="fill-caution" />
-        <circle cx="20.5" cy="9" r="3" className="fill-safe" />
-      </svg>
-      <span className="hidden text-lg font-semibold tracking-tight min-[420px]:inline" style={{ fontStretch: "125%" }}>
-        Shield
-      </span>
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>
+      <path d="M12 1.6 20.6 4.7V10.2H3.4V4.7Z" className="fill-foreground" />
+      <path d="M3.4 12.4H20.6C20.4 17.2 16.9 20.9 12 22.6 7.1 20.9 3.6 17.2 3.4 12.4Z" className="fill-brand" />
+    </svg>
+  );
+}
+
+export function Wordmark({ className, compact }: { className?: string; compact?: boolean }) {
+  return (
+    <span className={cn("inline-flex items-center gap-2", className)}>
+      <ShieldMark />
+      <span className={cn("text-[1.0625rem] font-semibold tracking-[-0.01em]", compact && "hidden min-[420px]:inline")}>Shield</span>
     </span>
   );
 }

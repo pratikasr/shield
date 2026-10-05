@@ -26,7 +26,7 @@ const e2eWrongChain = process.env.NEXT_PUBLIC_E2E_WRONG_CHAIN === "1";
 const forkTestWallet = (): Wallet => ({
   id: "fork-test-wallet",
   name: "Fork test wallet",
-  iconBackground: "#0e1424",
+  iconBackground: "#0b1220",
   iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyOCAyOCI+PHJlY3Qgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiBmaWxsPSIjMGUxNDI0Ii8+PHJlY3QgeD0iMTMiIHk9IjQiIHdpZHRoPSIzIiBoZWlnaHQ9IjIwIiBmaWxsPSIjZmZiMjI0Ii8+PC9zdmc+",
   createConnector: (details) =>
     createConnector((config) => ({ ...mock({ accounts: [e2eAccount!], features: { reconnect: true } })(config), ...details })),
@@ -62,10 +62,11 @@ export const wagmiConfig = createConfig({
 
 function Rainbow({ children }: { children: ReactNode }) {
   const { resolvedTheme } = useTheme();
-  const accent = { accentColor: resolvedTheme === "light" ? "#0e1424" : "#e7ebf3", accentColorForeground: resolvedTheme === "light" ? "#ffffff" : "#0e1424", borderRadius: "small" as const, fontStack: "system" as const };
+  const dark = resolvedTheme === "dark";
+  const accent = { accentColor: dark ? "#f2f4f7" : "#0b1220", accentColorForeground: dark ? "#0b0d12" : "#ffffff", borderRadius: "medium" as const, fontStack: "system" as const };
   return (
     <RainbowKitProvider
-      theme={resolvedTheme === "light" ? lightTheme(accent) : darkTheme(accent)}
+      theme={dark ? darkTheme(accent) : lightTheme(accent)}
       initialChain={e2eWrongChain ? monadTestnet : monadMainnet}
       modalSize="compact"
     >
