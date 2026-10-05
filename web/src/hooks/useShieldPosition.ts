@@ -35,7 +35,10 @@ export interface Cover {
   collateral: Address | undefined;
   prepaidUsd: number;
   premiumPaidUsd: number;
+  /** The rate stored at the last reprice: what is being charged block by block. */
   premiumPerBlockUsd: number;
+  /** The rate at live state: what the next reprice will set. */
+  livePremiumPerBlockUsd: number;
   annualPremiumUsd: number;
   sigma: number;
   lastRepricedBlock: bigint;
@@ -104,6 +107,7 @@ export function useShieldPosition(user?: Address, aToken?: Address) {
       prepaidUsd: toNumber(r.prepaid, 18),
       premiumPaidUsd: toNumber(r.accrued, 18),
       premiumPerBlockUsd: active ? toNumber(r.premiumPerBlock, 18) : q ? toNumber(q[0], 18) : 0,
+      livePremiumPerBlockUsd: q ? toNumber(q[0], 18) : 0,
       annualPremiumUsd: q ? toNumber(q[3], 18) : 0,
       sigma: q ? toNumber(q[2], 18) : toNumber(r.sigma, 18),
       lastRepricedBlock: r.lastRepricedBlock,

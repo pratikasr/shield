@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . && tsc --noEmit"
+    "lint": "eslint . && tsc --noEmit",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "2.2.11",

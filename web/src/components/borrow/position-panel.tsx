@@ -118,8 +118,8 @@ export function PositionPanel({
               </Info>
             </p>
             <p className="reading mt-0.5 flex items-center gap-3 text-xl font-semibold" aria-live="off">
-              {cover.lapsed ? "Paused" : formatUsd(cover.premiumPerBlockUsd)}
-              <Sparkline values={[...premiumHistory, cover.premiumPerBlockUsd]} />
+              {cover.lapsed ? "Paused" : formatUsd(cover.livePremiumPerBlockUsd)}
+              <Sparkline values={[...premiumHistory, cover.livePremiumPerBlockUsd]} />
             </p>
             <p className="mt-1 text-[0.8125rem] text-muted-foreground">{formatUsd(cover.annualPremiumUsd)} a year at this rate</p>
           </div>
@@ -127,7 +127,7 @@ export function PositionPanel({
             label="Prepaid balance"
             value={formatUsd(prepaidLive)}
             tone={cover.lapsed ? "caution" : undefined}
-            hint={cover.lapsed ? "Used up: top up to re-arm" : `Lasts ${formatRunway(runwayDays(prepaidLive, cover.premiumPerBlockUsd))}`}
+            hint={cover.lapsed ? "Used up: top up to re-arm" : `Lasts ${formatRunway(runwayDays(prepaidLive, cover.livePremiumPerBlockUsd))}`}
           />
           <Stat label="Premium paid so far" value={formatUsd(accruedLive)} hint={`Volatility ${formatPct(cover.sigma, 0)} a year, from Pyth`} />
         </div>

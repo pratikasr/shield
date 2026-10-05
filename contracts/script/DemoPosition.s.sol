@@ -13,6 +13,7 @@ import {Script, console2} from "forge-std/Script.sol";
 /// borrower's key. Addresses come from the deployment file named by DEPLOYMENT_FILE.
 ///   open():    supply DEMO_WETH, borrow USDC down to DEMO_HF_BPS, approve the Executor on aWETH, approve the
 ///              Repricer on USDC, opt in with DEMO_TRIGGER_BPS and DEMO_MAX_DISCOUNT_BPS, prepay DEMO_PREPAY.
+///   openPosition(): supply and borrow only; the opt-in is left to the web app.
 ///   borrowTo(): borrow more USDC until HF is DEMO_HF_BPS (a real borrower action that moves HF to the trigger;
 ///              borrowing alone stops at LT/LTV, 1.0435 for WETH).
 ///   trigger(): move the trigger to DEMO_TRIGGER_BPS.
@@ -50,6 +51,19 @@ contract DemoPosition is Script {
         IERC20(USDC).approve(address(repricer), prepay);
         registry.optIn(WETH, trigger, maxDiscount);
         repricer.topUp(prepay);
+        vm.stopBroadcast();
+        _report(me);
+    }
+
+    /// @notice Supply and borrow only, leaving the opt-in to the web app (the end-to-end test drives it).
+    function openPosition() external {
+        uint256 wethAmount = vm.envUint("DEMO_WETH");
+        uint256 hfBps = vm.envUint("DEMO_HF_BPS");
+        vm.startBroadcast();
+        (, address me,) = vm.readCallers();
+        IERC20(WETH).approve(address(POOL), wethAmount);
+        POOL.supply(WETH, wethAmount, me, 0);
+        _borrowTo(me, hfBps);
         vm.stopBroadcast();
         _report(me);
     }

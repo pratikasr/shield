@@ -9,6 +9,7 @@ import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IAaveOracle} from "aave-v3-origin/contracts/interfaces/IAaveOracle.sol";
@@ -80,7 +81,7 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     function topUp(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         asset.safeTransferFrom(msg.sender, address(this), amount);
-        registry.creditPrepaid(msg.sender, uint128(amount * scale));
+        registry.creditPrepaid(msg.sender, SafeCast.toUint128(amount * scale));
         emit ToppedUp(msg.sender, amount);
     }
 
@@ -94,7 +95,7 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         }
         uint256 wad = amount * scale;
         if (wad > r.prepaid) revert InsufficientPrepaid(amount, r.prepaid / scale);
-        registry.debitPrepaid(msg.sender, uint128(wad));
+        registry.debitPrepaid(msg.sender, SafeCast.toUint128(wad));
         asset.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount);
     }
@@ -121,7 +122,7 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         _applyPythUpdate(pythUpdate);
         Ctx memory c = _ctx();
         uint8 active = registry.FLAG_ACTIVE();
-        uint256 sampled; // bitmap of collateral ids already sampled in this call
+        uint256 sampled = 0; // bitmap of collateral ids already sampled in this call
         for (uint256 i; i < borrowers.length; ++i) {
             IPositionRegistry.Record memory r = registry.record(borrowers[i]);
             if (r.flags & active == 0) continue;
@@ -257,7 +258,7 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         uint256 prepaid = r.prepaid;
         uint256 accrued = r.accrued;
         bool lapsed = r.flags & registry.FLAG_LAPSED() != 0;
-        uint256 charged;
+        uint256 charged = 0;
         if (!lapsed && elapsed != 0) {
             uint256 due = uint256(r.premiumPerBlock) * elapsed;
             charged = due < prepaid ? due : prepaid;
@@ -272,7 +273,13 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         if (hfBps > type(uint32).max) hfBps = type(uint32).max;
 
         registry.writeRepricerState(
-            borrower, uint128(prepaid), uint128(accrued), uint96(rate), uint32(hfBps), uint64(sigma), lapsed
+            borrower,
+            SafeCast.toUint128(prepaid),
+            SafeCast.toUint128(accrued),
+            SafeCast.toUint96(rate),
+            SafeCast.toUint32(hfBps),
+            SafeCast.toUint64(sigma),
+            lapsed
         );
         pendingToVault += charged;
         emit Repriced(borrower, charged, rate, hf, sigma, prepaid, lapsed);
@@ -295,7 +302,7 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     }
 
     function _applyPythUpdate(bytes[] calldata update) private {
-        uint256 fee;
+        uint256 fee = 0;
         if (update.length != 0) {
             fee = pyth.getUpdateFee(update);
             if (msg.value < fee) revert InsufficientUpdateFee(fee, msg.value);
@@ -310,13 +317,15 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
 
     /// @dev Records the feed's latest Pyth price if it is newer than the newest observation.
     function _sample(bytes32 feedId) private {
-        PythStructs.Price memory p;
+        PythStructs.Price memory p = PythStructs.Price(0, 0, 0, 0);
         try pyth.getPriceUnsafe(feedId) returns (PythStructs.Price memory price) {
             p = price;
         } catch {
             return;
         }
         if (p.price <= 0 || p.publishTime == 0 || p.publishTime > type(uint64).max) return;
+        // Skip observations Pyth itself is unsure of (confidence wider than 1% of price).
+        if (uint256(p.conf) * 100 > uint256(uint64(p.price))) return;
         uint256 base = volSlot(feedId);
         uint256 header = _load(base);
         uint256 count = uint16(header);

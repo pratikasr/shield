@@ -301,13 +301,17 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
     /// @dev Pyth must be fresh and agree with Aave's collateral price within maxOracleDeviationBps.
     function _checkPyth(uint8 collateralId, uint256 aavePrice) private view returns (Status) {
         bytes32 feedId = registry.assetConfig(registry.assetAt(collateralId)).pythFeedId;
-        PythStructs.Price memory pp;
+        PythStructs.Price memory pp = PythStructs.Price(0, 0, 0, 0);
         try pyth.getPriceUnsafe(feedId) returns (PythStructs.Price memory price) {
             pp = price;
         } catch {
             return Status.PythStale;
         }
         if (pp.price <= 0 || pp.publishTime + exitMaxPriceAge < block.timestamp) return Status.PythStale;
+        // A Pyth price whose confidence interval is wider than the deviation bound cannot vouch for Aave's.
+        if (uint256(pp.conf) * BPS > uint256(uint64(pp.price)) * maxOracleDeviationBps) {
+            return Status.OracleDeviation;
+        }
         uint256 pythPrice = _toBase(uint64(pp.price), pp.expo);
         uint256 diff = pythPrice > aavePrice ? pythPrice - aavePrice : aavePrice - pythPrice;
         if (diff * BPS > aavePrice * maxOracleDeviationBps) return Status.OracleDeviation;
@@ -375,7 +379,7 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
     }
 
     function _applyPythUpdate(bytes[] calldata update) private {
-        uint256 fee;
+        uint256 fee = 0;
         if (update.length != 0) {
             fee = pyth.getUpdateFee(update);
             if (msg.value < fee) revert InsufficientUpdateFee(fee, msg.value);

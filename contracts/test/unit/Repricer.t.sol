@@ -344,6 +344,18 @@ contract RepricerTest is Test {
         assertEq(newest, pythTime);
     }
 
+    function test_sample_skipsLowConfidencePrice() public {
+        rp.reprice(alice, _pythUpdate(2700e8));
+        pythTime += 1;
+        bytes[] memory u = new bytes[](1);
+        // Confidence of 5% of the price: Pyth is unsure, so it is not an observation.
+        u[0] = pyth.createPriceFeedUpdateData(FEED, 2600e8, 130e8, -8, 2600e8, 130e8, pythTime);
+        vm.roll(block.number + 1);
+        rp.reprice(alice, u);
+        (uint16 count,,,,) = rp.volState(FEED);
+        assertEq(count, 1);
+    }
+
     function test_sigma_fallbackUntilMinSamples() public {
         for (uint256 i; i < rp.MIN_SAMPLES() - 1; ++i) {
             vm.roll(block.number + 1);

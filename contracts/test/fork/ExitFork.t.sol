@@ -241,6 +241,28 @@ contract ExitForkTest is ForkBase {
         d.executor.exit(borrower, u);
     }
 
+    function test_exit_revertsOnWidePythConfidence() public {
+        _dropPriceToHf(borrower, 10_380);
+        _nextBlock();
+        uint256 price = oracle.getAssetPrice(M.WETH);
+        pythTime = uint64(block.timestamp) > pythTime ? uint64(block.timestamp) : pythTime + 1;
+        bytes[] memory u = new bytes[](1);
+        // Same price as Aave, but a 3% confidence interval: wider than the 2% bound, so it cannot vouch.
+        u[0] = mockPyth.createPriceFeedUpdateData(
+            M.ETH_USD_FEED,
+            int64(int256(price)),
+            uint64(price * 3 / 100),
+            -8,
+            int64(int256(price)),
+            0,
+            pythTime
+        );
+        vm.expectRevert(
+            abi.encodeWithSelector(Executor.ExitBlocked.selector, Executor.Status.OracleDeviation)
+        );
+        d.executor.exit(borrower, u);
+    }
+
     function test_exit_revertsInEMode() public {
         vm.prank(borrower);
         pool.setUserEMode(1);
