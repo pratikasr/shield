@@ -70,6 +70,7 @@ abstract contract ForkBase is Test {
             pythTime = uint64(block.timestamp);
             _pushPyth(oracle.getAssetPrice(M.WETH));
         }
+        c.minCoverSeconds = 0; // the waiting period has its own tests (ExitHardening)
         d = ShieldDeployment.deploy(c);
         vm.label(address(d.registry), "PositionRegistry");
         vm.label(address(d.repricer), "Repricer");
@@ -110,8 +111,8 @@ abstract contract ForkBase is Test {
         vm.startPrank(user);
         aWeth.approve(address(d.executor), type(uint256).max);
         usdc.approve(address(d.repricer), prepay);
-        d.registry.optIn(M.WETH, trigger, 100);
         d.repricer.topUp(prepay);
+        d.registry.optIn(M.WETH, trigger, 100);
         vm.stopPrank();
     }
 

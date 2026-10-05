@@ -30,6 +30,10 @@ library ShieldDeployment {
         bytes32 cbbtcFeed;
         uint64 k;
         uint64 sigmaFallback;
+        /// @notice Waiting period before new or restored cover can exit (Executor.minCoverSeconds).
+        uint32 minCoverSeconds;
+        /// @notice cbBTC stays listed but disabled until a cbBTC/USDC swap route exists (audit M-5).
+        bool cbbtcEnabled;
     }
 
     struct Deployed {
@@ -58,6 +62,8 @@ library ShieldDeployment {
         c.cbbtcFeed = 0x2817d7bfe5c64b8ea956e9a26f573ef64e72e4d7891f2d6af9bcc93f7aff9a97;
         c.k = K;
         c.sigmaFallback = SIGMA_FALLBACK;
+        c.minCoverSeconds = 900;
+        c.cbbtcEnabled = false;
     }
 
     function deploy(Config memory c) internal returns (Deployed memory d) {
@@ -76,7 +82,12 @@ library ShieldDeployment {
         d.vault.setSwapper(ISwapper(address(d.swapper)), 300);
         if (c.keeper != address(0)) d.vault.setUnwinder(c.keeper);
         d.executor.setSwapper(ISwapper(address(d.swapper)));
+        if (c.minCoverSeconds != d.executor.minCoverSeconds()) {
+            d.executor.setMinCoverSeconds(c.minCoverSeconds);
+        }
         d.registry.setAsset(c.weth, c.wethFeed, c.k, c.sigmaFallback, true);
-        if (c.cbbtc != address(0)) d.registry.setAsset(c.cbbtc, c.cbbtcFeed, c.k, c.sigmaFallback, true);
+        if (c.cbbtc != address(0)) {
+            d.registry.setAsset(c.cbbtc, c.cbbtcFeed, c.k, c.sigmaFallback, c.cbbtcEnabled);
+        }
     }
 }

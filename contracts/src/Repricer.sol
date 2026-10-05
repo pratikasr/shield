@@ -143,6 +143,13 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         _charge(borrower, r, false, _ctx());
     }
 
+    /// @notice Final accrual before an opt-out: charges up to this block and stops the rate. Registry only.
+    function settleForOptOut(address borrower) external nonReentrant {
+        if (msg.sender != address(registry)) revert NotRegistry();
+        IPositionRegistry.Record memory r = registry.record(borrower);
+        _charge(borrower, r, false, _ctx());
+    }
+
     /// @notice Moves accrued premium, in whole asset units, to the vault; the remainder waits. Anyone may call it,
     /// and the vault calls it whenever it moves money. Repricing itself never transfers tokens, so its gas stays
     /// the same block after block.
@@ -164,7 +171,7 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     // ---------------------------------------------------------------- owner
 
     function setBlockTimeMs(uint32 blockTimeMs_) external onlyOwner {
-        if (blockTimeMs_ < 100 || blockTimeMs_ > 15_000) revert InvalidParameter();
+        if (blockTimeMs_ < 100 || blockTimeMs_ > 2000) revert InvalidParameter();
         blockTimeMs = blockTimeMs_;
         emit BlockTimeSet(blockTimeMs_);
     }
@@ -249,8 +256,10 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         c.dMin = registry.dMin();
     }
 
-    /// @dev Charges the stored rate for every block since the last reprice, then stores a fresh rate
-    /// (or zero when `setRate` is false, as at exit).
+    /// @dev Charges every block since the last reprice at the higher of the stored rate and the live one, then
+    /// stores the live rate (or zero when `setRate` is false, as at exit and opt-out). Billing at the higher
+    /// rate means a rate stored from a momentarily improved position cannot discount the next interval
+    /// (audit M-3).
     function _charge(address borrower, IPositionRegistry.Record memory r, bool setRate, Ctx memory c)
         private
     {
@@ -258,16 +267,17 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         uint256 prepaid = r.prepaid;
         uint256 accrued = r.accrued;
         bool lapsed = r.flags & registry.FLAG_LAPSED() != 0;
+        (uint256 rate, uint256 hf, uint256 sigma) = _rate(borrower, r, c);
         uint256 charged = 0;
         if (!lapsed && elapsed != 0) {
-            uint256 due = uint256(r.premiumPerBlock) * elapsed;
+            uint256 billed = rate > r.premiumPerBlock ? rate : r.premiumPerBlock;
+            uint256 due = billed * elapsed;
             charged = due < prepaid ? due : prepaid;
             prepaid -= charged;
             accrued += charged;
             if (prepaid == 0 && due != 0) lapsed = true;
         }
 
-        (uint256 rate, uint256 hf, uint256 sigma) = _rate(borrower, r, c);
         if (!setRate) rate = 0;
         uint256 hfBps = hf / PremiumMath.BPS_TO_WAD;
         if (hfBps > type(uint32).max) hfBps = type(uint32).max;
@@ -318,8 +328,8 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     /// @dev Records the feed's latest Pyth price if it is newer than the newest observation.
     function _sample(bytes32 feedId) private {
         PythStructs.Price memory p = PythStructs.Price(0, 0, 0, 0);
-        try pyth.getPriceUnsafe(feedId) returns (PythStructs.Price memory price) {
-            p = price;
+        try pyth.getPriceUnsafe(feedId) returns (PythStructs.Price memory latest) {
+            p = latest;
         } catch {
             return;
         }
@@ -333,7 +343,10 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         uint256 sumSquares = uint128(header >> 32);
         uint64 newest = uint64(header >> 160);
         uint64 time = uint64(p.publishTime);
-        uint64 price = uint64(p.price);
+        // Store prices at a fixed 8-decimal scale so a change of Pyth exponent is not read as a move (L-2).
+        uint256 scaled = _toBase(uint64(p.price), p.expo);
+        if (scaled == 0 || scaled > type(uint64).max) return;
+        uint64 price = uint64(scaled);
         if (count != 0 && time <= newest) return;
 
         if (count != 0) {
@@ -351,6 +364,16 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         if (sumSquares > type(uint128).max) sumSquares = type(uint128).max;
         _store(base, count | (head << 16) | (sumSquares << 32) | (uint256(time) << 160));
         emit PriceSampled(feedId, p.price, time, uint16(count));
+    }
+
+    /// @dev Pyth price to an 8-decimal integer.
+    function _toBase(uint64 price, int32 expo) private pure returns (uint256) {
+        if (expo >= -8) {
+            if (expo > 10) return 0;
+            return uint256(price) * 10 ** uint32(expo + 8);
+        }
+        if (expo < -30) return 0;
+        return uint256(price) / 10 ** uint32(-8 - expo);
     }
 
     function _sampleAt(uint256 base, uint256 index) private view returns (uint64 price, uint64 time) {

@@ -2,6 +2,7 @@
 pragma solidity 0.8.37;
 
 import {IPositionRegistry} from "./interfaces/IPositionRegistry.sol";
+import {IRepricer} from "./interfaces/IRepricer.sol";
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title PositionRegistry
@@ -24,6 +25,14 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
     uint32 public constant MAX_TRIGGER = 20_000;
     /// @notice The highest exit discount a borrower may accept, and the highest the owner may set.
     uint16 public constant MAX_DISCOUNT_CEILING_BPS = 500;
+    /// @notice Prepaid balance needed to opt in: 1 USDC, in 18-decimal units. Keeps dust records out of the
+    /// keeper's batch (audit M-4).
+    uint256 public constant MIN_PREPAY = 1e18;
+    /// @notice Upper bound on an asset's pricing constant k: ten times the calibrated 0.00125 (audit L-3).
+    uint64 public constant MAX_K = 0.0125e18;
+    /// @notice Bounds on an asset's fallback volatility, the same clamp the Repricer applies to measured sigma.
+    uint64 public constant MIN_SIGMA_FALLBACK = 0.1e18;
+    uint64 public constant MAX_SIGMA_FALLBACK = 5e18;
 
     bytes32 private constant RECORD_NAMESPACE = keccak256("shield.registry.record.v1");
     uint256 private constant PAGE_MASK = ~uint256(127);
@@ -70,11 +79,11 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
         uint256 s0 = _load(base);
         if (_flags(s0) & FLAG_ACTIVE != 0) revert AlreadyActive(msg.sender);
 
+        uint256 s1 = _load(base + 1);
+        if (uint128(s1) < MIN_PREPAY) revert PrepayTooLow(uint128(s1), MIN_PREPAY);
         _active.push(msg.sender);
         uint256 listIndex = _active.length;
-        uint256 s1 = _load(base + 1);
         uint8 flags = FLAG_ACTIVE;
-        if (uint128(s1) == 0) flags |= FLAG_LAPSED;
 
         s0 = uint256(trigger) | (uint256(maxDiscountBps) << 32) | (uint256(flags) << 48)
             | (uint256(cfg.id) << 56) | (uint256(block.number) << 64) | (listIndex << 128)
@@ -87,12 +96,14 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
         if (flags & FLAG_LAPSED != 0) emit CoverLapsed(msg.sender);
     }
 
-    /// @notice Move the caller's exit trigger. A trigger above the current HF makes the exit due at once.
+    /// @notice Move the caller's exit trigger. Raising it restarts the cover's waiting period, so a trigger
+    /// cannot be lifted over the current HF to exit at once (audit H-1).
     function setTrigger(uint32 trigger) external {
         _checkTrigger(trigger);
         uint256 base = recordSlot(msg.sender);
         uint256 s0 = _load(base);
         if (_flags(s0) & FLAG_ACTIVE == 0) revert NotActive(msg.sender);
+        if (trigger > uint32(s0)) s0 = _withCoverStart(s0);
         _store(base, (s0 & ~uint256(0xffffffff)) | trigger);
         emit TriggerSet(msg.sender, trigger);
     }
@@ -107,11 +118,13 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
         emit MaxDiscountSet(msg.sender, maxDiscountBps);
     }
 
-    /// @notice End cover. The prepaid balance stays withdrawable from the Repricer.
+    /// @notice End cover. The blocks since the last reprice are charged first (audit M-2); the rest of the
+    /// prepaid balance stays withdrawable from the Repricer.
     function optOut() external {
         uint256 base = recordSlot(msg.sender);
+        if (_flags(_load(base)) & FLAG_ACTIVE == 0) revert NotActive(msg.sender);
+        if (repricer != address(0)) IRepricer(repricer).settleForOptOut(msg.sender);
         uint256 s0 = _load(base);
-        if (_flags(s0) & FLAG_ACTIVE == 0) revert NotActive(msg.sender);
         _close(msg.sender, base, s0, 0);
         emit OptedOut(msg.sender);
     }
@@ -152,8 +165,10 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
         uint256 s0 = _load(base);
         uint8 flags = _flags(s0);
         if (flags & FLAG_LAPSED != 0 && amount != 0) {
-            // Restart the accrual clock so the unprotected blocks are never charged.
+            // Restart the accrual clock so the unprotected blocks are never charged, and restart the waiting
+            // period so cover cannot be bought back at the moment it is needed (audit H-1).
             s0 = (s0 & ~(uint256(type(uint64).max) << 64)) | (uint256(block.number) << 64);
+            if (flags & FLAG_ACTIVE != 0) s0 = _withCoverStart(s0);
             _store(base, _withFlags(s0, flags & ~FLAG_LAPSED));
             if (flags & FLAG_ACTIVE != 0) emit CoverRestored(borrower);
         }
@@ -199,7 +214,10 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
         external
         onlyOwner
     {
-        if (collateral == address(0) || pythFeedId == bytes32(0) || k == 0 || sigmaFallback == 0) {
+        if (collateral == address(0) || pythFeedId == bytes32(0) || k == 0 || k > MAX_K) {
+            revert InvalidParameter();
+        }
+        if (sigmaFallback < MIN_SIGMA_FALLBACK || sigmaFallback > MAX_SIGMA_FALLBACK) {
             revert InvalidParameter();
         }
         AssetConfig storage cfg = _assetConfig[collateral];
@@ -278,7 +296,7 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
     function activeBorrowers(uint256 offset, uint256 limit) external view returns (address[] memory out) {
         uint256 n = _active.length;
         if (offset >= n) return new address[](0);
-        uint256 end = offset + limit > n ? n : offset + limit;
+        uint256 end = limit > n - offset ? n : offset + limit;
         out = new address[](end - offset);
         for (uint256 i = offset; i < end; ++i) {
             out[i - offset] = _active[i];
@@ -286,6 +304,12 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
     }
 
     // ---------------------------------------------------------------- internals
+
+    /// @dev Stamps the start of cover (the opted-in time field) with now; the Executor's waiting period counts
+    /// from it.
+    function _withCoverStart(uint256 s0) private view returns (uint256) {
+        return (s0 & ~(uint256(type(uint64).max) << 160)) | (uint256(block.timestamp) << 160);
+    }
 
     function _close(address borrower, uint256 base, uint256 s0, uint8 extraFlag) private {
         uint256 listIndex = uint32(s0 >> 128);

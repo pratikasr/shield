@@ -53,6 +53,11 @@ contract AccountingHandler is Test {
         address u = _user(seed);
         if (reg.record(u).flags & reg.FLAG_ACTIVE() != 0) return;
         trigger = uint32(bound(trigger, 10_100, 12_000));
+        if (reg.record(u).prepaid < reg.MIN_PREPAY()) {
+            vm.prank(u);
+            rp.topUp(1e6);
+            ghostToppedUp += 1e6;
+        }
         vm.prank(u);
         reg.optIn(WETH, trigger, 100);
     }

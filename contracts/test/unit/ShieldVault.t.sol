@@ -92,14 +92,14 @@ contract ShieldVaultTest is Test {
 
     function test_recordExit_stats() public {
         vm.startPrank(executor);
-        vault.recordExit(WETH, 0.505e18, 1000e6, 1010e6);
-        vault.recordExit(WETH, 0.2525e18, 500e6, 505e6);
+        vault.recordExit(WETH, 0.505e18, 1000e6, 1010e6, false);
+        vault.recordExit(WETH, 0.2525e18, 500e6, 505e6, false);
         vm.stopPrank();
         assertEq(vault.exitsExecuted(), 2);
         assertEq(vault.totalExitFunding(), 1500e6);
         assertEq(vault.averageDiscountBps(), 100);
         vm.expectRevert(IShieldVault.NotExecutor.selector);
-        vault.recordExit(WETH, 1, 1, 1);
+        vault.recordExit(WETH, 1, 1, 1, false);
     }
 
     function test_notifyPremium() public {

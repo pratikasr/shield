@@ -3,6 +3,7 @@ pragma solidity 0.8.37;
 
 import {PositionRegistry} from "../../src/PositionRegistry.sol";
 import {IPositionRegistry} from "../../src/interfaces/IPositionRegistry.sol";
+import {IRepricer} from "../../src/interfaces/IRepricer.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Test} from "forge-std/Test.sol";
 
@@ -21,6 +22,17 @@ contract PositionRegistryTest is Test {
         reg.setAsset(WETH, bytes32("ETH/USD"), 0.00125e18, 0.8e18, true);
         reg.setAsset(CBBTC, bytes32("CBBTC/USD"), 0.00125e18, 0.8e18, true);
         reg.setModules(repricer, executor);
+        // The repricer here is a plain address: give it code and stub the opt-out settlement hook.
+        vm.etch(repricer, hex"00");
+        vm.mockCall(repricer, abi.encodeWithSelector(IRepricer.settleForOptOut.selector), "");
+    }
+
+    /// @dev Opt-in needs MIN_PREPAY on the record; credit it as the Repricer would after a top-up.
+    function _credit(address who) internal {
+        uint256 minimum = reg.MIN_PREPAY();
+        if (reg.record(who).prepaid >= minimum) return;
+        vm.prank(repricer);
+        reg.creditPrepaid(who, uint128(minimum));
     }
 
     // ------------------------------------------------------------ MIP-8 layout
@@ -38,13 +50,14 @@ contract PositionRegistryTest is Test {
     function test_record_readsRawStorageLayout() public {
         vm.roll(1234);
         vm.warp(5678);
+        _credit(alice);
         vm.prank(alice);
         reg.optIn(CBBTC, 10_400, 150);
         uint256 base = reg.recordSlot(alice);
         uint256 s0 = uint256(vm.load(address(reg), bytes32(base)));
         assertEq(uint32(s0), 10_400, "trigger in bits 0..31");
         assertEq(uint16(s0 >> 32), 150, "maxDiscountBps in bits 32..47");
-        assertEq(uint8(s0 >> 48), reg.FLAG_ACTIVE() | reg.FLAG_LAPSED(), "flags in bits 48..55");
+        assertEq(uint8(s0 >> 48), reg.FLAG_ACTIVE(), "flags in bits 48..55");
         assertEq(uint8(s0 >> 56), 1, "collateral id in bits 56..63");
         assertEq(uint64(s0 >> 64), 1234, "last repriced block in bits 64..127");
         assertEq(uint32(s0 >> 128), 1, "list index in bits 128..159");
@@ -59,6 +72,7 @@ contract PositionRegistryTest is Test {
         uint64 sigma,
         bool lapsed
     ) public {
+        _credit(alice);
         vm.prank(alice);
         reg.optIn(WETH, 10_400, 100);
         vm.roll(block.number + 7);
@@ -83,6 +97,7 @@ contract PositionRegistryTest is Test {
     // ------------------------------------------------------------ opt-in rules
 
     function test_optIn_recordsAndEmits() public {
+        _credit(alice);
         vm.expectEmit(address(reg));
         emit IPositionRegistry.OptedIn(alice, WETH, 10_400, 100);
         vm.prank(alice);
@@ -91,20 +106,23 @@ contract PositionRegistryTest is Test {
         assertEq(r.trigger, 10_400);
         assertEq(reg.collateralOf(alice), WETH);
         assertEq(reg.activeCount(), 1);
-        // No prepaid balance yet: active but unprotected.
-        assertEq(r.flags, reg.FLAG_ACTIVE() | reg.FLAG_LAPSED());
+        // The minimum prepay is required, so a new cover starts funded.
+        assertEq(r.flags, reg.FLAG_ACTIVE());
     }
 
     function test_optIn_revertsTriggerBelowOneOhOne() public {
+        _credit(alice);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.TriggerOutOfRange.selector, uint32(9900)));
         reg.optIn(WETH, 9900, 100);
+        _credit(alice);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.TriggerOutOfRange.selector, uint32(10_099)));
         reg.optIn(WETH, 10_099, 100);
     }
 
     function test_optIn_revertsTriggerAboveTwo() public {
+        _credit(alice);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.TriggerOutOfRange.selector, uint32(20_001)));
         reg.optIn(WETH, 20_001, 100);
@@ -127,6 +145,7 @@ contract PositionRegistryTest is Test {
     }
 
     function test_optIn_revertsUnknownAsset() public {
+        _credit(alice);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.AssetNotEnabled.selector, address(0xdead)));
         reg.optIn(address(0xdead), 10_400, 100);
@@ -134,12 +153,81 @@ contract PositionRegistryTest is Test {
 
     function test_optIn_revertsDisabledAsset() public {
         reg.setAsset(WETH, bytes32("ETH/USD"), 0.00125e18, 0.8e18, false);
+        _credit(alice);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.AssetNotEnabled.selector, WETH));
         reg.optIn(WETH, 10_400, 100);
     }
 
+    function test_optIn_revertsWithoutMinimumPrepay() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.PrepayTooLow.selector, 0, 1e18));
+        reg.optIn(WETH, 10_400, 100);
+    }
+
+    /// @notice Raising the trigger restarts the waiting period; lowering it does not (audit H-1).
+    function test_setTrigger_raiseRestartsCoverClock() public {
+        _credit(alice);
+        vm.warp(1000);
+        vm.prank(alice);
+        reg.optIn(WETH, 10_400, 100);
+        vm.warp(5000);
+        vm.prank(alice);
+        reg.setTrigger(10_300);
+        assertEq(reg.record(alice).optedInAt, 1000, "lowering keeps the clock");
+        vm.prank(alice);
+        reg.setTrigger(10_600);
+        assertEq(reg.record(alice).optedInAt, 5000, "raising restarts it");
+    }
+
+    /// @notice A top-up that restores a lapsed cover restarts the waiting period (audit H-1).
+    function test_restoreFromLapse_restartsCoverClock() public {
+        _credit(alice);
+        vm.warp(1000);
+        vm.prank(alice);
+        reg.optIn(WETH, 10_400, 100);
+        vm.prank(repricer);
+        reg.debitPrepaid(alice, 1e18); // lapses
+        vm.warp(9000);
+        vm.prank(repricer);
+        reg.creditPrepaid(alice, 1e18);
+        assertEq(reg.record(alice).optedInAt, 9000);
+        assertEq(reg.record(alice).flags, reg.FLAG_ACTIVE());
+    }
+
+    /// @notice Opting out settles the premium owed first (audit M-2).
+    function test_optOut_settlesFirst() public {
+        _credit(alice);
+        vm.prank(alice);
+        reg.optIn(WETH, 10_400, 100);
+        vm.expectCall(repricer, abi.encodeWithSelector(IRepricer.settleForOptOut.selector, alice));
+        vm.prank(alice);
+        reg.optOut();
+    }
+
+    /// @notice The owner's pricing inputs are bounded (audit L-3).
+    function test_setAsset_boundsKAndFallbackSigma() public {
+        uint64 maxK = reg.MAX_K();
+        vm.expectRevert(IPositionRegistry.InvalidParameter.selector);
+        reg.setAsset(WETH, bytes32("ETH/USD"), maxK + 1, 0.8e18, true);
+        vm.expectRevert(IPositionRegistry.InvalidParameter.selector);
+        reg.setAsset(WETH, bytes32("ETH/USD"), 0.00125e18, 6e18, true);
+        vm.expectRevert(IPositionRegistry.InvalidParameter.selector);
+        reg.setAsset(WETH, bytes32("ETH/USD"), 0.00125e18, 0.05e18, true);
+        reg.setAsset(WETH, bytes32("ETH/USD"), maxK, 5e18, true);
+    }
+
+    /// @notice The paged view does not overflow on a huge limit.
+    function test_activeBorrowers_hugeLimit() public {
+        _credit(alice);
+        vm.prank(alice);
+        reg.optIn(WETH, 10_400, 100);
+        assertEq(reg.activeBorrowers(0, type(uint256).max).length, 1);
+        assertEq(reg.activeBorrowers(1, type(uint256).max).length, 0);
+    }
+
     function test_optIn_revertsTwice() public {
+        _credit(alice);
         vm.startPrank(alice);
         reg.optIn(WETH, 10_400, 100);
         vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.AlreadyActive.selector, alice));
@@ -155,6 +243,7 @@ contract PositionRegistryTest is Test {
     }
 
     function test_setTrigger_and_setMaxDiscount() public {
+        _credit(alice);
         vm.startPrank(alice);
         reg.optIn(WETH, 10_400, 100);
         vm.expectEmit(address(reg));
@@ -179,6 +268,7 @@ contract PositionRegistryTest is Test {
     function test_optOut_swapAndPopKeepsIndexes() public {
         address[5] memory users = [alice, bob, makeAddr("c"), makeAddr("d"), makeAddr("e")];
         for (uint256 i; i < users.length; ++i) {
+            _credit(users[i]);
             vm.prank(users[i]);
             reg.optIn(WETH, 10_400, 100);
         }
@@ -199,6 +289,7 @@ contract PositionRegistryTest is Test {
         for (uint256 i; i < ops.length; ++i) {
             address u = users[ops[i] % users.length];
             bool active = reg.record(u).flags & reg.FLAG_ACTIVE() != 0;
+            if (!active) _credit(u);
             vm.prank(u);
             if (active) reg.optOut();
             else reg.optIn(WETH, 10_400, 100);
@@ -219,8 +310,10 @@ contract PositionRegistryTest is Test {
     }
 
     function test_activeBorrowers_pagination() public {
+        _credit(alice);
         vm.prank(alice);
         reg.optIn(WETH, 10_400, 100);
+        _credit(bob);
         vm.prank(bob);
         reg.optIn(WETH, 10_400, 100);
         assertEq(reg.activeBorrowers(1, 5).length, 1);
@@ -244,6 +337,7 @@ contract PositionRegistryTest is Test {
     function test_debitToZero_lapsesAndCreditRestores() public {
         vm.prank(repricer);
         reg.creditPrepaid(alice, 10e18);
+        _credit(alice);
         vm.prank(alice);
         reg.optIn(WETH, 10_400, 100);
         vm.roll(block.number + 50);
@@ -263,6 +357,7 @@ contract PositionRegistryTest is Test {
     }
 
     function test_markExited_closesRecord() public {
+        _credit(alice);
         vm.prank(alice);
         reg.optIn(WETH, 10_400, 100);
         vm.prank(repricer);
@@ -278,6 +373,7 @@ contract PositionRegistryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IPositionRegistry.NotActive.selector, alice));
         reg.markExited(alice);
         // A closed record can opt in again.
+        _credit(alice);
         vm.prank(alice);
         reg.optIn(WETH, 10_500, 100);
         assertEq(reg.record(alice).flags, reg.FLAG_ACTIVE());

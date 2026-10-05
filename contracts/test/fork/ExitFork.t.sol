@@ -69,8 +69,12 @@ contract ExitForkTest is ForkBase {
         _nextBlock();
         uint256 navBefore = d.vault.totalAssets();
         (uint256 repaid, uint256 seized) = d.executor.exit(borrower, _none());
+        assertApproxEqAbs(d.vault.totalAssets(), navBefore, 2, "the gain is locked at first (audit F3)");
+        vm.warp(block.timestamp + d.vault.PROFIT_UNLOCK_SECONDS());
         uint256 gain = d.vault.totalAssets() - navBefore;
-        assertApproxEqRel(gain, repaid / 100, 0.01e18, "NAV rises by about 1% of the repaid debt");
+        assertApproxEqRel(
+            gain, repaid / 100, 0.01e18, "NAV rises by about 1% of the repaid debt once unlocked"
+        );
 
         // Unwind half the seized collateral through Uniswap V3, bounded by oracle value less 3%.
         uint256 usdcBefore = usdc.balanceOf(address(d.vault));

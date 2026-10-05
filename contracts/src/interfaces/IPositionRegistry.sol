@@ -54,6 +54,7 @@ interface IPositionRegistry {
     error NotExecutor();
     error ModulesAlreadySet();
     error InvalidParameter();
+    error PrepayTooLow(uint256 prepaid, uint256 minimum);
 
     function FLAG_ACTIVE() external view returns (uint8);
     function FLAG_LAPSED() external view returns (uint8);

@@ -195,6 +195,19 @@
   },
   {
     "type": "function",
+    "name": "minCoverSeconds",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "oracle",
     "inputs": [],
     "outputs": [
@@ -337,6 +350,19 @@
   },
   {
     "type": "function",
+    "name": "setMinCoverSeconds",
+    "inputs": [
+      {
+        "name": "minCoverSeconds_",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setSwapper",
     "inputs": [
       {
@@ -463,6 +489,19 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MinCoverSecondsSet",
+    "inputs": [
+      {
+        "name": "minCoverSeconds",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
       }
     ],
     "anonymous": false
@@ -627,6 +666,38 @@
         "name": "token",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SwapShortfall",
+    "inputs": [
+      {
+        "name": "received",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "needed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "VaultWouldLose",
+    "inputs": [
+      {
+        "name": "returned",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "contributed",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   }

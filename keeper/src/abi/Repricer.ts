@@ -392,6 +392,19 @@ export const repricerAbi = [
   },
   {
     "type": "function",
+    "name": "settleForOptOut",
+    "inputs": [
+      {
+        "name": "borrower",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "sigmaOf",
     "inputs": [
       {
@@ -774,6 +787,11 @@ export const repricerAbi = [
   },
   {
     "type": "error",
+    "name": "NotRegistry",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OwnableInvalidOwner",
     "inputs": [
       {
@@ -803,6 +821,22 @@ export const repricerAbi = [
     "type": "error",
     "name": "RefundFailed",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SafeCastOverflowedUintDowncast",
+    "inputs": [
+      {
+        "name": "bits",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

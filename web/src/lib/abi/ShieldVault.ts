@@ -33,6 +33,19 @@ export const shieldVaultAbi = [
   },
   {
     "type": "function",
+    "name": "PROFIT_UNLOCK_SECONDS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "acceptOwnership",
     "inputs": [],
     "outputs": [],
@@ -283,6 +296,32 @@ export const shieldVaultAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "grossAssets",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lockedProfit",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -587,6 +626,11 @@ export const shieldVaultAbi = [
         "name": "valueUsdc",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "flashFunded",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -735,7 +779,7 @@ export const shieldVaultAbi = [
     "inputs": [],
     "outputs": [
       {
-        "name": "total",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }

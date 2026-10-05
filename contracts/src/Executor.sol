@@ -45,7 +45,8 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
         AllowanceTooLow,
         PythStale,
         OracleDeviation,
-        TargetUnreachable
+        TargetUnreachable,
+        CoverWarmingUp
     }
 
     /// @notice A computed exit. Amounts are in token units; prices are Aave base currency (USD x 1e8).
@@ -76,6 +77,8 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
     event SwapperSet(address swapper);
     event ExitParamsSet(uint16 maxSwapSlippageBps, uint16 maxOracleDeviationBps, uint32 exitMaxPriceAge);
 
+    event MinCoverSecondsSet(uint32 minCoverSeconds);
+
     error ExitBlocked(Status status);
     error HealthNotImproved(uint256 before, uint256 afterExit);
     error HealthAtOrBelowOne(uint256 afterExit);
@@ -84,6 +87,8 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
     error InsufficientUpdateFee(uint256 fee, uint256 sent);
     error RefundFailed();
     error InvalidParameter();
+    error SwapShortfall(uint256 received, uint256 needed);
+    error VaultWouldLose(uint256 returned, uint256 contributed);
 
     IPositionRegistry public immutable registry;
     IRepricer public immutable repricer;
@@ -102,6 +107,9 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
     uint16 public maxOracleDeviationBps = 200;
     /// @notice Oldest Pyth price an exit accepts, in seconds (the push-feed heartbeat; ADR-017).
     uint32 public exitMaxPriceAge = 3600;
+    /// @notice How long cover must have been held, since opt-in, a restore from lapse or a trigger raise, before
+    /// it can exit. Stops cover being bought at the moment it is needed (audit H-1).
+    uint32 public minCoverSeconds = 900;
 
     bool private transient _inFlash;
     uint256 private transient _flashRepaid;
@@ -145,6 +153,10 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
         if (r.flags & registry.FLAG_ACTIVE() == 0) revert ExitBlocked(Status.NotActive);
         if (r.flags & registry.FLAG_LAPSED() != 0) revert ExitBlocked(Status.CoverLapsed);
         repricer.settleForExit(borrower);
+        // Settlement charges the blocks since the last reprice; if that empties the prepaid balance the cover
+        // lapses, and an unpaid cover does not exit.
+        r = registry.record(borrower);
+        if (r.flags & registry.FLAG_LAPSED() != 0) revert ExitBlocked(Status.CoverLapsed);
 
         (Status status, Plan memory p) = _plan(borrower, r);
         if (status != Status.Ready) revert ExitBlocked(status);
@@ -158,7 +170,7 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
             (repaid, seized) = _repayAndSeize(p, address(vault));
             uint256 leftover = asset.balanceOf(address(this));
             if (leftover != 0) asset.safeTransfer(address(vault), leftover);
-            vault.recordExit(p.collateral, seized, repaid, _valueInAsset(p, seized));
+            vault.recordExit(p.collateral, seized, repaid, _valueInAsset(p, seized), false);
         } else {
             if (address(swapper) == address(0)) revert NoSwapper();
             _inFlash = true;
@@ -203,7 +215,12 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
         asset.forceApprove(address(POOL), owed);
 
         uint256 kept = aLeft + resupplied;
-        vault.recordExit(p.collateral, kept, fromVault, _valueInAsset(p, kept));
+        uint256 keptValue = _valueInAsset(p, kept);
+        // The swap and the flash premium come out of the vault's share. Whatever the market fills, the vault
+        // must end with at least the USDC it put in, valued at Aave's oracle (audit F2).
+        uint256 returned = keptValue + (bal > owed ? bal - owed : 0);
+        if (returned < fromVault) revert VaultWouldLose(returned, fromVault);
+        vault.recordExit(p.collateral, kept, fromVault, keptValue, true);
         _flashRepaid = repaid;
         _flashSeized = seized;
         return true;
@@ -233,6 +250,12 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
         emit SwapperSet(address(swapper_));
     }
 
+    function setMinCoverSeconds(uint32 minCoverSeconds_) external onlyOwner {
+        if (minCoverSeconds_ > 7 days) revert InvalidParameter();
+        minCoverSeconds = minCoverSeconds_;
+        emit MinCoverSecondsSet(minCoverSeconds_);
+    }
+
     function setExitParams(uint16 maxSwapSlippageBps_, uint16 maxOracleDeviationBps_, uint32 exitMaxPriceAge_)
         external
         onlyOwner
@@ -259,6 +282,7 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
         p.borrower = borrower;
         uint256 debtBase;
         (, debtBase,,,, p.healthFactor) = POOL.getUserAccountData(borrower);
+        if (block.timestamp < uint256(r.optedInAt) + minCoverSeconds) return (Status.CoverWarmingUp, p);
         if (p.healthFactor > uint256(r.trigger) * BPS_TO_WAD) return (Status.AboveTrigger, p);
         if (POOL.getUserEMode(borrower) != 0) return (Status.EModeUnsupported, p);
         p.discountBps = registry.exitDiscountBps();
@@ -340,9 +364,13 @@ contract Executor is IFlashLoanSimpleReceiver, Ownable2Step, ReentrancyGuardTran
         if (maxIn > seized) maxIn = seized;
         uint256 withdrawn = POOL.withdraw(p.collateral, maxIn, address(this));
         IERC20(p.collateral).forceApprove(address(swapper), withdrawn);
-        uint256 sold = swapper.swapExactOut(p.collateral, address(asset), shortfall, withdrawn, address(this));
+        swapper.swapExactOut(p.collateral, address(asset), shortfall, withdrawn, address(this));
         IERC20(p.collateral).forceApprove(address(swapper), 0);
-        resupplied = withdrawn - sold;
+        // Trust balances, not the swapper's return value (audit F1): the USDC must have arrived, and whatever
+        // collateral is still here goes back to Aave for the vault.
+        uint256 received = asset.balanceOf(address(this)) - onHand;
+        if (received < shortfall) revert SwapShortfall(received, shortfall);
+        resupplied = IERC20(p.collateral).balanceOf(address(this));
         if (resupplied != 0) {
             IERC20(p.collateral).forceApprove(address(POOL), resupplied);
             POOL.supply(p.collateral, resupplied, address(vault), 0);

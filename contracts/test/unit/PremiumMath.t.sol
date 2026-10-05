@@ -77,9 +77,20 @@ contract PremiumMathTest is Test {
         assertEq(atFloor, at5 * 5);
     }
 
-    function test_zero_whenAtOrBelowTrigger() public view {
-        assertEq(m.annualPremium(10_000e8, 1.04e18, 10_400, 100, K, 0.8e18, ONE_USD), 0);
-        assertEq(m.annualPremium(10_000e8, 1.0e18, 10_400, 100, K, 0.8e18, ONE_USD), 0);
+    /// @notice At or below the trigger the exit is due: priced at the distance floor, never free (audit H-1).
+    function test_atOrBelowTrigger_pricedAtTheFloor() public view {
+        uint256 atFloor = m.annualPremium(10_000e8, 1.05e18, 10_400, 100, K, 0.8e18, ONE_USD); // d = 0.01
+        assertEq(m.annualPremium(10_000e8, 1.04e18, 10_400, 100, K, 0.8e18, ONE_USD), atFloor);
+        assertEq(m.annualPremium(10_000e8, 1.0e18, 10_400, 100, K, 0.8e18, ONE_USD), atFloor);
+        assertGt(atFloor, 0);
+    }
+
+    /// @notice One bad print cannot push a squared return past a 100% move (audit L-1).
+    function test_squaredReturn_cappedAtOneHundredPercent() public view {
+        assertLe(m.squaredReturn(2700e8, 1), 1e18);
+        assertEq(m.squaredReturn(1, 2700e8), 1e18);
+        assertEq(m.squaredReturn(100, 200), 1e18);
+        assertEq(m.squaredReturn(100, 150), 0.25e18);
     }
 
     function test_zero_whenNoDebt() public view {

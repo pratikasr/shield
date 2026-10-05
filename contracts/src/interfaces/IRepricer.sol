@@ -21,6 +21,7 @@ interface IRepricer {
     event BlockTimeSet(uint32 blockTimeMs);
 
     error NotExecutor();
+    error NotRegistry();
     error InsufficientUpdateFee(uint256 fee, uint256 sent);
     error InsufficientPrepaid(uint256 requested, uint256 available);
     error ZeroAmount();
@@ -30,6 +31,7 @@ interface IRepricer {
     function reprice(address borrower, bytes[] calldata pythUpdate) external payable;
     function repriceMany(address[] calldata borrowers, bytes[] calldata pythUpdate) external payable;
     function settleForExit(address borrower) external;
+    function settleForOptOut(address borrower) external;
     function topUp(uint256 amount) external;
     function withdrawUnused(uint256 amount) external;
     function sweep() external returns (uint256 amount);

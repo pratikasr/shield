@@ -14,6 +14,8 @@ contract Deploy is Script {
         vm.startBroadcast();
         (, address owner,) = vm.readCallers();
         ShieldDeployment.Config memory c = ShieldDeployment.monadMainnet(owner, keeper);
+        // Fork rehearsals shorten the waiting period so a scripted run does not sit idle for 15 minutes.
+        c.minCoverSeconds = uint32(vm.envOr("SHIELD_MIN_COVER_SECONDS", uint256(c.minCoverSeconds)));
         d = ShieldDeployment.deploy(c);
         vm.stopBroadcast();
 

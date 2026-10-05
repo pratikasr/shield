@@ -49,8 +49,9 @@ contract DemoPosition is Script {
         _borrowTo(me, hfBps);
         IERC20(A_WETH).approve(executor, type(uint256).max);
         IERC20(USDC).approve(address(repricer), prepay);
-        registry.optIn(WETH, trigger, maxDiscount);
+        // Prepay first: opting in needs at least the registry's minimum prepaid balance.
         repricer.topUp(prepay);
+        registry.optIn(WETH, trigger, maxDiscount);
         vm.stopBroadcast();
         _report(me);
     }

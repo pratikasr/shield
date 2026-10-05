@@ -51,7 +51,9 @@ contract RepricerForkTest is ForkBase {
             d.repricer.reprice(borrower, _none());
             if (i == 2) vm.snapshotGasLastCall("reprice_single_warmFeed");
             uint256 accrued = d.registry.record(borrower).accrued;
-            assertEq(accrued - accrued0, rate, "one block at the stored rate");
+            uint256 live = d.registry.record(borrower).premiumPerBlock;
+            // One block at the higher of the stored and the live rate (audit M-3); debt interest nudges it up.
+            assertEq(accrued - accrued0, live > rate ? live : rate, "one block at the higher rate");
             accrued0 = accrued;
         }
     }

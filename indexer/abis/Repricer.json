@@ -391,6 +391,19 @@
   },
   {
     "type": "function",
+    "name": "settleForOptOut",
+    "inputs": [
+      {
+        "name": "borrower",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "sigmaOf",
     "inputs": [
       {
@@ -773,6 +786,11 @@
   },
   {
     "type": "error",
+    "name": "NotRegistry",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OwnableInvalidOwner",
     "inputs": [
       {
@@ -802,6 +820,22 @@
     "type": "error",
     "name": "RefundFailed",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SafeCastOverflowedUintDowncast",
+    "inputs": [
+      {
+        "name": "bits",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

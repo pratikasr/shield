@@ -33,9 +33,10 @@ library PremiumMath {
     ) internal pure returns (uint256) {
         if (debtBase == 0 || assetPriceBase == 0) return 0;
         uint256 trigger = triggerBps * BPS_TO_WAD;
-        if (healthFactor <= trigger) return 0;
-        uint256 d = healthFactor - trigger;
         uint256 dMin = dMinBps * BPS_TO_WAD;
+        // At or below the trigger the exit is due: that is the most expensive moment to be covered, priced at
+        // the distance floor, never free (audit H-1).
+        uint256 d = healthFactor > trigger ? healthFactor - trigger : 0;
         if (d < dMin) d = dMin;
         // Covered debt in 18-decimal vault-asset units.
         uint256 covered = Math.mulDiv(debtBase, WAD, assetPriceBase);
@@ -47,9 +48,11 @@ library PremiumMath {
         return Math.mulDiv(annual, blockTimeMs, 1000 * YEAR_SECONDS);
     }
 
-    /// @notice Squared simple return between two prices, x 1e18.
+    /// @notice Squared simple return between two prices, x 1e18, capped at a 100% move so one bad print cannot
+    /// saturate the window's running sum (audit L-1).
     function squaredReturn(uint256 prev, uint256 next) internal pure returns (uint256) {
         uint256 diff = next > prev ? next - prev : prev - next;
+        if (diff >= prev) return WAD;
         uint256 r = Math.mulDiv(diff, WAD, prev);
         return Math.mulDiv(r, r, WAD);
     }

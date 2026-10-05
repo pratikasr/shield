@@ -65,9 +65,9 @@ contract RepricerTest is Test {
         pool.setAccount(alice, 13_000e8, 10_000e8, 1.09e18);
         _fund(alice, 1000e6);
         vm.prank(alice);
-        reg.optIn(WETH, 10_400, 100);
-        vm.prank(alice);
         rp.topUp(100e6);
+        vm.prank(alice);
+        reg.optIn(WETH, 10_400, 100);
     }
 
     function _fund(address who, uint256 amount) internal {
@@ -82,44 +82,89 @@ contract RepricerTest is Test {
         u[0] = pyth.createPriceFeedUpdateData(FEED, price, 1e6, -8, price, 1e6, pythTime);
     }
 
+    function _pythUpdateExpo(int64 price, uint64 conf, int32 expo) internal returns (bytes[] memory u) {
+        pythTime += 1;
+        u = new bytes[](1);
+        u[0] = pyth.createPriceFeedUpdateData(FEED, price, conf, expo, price, conf, pythTime);
+    }
+
+    /// @notice A one-unit Pyth print neither saturates the window nor bricks the feed when it leaves the window
+    /// 200 observations later (audit L-1).
+    function test_volWindow_badPrintDoesNotBrickTheFeed() public {
+        rp.reprice(alice, _pythUpdateExpo(2700e8, 1e6, -8));
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _pythUpdateExpo(1, 0, -8));
+        for (uint256 i; i < 201; ++i) {
+            vm.roll(block.number + 1);
+            rp.reprice(alice, _pythUpdateExpo(2700e8, 1e6, -8));
+        }
+        vm.prank(executor);
+        rp.settleForExit(alice); // would revert with an arithmetic underflow before the fix
+        assertLe(rp.sigmaOf(FEED, 0.8e18), rp.SIGMA_MAX());
+    }
+
+    /// @notice A change of Pyth exponent at an unchanged price is not read as a move (audit L-2).
+    function test_volWindow_expoChangeIsNotAMove() public {
+        int64 p = 2700e8;
+        for (uint256 i; i < 30; ++i) {
+            vm.roll(block.number + 1);
+            p = i % 2 == 0 ? p * 10_001 / 10_000 : p * 10_000 / 10_001;
+            rp.reprice(alice, _pythUpdateExpo(p, 1e6, -8));
+        }
+        uint256 before = rp.sigmaOf(FEED, 0.8e18);
+        vm.roll(block.number + 1);
+        rp.reprice(alice, _pythUpdateExpo(p * 100, 1e8, -10)); // the same dollar price, expo -10
+        assertLe(rp.sigmaOf(FEED, 0.8e18), before * 11 / 10, "no jump from the exponent change");
+    }
+
     function _none() internal pure returns (bytes[] memory) {
         return new bytes[](0);
     }
 
     // ------------------------------------------------------------ accrual
 
-    function test_firstReprice_setsRateWithoutCharging() public {
+    /// @notice The blocks between opt-in and the first reprice are billed at the live rate: cover is never free
+    /// before the keeper first prices it (audit H-1, M-3).
+    function test_firstReprice_billsTheBlocksSinceOptIn() public {
         vm.roll(block.number + 10);
         rp.reprice(alice, _none());
         IPositionRegistry.Record memory r = reg.record(alice);
-        assertEq(r.accrued, 0, "nothing owed before a rate existed");
         // Calibration point: 2% of $10,000 a year at the fallback sigma of 80%.
         uint256 expected = PremiumMath.perBlock(200e18, 300);
+        assertEq(r.accrued, expected * 10, "ten blocks at the live rate");
         assertEq(r.premiumPerBlock, expected);
         assertEq(r.healthFactorBps, 10_900);
         assertEq(r.sigma, 0.8e18);
     }
 
-    function test_reprice_chargesStoredRatePerElapsedBlock() public {
+    /// @notice Elapsed blocks are billed at the higher of the stored and the live rate (audit M-3): when HF
+    /// moves closer to the trigger the higher live rate applies.
+    function test_reprice_billsHigherOfStoredAndLiveRate() public {
         rp.reprice(alice, _none());
-        uint256 rate = reg.record(alice).premiumPerBlock;
+        uint256 accrued0 = reg.record(alice).accrued;
         vm.roll(block.number + 25);
-        // HF moves; the past 25 blocks are still charged at the old rate.
         pool.setAccount(alice, 13_000e8, 10_000e8, 1.06e18);
-        vm.expectEmit(address(rp));
-        emit IRepricer.Repriced(
-            alice,
-            rate * 25,
-            PremiumMath.perBlock(200e18 * 5 / 2, 300),
-            1.06e18,
-            0.8e18,
-            100e18 - rate * 25,
-            false
-        );
+        uint256 live = PremiumMath.perBlock(200e18 * 5 / 2, 300);
         rp.reprice(alice, _none());
         IPositionRegistry.Record memory r = reg.record(alice);
-        assertEq(r.accrued, rate * 25);
-        assertEq(r.prepaid, 100e18 - rate * 25);
+        assertEq(r.accrued - accrued0, live * 25);
+        assertEq(r.premiumPerBlock, live);
+    }
+
+    /// @notice A rate stored from a momentarily improved position does not discount the next interval.
+    function test_reprice_selfRepriceFromImprovedState_doesNotDiscount() public {
+        rp.reprice(alice, _none());
+        uint256 fair = reg.record(alice).premiumPerBlock;
+        // The borrower repays in one transaction, reprices, and borrows back.
+        pool.setAccount(alice, 13_000e8, 0, type(uint256).max);
+        vm.prank(alice);
+        rp.reprice(alice, _none());
+        pool.setAccount(alice, 13_000e8, 10_000e8, 1.09e18);
+        assertEq(reg.record(alice).premiumPerBlock, 0);
+        uint256 accrued0 = reg.record(alice).accrued;
+        vm.roll(block.number + 200);
+        rp.reprice(alice, _none());
+        assertEq(reg.record(alice).accrued - accrued0, fair * 200, "billed at the fair live rate");
     }
 
     function test_reprice_twiceInOneBlock_chargesOnce() public {
@@ -131,10 +176,11 @@ contract RepricerTest is Test {
         assertEq(reg.record(alice).accrued, accrued);
     }
 
-    function test_reprice_noPremiumAtOrBelowTrigger() public {
+    /// @notice A position at or below its trigger pays the floor rate, the most expensive, never zero (H-1).
+    function test_reprice_atOrBelowTrigger_paysTheFloorRate() public {
         pool.setAccount(alice, 13_000e8, 10_000e8, 1.04e18);
         rp.reprice(alice, _none());
-        assertEq(reg.record(alice).premiumPerBlock, 0);
+        assertEq(reg.record(alice).premiumPerBlock, PremiumMath.perBlock(200e18 * 5, 300));
     }
 
     function test_reprice_revertsForInactive() public {
@@ -276,9 +322,9 @@ contract RepricerTest is Test {
         pool.setAccount(bob, 13_000e8, 10_000e8, 1.2e18);
         _fund(bob, 100e6);
         vm.prank(bob);
-        reg.optIn(WETH, 10_400, 100);
-        vm.prank(bob);
         rp.topUp(10e6);
+        vm.prank(bob);
+        reg.optIn(WETH, 10_400, 100);
         address[] memory list = new address[](3);
         list[0] = alice;
         list[1] = makeAddr("nobody");

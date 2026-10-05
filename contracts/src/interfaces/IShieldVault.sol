@@ -24,7 +24,12 @@ interface IShieldVault {
 
     function availableLiquidity() external view returns (uint256);
     function fundExit(uint256 amount) external;
-    function recordExit(address collateral, uint256 aTokenAmount, uint256 usdcSpent, uint256 valueUsdc)
-        external;
+    function recordExit(
+        address collateral,
+        uint256 aTokenAmount,
+        uint256 usdcSpent,
+        uint256 valueUsdc,
+        bool flashFunded
+    ) external;
     function notifyPremium(uint256 amount) external;
 }

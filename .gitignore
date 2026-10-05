@@ -30,3 +30,6 @@ indexer/.envio/
 .fork/
 contracts/deployments/fork-*.json
 contracts/broadcast/
+
+# agent worktrees
+.claude/worktrees/

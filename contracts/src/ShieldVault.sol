@@ -37,6 +37,12 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
     ISwapper public swapper;
     uint16 public maxSwapSlippageBps = 300;
 
+    /// @notice Exit gains reach the share price gradually over this period, so a deposit made just before an
+    /// exit and redeemed just after cannot take the discount owed to the LPs who carried the cover (audit F3).
+    uint256 public constant PROFIT_UNLOCK_SECONDS = 6 hours;
+    uint256 private lockedProfitAtLock;
+    uint64 private profitLockedAt;
+
     /// @notice Premium received from the Repricer, in USDC units.
     uint256 public totalPremiumEarned;
     /// @notice Exits this vault has taken part in.
@@ -68,8 +74,23 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
 
     // ---------------------------------------------------------------- ERC-4626
 
+    /// @notice Idle USDC plus every seized aToken balance valued at Aave's oracle, in USDC units, less exit
+    /// gains that are still unlocking.
+    function totalAssets() public view override returns (uint256) {
+        uint256 gross = grossAssets();
+        uint256 locked = lockedProfit();
+        return gross > locked ? gross - locked : 0;
+    }
+
+    /// @notice Exit gains not yet in the share price; they unlock linearly over PROFIT_UNLOCK_SECONDS.
+    function lockedProfit() public view returns (uint256) {
+        uint256 elapsed = block.timestamp - profitLockedAt;
+        if (elapsed >= PROFIT_UNLOCK_SECONDS) return 0;
+        return Math.mulDiv(lockedProfitAtLock, PROFIT_UNLOCK_SECONDS - elapsed, PROFIT_UNLOCK_SECONDS);
+    }
+
     /// @notice Idle USDC plus every seized aToken balance valued at Aave's oracle, in USDC units.
-    function totalAssets() public view override returns (uint256 total) {
+    function grossAssets() public view returns (uint256 total) {
         total = availableLiquidity();
         address[] memory collaterals = registry.assets();
         if (collaterals.length == 0) return total;
@@ -140,16 +161,24 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
     }
 
     /// @inheritdoc IShieldVault
-    function recordExit(address collateral, uint256 aTokenAmount, uint256 usdcSpent, uint256 valueUsdc)
-        external
-        onlyExecutor
-    {
+    function recordExit(
+        address collateral,
+        uint256 aTokenAmount,
+        uint256 usdcSpent,
+        uint256 valueUsdc,
+        bool flashFunded
+    ) external onlyExecutor {
         ++exitsExecuted;
         totalExitFunding += usdcSpent;
         totalCollateralValueReceived += valueUsdc;
-        if (usdcSpent != 0 && valueUsdc >= usdcSpent) {
+        // The average discount counts only exits the vault funded alone (audit L-4).
+        if (!flashFunded && usdcSpent != 0) {
             discountBaseRepaid += usdcSpent;
             discountBaseValue += valueUsdc;
+        }
+        if (valueUsdc > usdcSpent) {
+            lockedProfitAtLock = lockedProfit() + (valueUsdc - usdcSpent);
+            profitLockedAt = uint64(block.timestamp);
         }
         emit CollateralReceived(collateral, aTokenAmount, usdcSpent, valueUsdc);
     }
@@ -179,11 +208,20 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
         uint256 fair = Math.mulDiv(valueBase, assetUnit, oracle.getAssetPrice(usdc));
         uint256 floor = Math.mulDiv(fair, BPS - maxSwapSlippageBps, BPS);
         if (minOut < floor) minOut = floor;
+        uint256 usdcBefore = IERC20(usdc).balanceOf(address(this));
         IERC20(collateral).forceApprove(address(swapper), withdrawn);
-        amountOut = swapper.swapExactIn(collateral, usdc, withdrawn, minOut, address(this));
+        swapper.swapExactIn(collateral, usdc, withdrawn, minOut, address(this));
         IERC20(collateral).forceApprove(address(swapper), 0);
+        // Trust balances, not the swapper's return value (audit F1).
+        amountOut = IERC20(usdc).balanceOf(address(this)) - usdcBefore;
         if (amountOut < minOut) revert SwapBelowMinimum(amountOut, minOut);
-        emit Unwound(collateral, withdrawn, amountOut);
+        // Collateral the swapper did not take goes back to Aave, where the share price counts it.
+        uint256 unsold = IERC20(collateral).balanceOf(address(this));
+        if (unsold != 0) {
+            IERC20(collateral).forceApprove(address(pool), unsold);
+            pool.supply(collateral, unsold, address(this), 0);
+        }
+        emit Unwound(collateral, withdrawn - unsold, amountOut);
     }
 
     // ---------------------------------------------------------------- owner
