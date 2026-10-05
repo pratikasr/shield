@@ -65,7 +65,7 @@ function chartBars(period: Period, data: AnalyticsData, now: number): ChartBar[]
     else axisLabel = hour === 0 ? utcDay.format(d) : undefined;
     return {
       key: String(b.start),
-      title: unit === "hour" ? `${utcDay.format(d)}, ${hh(b.start)} to ${hh(b.start + 3600)} UTC` : `${utcDate.format(d)}, UTC`,
+      title: unit === "hour" ? `${utcDay.format(d)}, ${hh(b.start)} to ${hh(b.start + 3600)}` : utcDate.format(d),
       axisLabel,
       values: b.values,
     };
@@ -369,6 +369,8 @@ export function AnalyticsView() {
           title="Earnings over time"
           description={`${info.unit === "hour" ? "Hourly" : "Daily"}, ${info.phrase}. Times in UTC.`}
           labelledBy="chart-heading"
+          className="flex flex-col"
+          bodyClassName="flex flex-1 flex-col"
         >
           {historyState ? (
             <p className={historyState.tone ? "py-10 text-center text-sm text-caution" : "py-10 text-center text-sm text-muted-foreground"} role={historyState.tone ? "status" : undefined}>

@@ -23,7 +23,8 @@ export interface ChartBar {
   values: number[];
 }
 
-const HEIGHT = 224;
+/** The plot's least height; it grows to fill a taller container (a panel stretched to its row). */
+const MIN_HEIGHT = 224;
 const PAD_TOP = 10;
 const PAD_BOTTOM = 26;
 const BAR_MAX = 24;
@@ -32,18 +33,19 @@ const SEGMENT_GAP = 2;
 /** Nothing earned below this, in the chart's unit, is treated as zero. */
 const EPS = 1e-15;
 
-function useWidth<T extends HTMLElement>() {
+function useSize<T extends HTMLElement>(remount: unknown) {
   const ref = useRef<T>(null);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: MIN_HEIGHT });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver((entries) => setWidth(Math.floor(entries[0]!.contentRect.width)));
+    const read = (w: number, h: number) => setSize({ width: Math.floor(w), height: Math.max(MIN_HEIGHT, Math.floor(h)) });
+    read(el.clientWidth, el.clientHeight);
+    const ro = new ResizeObserver((entries) => read(entries[0]!.contentRect.width, entries[0]!.contentRect.height));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  return { ref, width };
+  }, [remount]);
+  return { ref, ...size };
 }
 
 /** A rectangle with its top corners rounded (the data end) and a square base. */
@@ -94,9 +96,10 @@ export function StackedBarChart({
   /** Keeps the frame but dims it while the data is old. */
   stale?: boolean;
 }) {
-  const { ref, width } = useWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
   const [asTable, setAsTable] = useState(false);
+  // The plot element comes back when the table is closed, so it is measured again then.
+  const { ref, width, height: HEIGHT } = useSize<HTMLDivElement>(asTable);
   const readoutId = useId();
   const totals = useMemo(() => bars.map((b) => sum(b.values)), [bars]);
   const maxTotal = Math.max(0, ...totals);
@@ -168,7 +171,7 @@ export function StackedBarChart({
   );
 
   return (
-    <div className={cn("min-w-0 transition-opacity", stale && "opacity-60")}>
+    <div className={cn("flex min-w-0 flex-1 flex-col transition-opacity", stale && "opacity-60")}>
       <div className="relative">
         <button
           type="button"
@@ -193,8 +196,7 @@ export function StackedBarChart({
       ) : (
         <div
           ref={ref}
-          className="relative mt-4 rounded-md outline-offset-4"
-          style={{ height: HEIGHT }}
+          className="relative mt-4 min-h-56 flex-1 rounded-md outline-offset-4"
           tabIndex={empty ? undefined : 0}
           role={empty ? undefined : "group"}
           aria-label={empty ? undefined : `Earnings chart. Use the left and right arrow keys to read ${navHint}; Escape returns to the totals.`}
@@ -203,7 +205,8 @@ export function StackedBarChart({
           onBlur={() => setActive(null)}
         >
           {width > 0 && (
-            <svg width={width} height={HEIGHT} role="img" aria-label={summary} className="block overflow-visible" onPointerLeave={() => setActive(null)}>
+            // Out of flow, so the drawing never sets the box's height: the box takes its height from the panel.
+            <svg width={width} height={HEIGHT} role="img" aria-label={summary} className="absolute inset-0 block overflow-visible" onPointerLeave={() => setActive(null)}>
               {/* Grid and y-axis: hairlines one step off the surface. */}
               {!empty &&
                 ticks.map((t, i) => (
@@ -323,7 +326,7 @@ function ChartTable({
   return (
     <div className="mt-4">
       <div className="relative max-h-[22rem] overflow-auto">
-        <table className="w-full min-w-[34rem] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
+        <table className="w-full min-w-[30rem] text-left text-sm [&_tbody_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
           <caption className="sr-only">{caption}</caption>
           <thead className="sticky top-0 bg-card">
             <tr className="border-b text-[0.75rem] text-muted-foreground">
@@ -331,7 +334,7 @@ function ChartTable({
                 {firstColumn}
               </th>
               {series.map((s) => (
-                <th key={s.key} scope="col" className={`${th} text-right`}>
+                <th key={s.key} scope="col" className={`${th} max-w-[9rem] text-right align-bottom`}>
                   {s.label}
                 </th>
               ))}
