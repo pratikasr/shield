@@ -120,7 +120,7 @@ Every number uses tabular figures (`.num`, `.reading`).
 | Component | Notes |
 | --- | --- |
 | Mark and wordmark | `ShieldMark`, `Wordmark`; `app/icon.svg` is the same mark on an ink tile |
-| App header | Sticky and blurred: mark, "Protect" and "Earn" with an underline on the current page, Monad network chip (logo, live dot, block), theme toggle, wallet button (avatar and address, or "Connect wallet") |
+| App header | Sticky and blurred: mark, "Protect", "Earn" and "Analytics" with an underline on the current page, Monad network chip (logo, live dot, block), theme toggle, wallet button (avatar and address, or "Connect wallet"). Below 640 px the three links sit in their own row under the bar; between 768 and 1024 px the mark shows without the word so the chip fits |
 | Footers | Site: four columns (product; transparency, with contract addresses once deployed; built on), a disclaimer and the licence. App: the disclaimer and links to Security, Tests and GitHub |
 | Panel | The one surface style: hairline border, 14 px radius, optional title row. Panels never nest |
 | Stat | Label above a tabular value with an optional hint; `dt`/`dd` |
@@ -237,6 +237,26 @@ Layout:
 | Deposit over balance | Red hint with the wallet balance | Lower the amount |
 | Withdraw over the liquid amount | "Available now" and why seized collateral must be sold first | Lower the amount |
 | Wrong network, pending, confirmed, error | As on the borrower page | |
+
+### Analytics `/app/analytics`
+
+Public, no wallet needed. Earnings come from the Envio indexer; live figures from Monad on the proposed block (ADR-038).
+
+- **Header band:** title, one line on what the page shows and where the numbers come from, the period selector (24 hours, 7 days, 30 days, All time; times in UTC) and "Indexed to block N".
+- **Key figures:** protocol earnings (with the live share, "10% of premiums"), liquidity providers' earnings (premiums plus gross exit discounts), penalty avoided for borrowers, exits, debt protected now and active covers. Sub-cent figures read "<$0.01" with the exact amount in the hint.
+- **Earnings over time:** a stacked bar chart in neutral greys ordered by lightness (premiums to liquidity providers, premiums to the protocol, exit discounts), hourly for 24 hours and 7 days and daily otherwise, with a hover and keyboard readout and "Show as table". Beside it, the earnings breakdown for the period and all time, including the protocol share paid to the treasury and the share waiting for the next sweep.
+- **Live on Monad:** the last ten blocks from `monadNewHeads`, each moving through Proposed, Voted, Finalized and Verified, with Shield's reprices marked; average block time, reprices seen and the protocol share earned while the page is open. On a local fork it polls, labels blocks "Mined" and says commit states are Monad-only.
+- **Keeper and cost:** reprices, gas and MON per reprice from the latest receipts, and how close to the trigger each exit ran.
+- **Tables:** covered positions and exits, scrolling inside their panels on phones.
+- **Worked example:** the one liquidation in Aave Monad's history, what the borrower paid above the debt and what a Shield exit would have cost, with the transaction and the sources.
+- **Lenders on Monad:** Aave V3 live; Euler V2, Morpho Blue, Curvance and Neverland coming soon, each with its Monad TVL from DefiLlama and the date. Names and initials only, no third-party logos.
+
+| State | Shows |
+| --- | --- |
+| Loading | Skeletons sized like the loaded figures and chart |
+| Indexer down or stale | The live figures still show; each indexer section says history is unavailable and why |
+| No data in the period | The chart says what will appear and when |
+| Socket closed | "Reconnecting in N s", retries back off from 1 s to 15 s |
 
 ## Flows
 
