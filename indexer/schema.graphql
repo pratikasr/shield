@@ -1,8 +1,125 @@
+enum PositionStatus {
+  Protected
+  Unprotected
+  OptedOut
+  Exited
+}
+
+enum VaultFlowKind {
+  Deposit
+  Withdraw
+  Premium
+  ExitFunded
+  CollateralReceived
+  Unwound
+}
+
+"""One borrower's cover. Money fields are 18-decimal vault-asset units unless noted; HF values are x 1e18."""
 type Position {
   id: ID!
-  borrower: String!
+  borrower: String! @index
   collateral: String!
+  status: PositionStatus!
   trigger: Int!
   maxDiscountBps: Int!
+  prepaid: BigInt!
+  premiumPaid: BigInt!
+  premiumPerBlock: BigInt!
+  healthFactor: BigInt!
+  sigma: BigInt!
+  repriceCount: Int!
   optedInAt: BigInt!
+  optedInTx: String!
+  lastRepricedBlock: BigInt!
+  exitedAt: BigInt
+  reprices: [Reprice!]! @derivedFrom(field: "position")
+  exits: [Exit!]! @derivedFrom(field: "position")
+  prepaidFlows: [PrepaidFlow!]! @derivedFrom(field: "position")
+}
+
+"""A Repriced event. Money fields are 18-decimal vault-asset units."""
+type Reprice {
+  id: ID!
+  position: Position!
+  borrower: String! @index
+  charged: BigInt!
+  premiumPerBlock: BigInt!
+  healthFactor: BigInt!
+  sigma: BigInt!
+  prepaid: BigInt!
+  lapsed: Boolean!
+  blockNumber: BigInt! @index
+  timestamp: BigInt!
+  txHash: String!
+  logIndex: Int!
+}
+
+"""An Exited event. repaid and savedVsAave are USDC units (6 decimals); seized is collateral units."""
+type Exit {
+  id: ID!
+  position: Position!
+  borrower: String! @index
+  collateral: String!
+  repaid: BigInt!
+  seized: BigInt!
+  savedVsAave: BigInt!
+  healthFactorBefore: BigInt!
+  healthFactorAfter: BigInt!
+  flashLoanAmount: BigInt!
+  blockNumber: BigInt! @index
+  timestamp: BigInt!
+  txHash: String!
+}
+
+"""A top-up or withdrawal of prepaid premium, in USDC units."""
+type PrepaidFlow {
+  id: ID!
+  position: Position!
+  borrower: String! @index
+  kind: String!
+  amount: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: String!
+}
+
+"""Money moving in or out of the vault, in USDC units (collateral flows: aToken units in collateralAmount)."""
+type VaultFlow {
+  id: ID!
+  kind: VaultFlowKind! @index
+  account: String
+  assets: BigInt!
+  shares: BigInt!
+  collateral: String
+  collateralAmount: BigInt!
+  blockNumber: BigInt! @index
+  timestamp: BigInt!
+  txHash: String!
+}
+
+"""Running vault totals, one row with id "vault". USDC units."""
+type VaultStats {
+  id: ID!
+  deposited: BigInt!
+  withdrawn: BigInt!
+  premiumEarned: BigInt!
+  exitsExecuted: Int!
+  exitFunding: BigInt!
+  collateralValueReceived: BigInt!
+  depositors: Int!
+}
+
+"""A Pyth observation recorded into a feed's volatility window."""
+type PriceSample {
+  id: ID!
+  feedId: String! @index
+  price: BigInt!
+  publishTime: BigInt!
+  count: Int!
+  blockNumber: BigInt!
+}
+
+type Depositor {
+  id: ID!
+  shares: BigInt!
 }

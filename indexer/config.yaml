@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
-# Shield indexer on Monad mainnet (chain 143). M1 scaffold: M5 adds every Shield event.
+# Shield on Monad mainnet (chain 143): positions, repricing, exits and vault flows (ADR-005, Envio bounty).
+# Hosted: HyperSync with ENVIO_API_TOKEN. Local rehearsal against a fork: ENVIO_RPC_URL=http://127.0.0.1:8545
+# and ENVIO_RPC_FOR=sync. Contract addresses and the start block come from ENVIO_* variables (see .env.example).
 name: shield-indexer
 description: Shield positions, repricing, exits and vault flows on Monad
 contracts:
@@ -7,9 +9,45 @@ contracts:
     abi_file_path: ./abis/PositionRegistry.json
     events:
       - event: OptedIn
+      - event: TriggerSet
+      - event: MaxDiscountSet
+      - event: OptedOut
+      - event: CoverLapsed
+      - event: CoverRestored
+      - event: RecordClosed
+  - name: Repricer
+    abi_file_path: ./abis/Repricer.json
+    events:
+      - event: Repriced
+      - event: PriceSampled
+      - event: ToppedUp
+      - event: Withdrawn
+      - event: PremiumForwarded
+  - name: Executor
+    abi_file_path: ./abis/Executor.json
+    events:
+      - event: Exited
+  - name: ShieldVault
+    abi_file_path: ./abis/ShieldVault.json
+    events:
+      - event: Deposit
+      - event: Withdraw
+      - event: PremiumReceived
+      - event: ExitFunded
+      - event: CollateralReceived
+      - event: Unwound
 chains:
   - id: 143
-    start_block: 0
+    start_block: ${ENVIO_START_BLOCK:-0}
+    rpc:
+      - url: ${ENVIO_RPC_URL:-https://rpc.monad.xyz}
+        for: ${ENVIO_RPC_FOR:-fallback}
     contracts:
       - name: PositionRegistry
         address: "${ENVIO_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000001}"
+      - name: Repricer
+        address: "${ENVIO_REPRICER_ADDRESS:-0x0000000000000000000000000000000000000002}"
+      - name: Executor
+        address: "${ENVIO_EXECUTOR_ADDRESS:-0x0000000000000000000000000000000000000003}"
+      - name: ShieldVault
+        address: "${ENVIO_VAULT_ADDRESS:-0x0000000000000000000000000000000000000004}"
