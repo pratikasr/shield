@@ -6,8 +6,9 @@ import {
   MIN_ALL_TIME_DAYS,
   applyHead,
   applyPolledBlock,
+  averageBlockMs,
+  pushWindow,
   axisUsd,
-  blockGaps,
   earningsSeries,
   exitLanding,
   formatTvl,
@@ -20,7 +21,6 @@ import {
   protocolCut,
   ratePerYear,
   repriceCost,
-  stateLatency,
   sumBuckets,
   totalsUsd,
   usdHeadline,
@@ -247,8 +247,6 @@ describe("live block stream", () => {
     expect(s.map((b) => b.number)).toEqual([101, 100]);
     expect(s[1]!.state).toBe("Finalized");
     expect(s[1]!.at).toEqual({ Proposed: 1000, Voted: 1310, Finalized: 1600 });
-    expect(blockGaps(s)).toEqual([300, undefined]);
-    expect(stateLatency(s, "Finalized")).toEqual([600]);
   });
 
   it("replaces a block that was only proposed when another proposal at that height moves on", () => {
@@ -268,7 +266,25 @@ describe("live block stream", () => {
     expect(same).toBe(s);
   });
 
-  it("adds polled blocks on a fork without commit states, and measures gaps only between neighbours", () => {
+  it("averages block time over a window, so two blocks delivered in one tick do not read as 0 ms", () => {
+    const pts = [
+      { n: 100, t: 0 },
+      { n: 101, t: 610 },
+      { n: 102, t: 610 },
+      { n: 103, t: 900 },
+      { n: 105, t: 1500 },
+      { n: 106, t: 1830 },
+    ];
+    expect(averageBlockMs(pts)).toBe(305);
+    expect(averageBlockMs(pts.slice(0, 3))).toBeUndefined();
+    expect(averageBlockMs([{ n: 1, t: 5 }])).toBeUndefined();
+    let w: number[] = [];
+    for (let i = 0; i < 70; i++) w = pushWindow(w, i);
+    expect(w).toHaveLength(64);
+    expect(w[0]).toBe(6);
+  });
+
+  it("adds polled blocks on a fork without commit states, once each, newest first", () => {
     let s: StreamBlock[] = [];
     s = applyPolledBlock(s, 50, 0);
     s = applyPolledBlock(s, 51, 310);
@@ -279,6 +295,5 @@ describe("live block stream", () => {
       [51, null],
       [50, null],
     ]);
-    expect(blockGaps(s)).toEqual([undefined, 310, undefined]);
   });
 });

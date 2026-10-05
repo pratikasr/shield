@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { decodeEventLog, encodeEventTopics, type Address, type Hex } from "viem";
 import { usePublicClient } from "wagmi";
 import { useLiveBlock, usePageVisible } from "@/hooks/useLiveBlock";
-import { applyHead, applyPolledBlock, parseHead, type StreamBlock } from "@/lib/analytics";
+import { applyHead, applyPolledBlock, parseHead, pushWindow, type HeadMessage, type StreamBlock } from "@/lib/analytics";
 import { repricerAbi } from "@/lib/abis";
 import { monadMainnet } from "@/lib/chains";
 import { isFork } from "@/lib/env";
@@ -18,7 +18,7 @@ const FLUSH_MS = 120;
 const BACKOFF_MAX_MS = 15_000;
 
 export type StreamMode = "socket" | "poll";
-export type StreamStatus = "connecting" | "live" | "reconnecting" | "paused" | "unavailable";
+export type StreamStatus = "connecting" | "live" | "reconnecting" | "paused" | "unavailable" | "unsupported";
 
 export interface StreamState {
   mode: StreamMode;
@@ -33,10 +33,37 @@ export interface StreamState {
   chargedSeen: bigint;
   /** False when the RPC refused the log subscription, so reprices cannot be marked. */
   logsAvailable: boolean;
+  /** (block number, browser ms) of recent proposals, or polled blocks on a fork, for the block-time average. */
+  proposals: { n: number; t: number }[];
+  /** Recent Proposed-to-Finalized times, ms. */
+  finalizeMs: number[];
 }
 
 function initial(mode: StreamMode): StreamState {
-  return { mode, status: mode === "socket" ? "connecting" : "live", blocks: [], repricesByBlock: {}, repricesSeen: 0, chargedSeen: 0n, logsAvailable: true };
+  return {
+    mode,
+    status: mode === "socket" ? "connecting" : "live",
+    blocks: [],
+    repricesByBlock: {},
+    repricesSeen: 0,
+    chargedSeen: 0n,
+    logsAvailable: true,
+    proposals: [],
+    finalizeMs: [],
+  };
+}
+
+/** Folds a head into the state: the block list, and the timing windows when it is a new proposal or a finalization. */
+function withHead(s: StreamState, head: HeadMessage, at: number): StreamState {
+  const blocks = applyHead(s.blocks, head, at);
+  if (blocks === s.blocks) return { ...s, status: "live", retryAt: undefined };
+  let { proposals, finalizeMs } = s;
+  if (head.commitState === "Proposed" && !proposals.some((p) => p.n === head.number)) proposals = pushWindow(proposals, { n: head.number, t: at });
+  if (head.commitState === "Finalized") {
+    const b = blocks.find((x) => x.number === head.number);
+    if (b?.at.Proposed !== undefined && b.at.Finalized !== undefined) finalizeMs = pushWindow(finalizeMs, b.at.Finalized - b.at.Proposed);
+  }
+  return { ...s, status: "live", retryAt: undefined, blocks, proposals, finalizeMs };
 }
 
 interface RawLog {
@@ -145,6 +172,16 @@ export function useBlockStream(repricer?: Address): StreamState {
         }
         if (m.id === 1) {
           if (typeof m.result === "string") headsSub = m.result;
+          else {
+            // This RPC has no monadNewHeads: retrying would not help.
+            closedByUs = true;
+            update((s) => ({ ...s, status: "unsupported", retryAt: undefined }));
+            try {
+              ws?.close();
+            } catch {
+              // Already closed.
+            }
+          }
           return;
         }
         if (m.id === 2) {
@@ -162,7 +199,7 @@ export function useBlockStream(repricer?: Address): StreamState {
           if (!head) return;
           attempt = 0;
           const at = typeof performance !== "undefined" ? performance.timeOrigin + performance.now() : Date.now();
-          update((s) => ({ ...s, status: "live", retryAt: undefined, blocks: applyHead(s.blocks, head, at) }));
+          update((s) => withHead(s, head, at));
         }
       };
       ws.onerror = () => {
@@ -203,7 +240,13 @@ export function useBlockStream(repricer?: Address): StreamState {
   const logsInFlight = useRef(false);
   useEffect(() => {
     if (mode !== "poll" || block === undefined) return;
-    update((s) => ({ ...s, status: "live", blocks: applyPolledBlock(s.blocks, Number(block), Date.now()) }));
+    const n = Number(block);
+    const at = Date.now();
+    update((s) =>
+      s.blocks.some((b) => b.number === n)
+        ? s
+        : { ...s, status: "live", blocks: applyPolledBlock(s.blocks, n, at), proposals: pushWindow(s.proposals, { n, t: at }) },
+    );
     if (!repricer || !client || logsInFlight.current) return;
     // Count reprices from the block the page opened at onward.
     const from = lastLogBlock.current === undefined ? block : lastLogBlock.current + 1n;

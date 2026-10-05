@@ -453,28 +453,31 @@ export function applyPolledBlock(blocks: readonly StreamBlock[], number: number,
   return [...blocks, { number, blockId: "", state: null, at: {}, seenAt: at }].sort((a, b) => b.number - a.number).slice(0, keep);
 }
 
-/** When a block was proposed (or first seen, when polled). */
-export function arrivalOf(b: StreamBlock): number {
-  return b.at.Proposed ?? b.seenAt;
-}
+/** Proposals remembered for the block-time average: about 20 seconds of Monad blocks. */
+export const TIMING_WINDOW = 64;
 
 /**
- * Milliseconds between each block and the one before it, by arrival in this browser, newest first. Undefined where the
- * previous block is not in the list or a gap spans skipped heights.
+ * Average milliseconds per block over a window of (block number, arrival) points: the time from the oldest to the
+ * newest arrival over the blocks between them. One browser tick can deliver two blocks at once, so single gaps jitter;
+ * the average over the window does not. Undefined until the window spans at least `minBlocks`.
  */
-export function blockGaps(blocks: readonly StreamBlock[]): (number | undefined)[] {
-  return blocks.map((b, i) => {
-    const prev = blocks[i + 1];
-    if (!prev || prev.number !== b.number - 1) return undefined;
-    if (b.at.Proposed === undefined && b.state !== null) return undefined;
-    if (prev.at.Proposed === undefined && prev.state !== null) return undefined;
-    return arrivalOf(b) - arrivalOf(prev);
-  });
+export function averageBlockMs(points: readonly { n: number; t: number }[], minBlocks = 5): number | undefined {
+  if (points.length < 2) return undefined;
+  let first = points[0]!;
+  let last = points[0]!;
+  for (const p of points) {
+    if (p.n < first.n) first = p;
+    if (p.n > last.n) last = p;
+  }
+  const blocks = last.n - first.n;
+  if (blocks < minBlocks || !(last.t > first.t)) return undefined;
+  return (last.t - first.t) / blocks;
 }
 
-/** Milliseconds from Proposed to a later state, for blocks where both arrived while the page was open. */
-export function stateLatency(blocks: readonly StreamBlock[], state: Exclude<CommitState, "Proposed">): number[] {
-  return blocks.filter((b) => b.at.Proposed !== undefined && b.at[state] !== undefined).map((b) => b.at[state]! - b.at.Proposed!);
+/** Keeps the newest `keep` items of a list after adding one. */
+export function pushWindow<T>(list: readonly T[], item: T, keep = TIMING_WINDOW): T[] {
+  const out = [...list, item];
+  return out.length > keep ? out.slice(out.length - keep) : out;
 }
 
 // ------------------------------------------------------------------------------------------------ fixed references
