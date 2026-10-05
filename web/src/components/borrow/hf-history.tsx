@@ -1,7 +1,7 @@
 "use client";
 
 import { LineChartIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { Address } from "viem";
 import { LineChart, formatTimeTick, niceTicks, timeTicks, type ChartMarker, type ChartPoint } from "@/components/charts/line-chart";
 import { HashLink } from "@/components/data/hash-link";
@@ -10,7 +10,7 @@ import { Panel } from "@/components/data/stat";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIndexerQuery } from "@/hooks/useIndexer";
-import { BORROWER_CHART, CHART_REPRICE_LIMIT, buildHfSeries, historyError, type BorrowerChart, type HfPoint } from "@/lib/envio";
+import { BORROWER_CHART, CHART_REPRICE_LIMIT, buildHfSeries, historyError, withLive, type BorrowerChart, type HfPoint } from "@/lib/envio";
 import { envioUrl } from "@/lib/env";
 import { formatHf, formatUsd, timeAgo, toNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -75,7 +75,7 @@ function Readout({ point, premium, scope }: { point?: HfPoint; premium?: number;
  * line and each exit; below it, the premium paid. Lazy-loaded: it sits below the fold and is not needed for the
  * first paint.
  */
-export default function HfHistoryPanel({
+function HfHistoryPanel({
   borrower,
   liveHf,
   trigger,
@@ -83,27 +83,30 @@ export default function HfHistoryPanel({
   nowSec,
 }: {
   borrower: Address;
+  /** Aave's health factor now. The page passes it at the 3 decimals shown, so the panel redraws only when it moves. */
   liveHf: number;
   /** The active cover's trigger. */
   trigger?: number;
   /** A cover is active: the keeper keeps repricing, so the line runs on to the live reading. */
   active: boolean;
-  /** Chain time now, unix seconds. */
+  /** Chain time now, unix seconds, in steps of a few seconds. */
   nowSec?: number;
 }) {
   const q = useIndexerQuery<BorrowerChart>(["borrower-chart", borrower], BORROWER_CHART, { borrower: borrower.toLowerCase() }, true, 6_000);
   const now = nowSec ?? Date.now() / 1000;
   const [chosen, setChosen] = useState<Range>();
   const [activeX, setActiveX] = useState<number>();
+  const [tableOpen, setTableOpen] = useState(false);
   const onActiveX = useCallback((x: number | undefined) => setActiveX(x), []);
 
+  // The indexed rows are parsed once per query result; the live reading is appended separately.
+  const indexed = useMemo(() => buildHfSeries(q.data), [q.data]);
   const liveT = active ? Math.floor(now) : undefined;
   const series = useMemo(
-    () => buildHfSeries(q.data, liveT !== undefined ? { hf: liveHf, t: liveT } : undefined),
-    // The live reading moves every block; the indexed part only when the query returns.
-    [q.data, liveHf, liveT],
+    () => ({ ...indexed, points: withLive(indexed.points, liveT !== undefined ? { hf: liveHf, t: liveT } : undefined) }),
+    [indexed, liveHf, liveT],
   );
-  const recorded = series.points.filter((p) => p.kind !== "live");
+  const recorded = indexed.points;
   const latest = recorded.at(-1);
 
   // "This cover" runs from the active cover's opt-in, so an earlier cover and the gap since it do not squeeze it.
@@ -237,7 +240,7 @@ export default function HfHistoryPanel({
     const premiumSummary = `${premiumWord}, from ${formatUsd(premiumFirst)} to ${formatUsd(premiumLast)} over this range`;
     const premiumOf = (p: HfPoint) => (p.cum !== undefined ? Math.max(p.cum - base, 0) : undefined);
 
-    const tableRows = [...inRange].reverse().slice(0, TABLE_ROWS);
+    const tableRows = tableOpen ? [...inRange].reverse().slice(0, TABLE_ROWS) : [];
 
     body = (
       <>
@@ -325,8 +328,10 @@ export default function HfHistoryPanel({
           </p>
         )}
 
-        <details className="group mt-4 border-t pt-3">
+        <details className="group mt-4 border-t pt-3" onToggle={(e) => setTableOpen(e.currentTarget.open)}>
           <summary className="hit relative w-fit cursor-pointer rounded-sm text-[0.8125rem] font-medium text-foreground">Show the data as a table</summary>
+          {/* Rows are built only once the table is opened: the panel stays cheap to redraw while it is closed. */}
+          {tableOpen && (
           <div className="relative mt-3 max-h-80 overflow-auto rounded-md border">
             <table className="w-full min-w-[30rem] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <caption className="sr-only">Health factor readings in this range, newest first</caption>
@@ -354,7 +359,8 @@ export default function HfHistoryPanel({
               </tbody>
             </table>
           </div>
-          {inRange.length > TABLE_ROWS && (
+          )}
+          {tableOpen && inRange.length > TABLE_ROWS && (
             <p className="mt-2 text-[0.8125rem] text-muted-foreground">
               The newest {TABLE_ROWS} of {inRange.length} readings in this range. Every reprice is listed with its transaction under Activity.
             </p>
@@ -384,3 +390,6 @@ export default function HfHistoryPanel({
     </Panel>
   );
 }
+
+/** Redrawn only when its inputs change, not on every block the page re-renders for. */
+export default memo(HfHistoryPanel);

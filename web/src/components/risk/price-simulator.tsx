@@ -2,7 +2,7 @@
 
 import { CircleCheck, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Slider as SliderPrimitive } from "radix-ui";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Chip } from "@/components/data/chip";
 import { Info } from "@/components/data/info";
 import { Stat } from "@/components/data/stat";
@@ -61,7 +61,7 @@ function Status({ sim, triggerWord }: { sim: Simulation; triggerWord: string }) 
  * Aave could liquidate there, and what each would cost. Only the chosen collateral's price moves; USDC debt and any
  * other collateral stay at their prices (lib/risk-math.ts).
  */
-export function PriceSimulator({
+function PriceSimulatorView({
   position,
   collateral,
   config,
@@ -216,6 +216,9 @@ export function PriceSimulator({
     </section>
   );
 }
+
+/** Redrawn when the position, the trigger or the settings change, not on every block the page re-renders for. */
+export const PriceSimulator = memo(PriceSimulatorView);
 
 /**
  * The chance the collateral's price touches the exit price within 24 hours and 7 days: a zero-drift lognormal

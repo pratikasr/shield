@@ -196,12 +196,22 @@ export function buildHfSeries(data: BorrowerChart | undefined, live?: { hf: numb
   });
   const order = { reprice: 0, exitBefore: 1, exit: 2, live: 3 } as const;
   const points = [...reprices, ...exits].filter((p) => plottable(p.hf)).sort((a, b) => a.block - b.block || order[a.kind] - order[b.kind]);
-  const last = points.at(-1);
-  if (live && plottable(live.hf) && (!last || live.t >= last.t)) points.push({ t: live.t, block: Number.NaN, hf: live.hf, kind: "live" });
   points.forEach((p, i) => {
     if (i > 0 && p.kind !== "exit") p.gapBefore = p.t - points[i - 1]!.t > GAP_SECONDS;
   });
-  return { points, truncated, droppedExits: data.Exit.length - kept.length };
+  return { points: withLive(points, live), truncated, droppedExits: data.Exit.length - kept.length };
+}
+
+/**
+ * The recorded readings plus the live one at the end, when it is plottable. The live reading is "now", so a clock that
+ * lags the last recording puts it at that recording's time rather than before it. Kept apart from buildHfSeries so
+ * the indexed rows are parsed once per query result, not once per block.
+ */
+export function withLive(points: HfPoint[], live?: { hf: number; t: number }): HfPoint[] {
+  const last = points.at(-1);
+  if (!live || !plottable(live.hf)) return points;
+  const t = last ? Math.max(live.t, last.t) : live.t;
+  return [...points, { t, block: Number.NaN, hf: live.hf, kind: "live", gapBefore: last !== undefined && t - last.t > GAP_SECONDS }];
 }
 
 /**

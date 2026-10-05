@@ -62,10 +62,13 @@ describe("health-factor chart series", () => {
     expect(live.gapBefore).toBe(false);
   });
 
-  it("skips readings with no debt and a live reading older than the last one", () => {
+  it("skips readings with no debt, and never puts the live reading before the last recording", () => {
     const noDebt: BorrowerChart = { ...data, Reprice: [{ ...reprice(104, 1004, 1, 0), healthFactor: (2n ** 255n).toString() }, ...data.Reprice] };
     expect(buildHfSeries(noDebt).points.some((p) => p.block === 104)).toBe(false);
-    expect(buildHfSeries(data, { hf: 1.2, t: 999 }).points.some((p) => p.kind === "live")).toBe(false);
+    expect(buildHfSeries(data, { hf: Number.POSITIVE_INFINITY, t: 1010 }).points.some((p) => p.kind === "live")).toBe(false);
+    const lagging = buildHfSeries(data, { hf: 1.2, t: 999 }).points.at(-1)!;
+    expect(lagging.kind).toBe("live");
+    expect(lagging.t).toBe(1003);
   });
 
   it("drops exits older than the loaded window when the list was cut at the limit", () => {

@@ -379,7 +379,14 @@ export function BorrowView({ initialWatch = "", walletHint = false }: { initialW
           {!watching && cover && !cover.active && cover.prepaidWad > 0n && <PrepaidCard cover={cover} disabled={wrongNetwork} refetch={refetch} />}
         </aside>
         <div className="grid min-w-0 gap-6 self-start lg:col-start-1">
-          <HfHistoryPanel borrower={viewer} liveHf={position.healthFactor} trigger={cover?.active ? cover.trigger : undefined} active={Boolean(cover?.active)} nowSec={chainNow} />
+          {/* The health factor at the 3 decimals shown and the clock in 5 s steps, so the chart redraws when they move, not on every block. */}
+          <HfHistoryPanel
+            borrower={viewer}
+            liveHf={Number.isFinite(position.healthFactor) ? Math.floor(position.healthFactor * 1000) / 1000 : position.healthFactor}
+            trigger={cover?.active ? cover.trigger : undefined}
+            active={Boolean(cover?.active)}
+            nowSec={chainNow === undefined ? undefined : Math.floor(chainNow / 5) * 5}
+          />
           <ActivityPanel history={history.data} isLoading={history.isLoading} error={history.error} chainExit={chainExit.data} active={Boolean(cover?.active)} />
         </div>
         <div className="grid min-w-0 gap-6 self-start lg:col-start-1">
