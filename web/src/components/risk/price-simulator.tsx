@@ -120,7 +120,7 @@ function PriceSimulatorView({
           <Info label="How the simulator works">
             Aave&rsquo;s health factor at a {symbol} price you choose: your supplied collateral times each liquidation threshold, over your debt. Only {symbol}
             &rsquo;s price moves; USDC debt and any other collateral stay where they are, and interest is left out. The exit is sized the way the Executor sizes it,
-            at the price where it would run on the way down.
+            at the price where it would run on the way down, and assumes the cover is armed then: paid up, approved and with a fresh Pyth price.
           </Info>
         </div>
         <p className="num text-sm text-muted-foreground" aria-live="off">
