@@ -35,11 +35,11 @@ function Item({ href, children, external }: { href: string; children: React.Reac
   return (
     <li>
       {external ? (
-        <a href={href} target="_blank" rel="noreferrer" className="rounded-sm transition-colors hover:text-foreground">
+        <a href={href} target="_blank" rel="noreferrer" className="hit relative rounded-sm transition-colors hover:text-foreground">
           {children}
         </a>
       ) : (
-        <Link href={href} prefetch={false} className="rounded-sm transition-colors hover:text-foreground">
+        <Link href={href} prefetch={false} className="hit relative rounded-sm transition-colors hover:text-foreground">
           {children}
         </Link>
       )}
@@ -88,7 +88,7 @@ export function SiteFooter() {
         <div className="mt-12 flex flex-col gap-4 border-t pt-6 text-[0.8125rem] text-muted-foreground md:flex-row md:items-start md:justify-between">
           <p className="max-w-3xl">{DISCLAIMER}</p>
           <p className="shrink-0">
-            <a href={DOCS.license} target="_blank" rel="noreferrer" className="hover:text-foreground">
+            <a href={DOCS.license} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">
               MIT License
             </a>
           </p>
@@ -105,9 +105,9 @@ export function AppFooter() {
       <div className="mx-auto flex max-w-[76rem] flex-col gap-3 px-4 py-6 text-[0.8125rem] text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between">
         <p className="max-w-3xl">{DISCLAIMER}</p>
         <nav aria-label="Resources" className="flex shrink-0 flex-wrap gap-x-5 gap-y-1">
-          <a href={DOCS.security} target="_blank" rel="noreferrer" className="hover:text-foreground">Security</a>
-          <a href={DOCS.tests} target="_blank" rel="noreferrer" className="hover:text-foreground">Tests</a>
-          <a href={REPO} target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
+          <a href={DOCS.security} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">Security</a>
+          <a href={DOCS.tests} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">Tests</a>
+          <a href={REPO} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">GitHub</a>
         </nav>
       </div>
     </footer>

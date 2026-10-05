@@ -6,10 +6,10 @@ import { useReadContract, useReadContracts } from "wagmi";
 import { aaveDataProviderAbi, aaveOracleAbi, aavePoolAbi, erc20Abi } from "@/lib/abis";
 import { monadMainnet } from "@/lib/chains";
 import { aave } from "@/lib/env";
-
-const chainId = monadMainnet.id;
 import { toNumber } from "@/lib/format";
 import { useOnBlock } from "./useLiveBlock";
+
+const chainId = monadMainnet.id;
 
 export interface ReserveLine {
   asset: Address;
@@ -18,6 +18,9 @@ export interface ReserveLine {
   decimals: number;
   supplied: number;
   borrowed: number;
+  /** The aToken and variable-debt balances in token units, for exact comparisons (allowance against balance). */
+  suppliedRaw: bigint;
+  borrowedRaw: bigint;
   priceUsd: number;
   suppliedUsd: number;
   borrowedUsd: number;
@@ -27,18 +30,28 @@ export interface ReserveLine {
 }
 
 export interface AavePosition {
+  /** Reserves the wallet supplies or borrows. */
   reserves: ReserveLine[];
+  /** Every Aave reserve, including ones the wallet does not hold (the cover's collateral after a full withdrawal). */
+  allReserves: ReserveLine[];
   collateralUsd: number;
   debtUsd: number;
   healthFactor: number;
   liquidationThreshold: number;
   eMode: number;
   hasPosition: boolean;
+  /** The wallet's USDC reserve line (debt Shield repays). */
+  usdc?: ReserveLine;
+  /**
+   * LTV-0 reserves the wallet supplies and uses as collateral. Aave refuses to move other collateral while one is
+   * enabled, so an exit could not take the aToken. Undefined while it is being checked.
+   */
+  ltv0Collateral: ReserveLine[] | undefined;
 }
 
 /**
- * The connected wallet's Aave V3 Monad position, read from the Pool, the oracle and every reserve's tokens on
- * proposed state, refreshed every block.
+ * A wallet's Aave V3 Monad position, read from the Pool, the oracle and every reserve's tokens on proposed state,
+ * refreshed every block.
  */
 export function useAavePosition(user?: Address) {
   const reservesList = useReadContract({ address: aave.pool, abi: aavePoolAbi, functionName: "getReservesList", chainId, query: { staleTime: Infinity } });
@@ -89,16 +102,19 @@ export function useAavePosition(user?: Address) {
     query: { enabled: Boolean(user) && tokens.length > 0 },
   });
   useOnBlock(() => {
-    if (user && tokens.length) void live.refetch();
+    // A slow read is not cancelled by the next block; it finishes and the next one starts after it.
+    if (user && tokens.length) void live.refetch({ cancelRefetch: false });
   });
 
-  const position = useMemo<AavePosition | undefined>(() => {
+  const base = useMemo(() => {
     if (!live.data) return undefined;
     const account = live.data[0] as unknown as readonly bigint[];
     const prices = live.data[2] as unknown as readonly bigint[];
-    const reserves: ReserveLine[] = tokens.map((t, i) => {
-      const supplied = toNumber(live.data![3 + 2 * i] as bigint, t.decimals);
-      const borrowed = toNumber(live.data![4 + 2 * i] as bigint, t.decimals);
+    const allReserves: ReserveLine[] = tokens.map((t, i) => {
+      const suppliedRaw = live.data![3 + 2 * i] as bigint;
+      const borrowedRaw = live.data![4 + 2 * i] as bigint;
+      const supplied = toNumber(suppliedRaw, t.decimals);
+      const borrowed = toNumber(borrowedRaw, t.decimals);
       const priceUsd = Number(prices[i] ?? 0n) / 1e8;
       return {
         asset: t.asset,
@@ -107,6 +123,8 @@ export function useAavePosition(user?: Address) {
         decimals: t.decimals,
         supplied,
         borrowed,
+        suppliedRaw,
+        borrowedRaw,
         priceUsd,
         suppliedUsd: supplied * priceUsd,
         borrowedUsd: borrowed * priceUsd,
@@ -117,19 +135,43 @@ export function useAavePosition(user?: Address) {
     });
     const debtUsd = Number(account[1]) / 1e8;
     return {
-      reserves: reserves.filter((r) => r.supplied > 0 || r.borrowed > 0),
+      reserves: allReserves.filter((r) => r.suppliedRaw > 0n || r.borrowedRaw > 0n),
+      allReserves,
       collateralUsd: Number(account[0]) / 1e8,
       debtUsd,
-      healthFactor: debtUsd === 0 ? Number.POSITIVE_INFINITY : toNumber(account[5], 18),
+      healthFactor: account[1] === 0n ? Number.POSITIVE_INFINITY : toNumber(account[5], 18),
       liquidationThreshold: Number(account[3]) / 1e4,
       eMode: Number(live.data[1] as bigint),
-      hasPosition: Number(account[0]) > 0 || debtUsd > 0,
+      hasPosition: account[0] > 0n || account[1] > 0n,
+      usdc: allReserves.find((r) => r.asset.toLowerCase() === aave.usdc.toLowerCase()),
     };
   }, [live.data, tokens]);
+
+  // Only reserves with LTV 0 that the wallet supplies need the collateral flag; usually there are none.
+  const ltv0Candidates = useMemo(() => base?.allReserves.filter((r) => r.ltv === 0 && r.suppliedRaw > 0n) ?? [], [base]);
+  const ltv0 = useReadContracts({
+    allowFailure: false,
+    contracts: user
+      ? ltv0Candidates.map((r) => ({ address: aave.dataProvider, abi: aaveDataProviderAbi, functionName: "getUserReserveData", args: [r.asset, user], chainId }) as const)
+      : [],
+    query: { enabled: Boolean(user) && ltv0Candidates.length > 0, refetchInterval: 10_000 },
+  });
+
+  const position = useMemo<AavePosition | undefined>(() => {
+    if (!base) return undefined;
+    let ltv0Collateral: ReserveLine[] | undefined = [];
+    if (ltv0Candidates.length > 0) {
+      ltv0Collateral = ltv0.data
+        ? ltv0Candidates.filter((_, i) => (ltv0.data![i] as readonly unknown[] | undefined)?.[8] === true)
+        : undefined;
+    }
+    return { ...base, ltv0Collateral };
+  }, [base, ltv0Candidates, ltv0.data]);
 
   return {
     position,
     isLoading: reservesList.isLoading || statics.isLoading || (Boolean(user) && live.isLoading),
     error: reservesList.error ?? statics.error ?? live.error,
+    refetch: live.refetch,
   };
 }

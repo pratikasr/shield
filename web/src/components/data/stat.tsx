@@ -19,7 +19,8 @@ export function Stat({
 }) {
   return (
     <div className={cn("min-w-0", className)}>
-      <dt className="flex items-center gap-1 text-[0.8125rem] text-muted-foreground">{label}</dt>
+      {/* A fixed label height keeps values on one line across a row, with or without an info button. */}
+      <dt className="flex min-h-6 items-center gap-1 text-[0.8125rem] text-muted-foreground">{label}</dt>
       <dd
         className={cn(
           "reading mt-1 font-semibold",

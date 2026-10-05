@@ -33,8 +33,9 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
   await expect(page.getByText(/Aave penalty if liquidated/).first()).toBeVisible();
 
   const panel = page.locator("aside");
+  const armed = panel.getByRole("heading", { name: "Protected", exact: true });
   for (let i = 0; i < 4; i++) {
-    if (await panel.getByRole("heading", { name: "Protected" }).isVisible().catch(() => false)) break;
+    if (await armed.isVisible().catch(() => false)) break;
     const action = panel.getByRole("button", { name: /^(Approve WETH|Approve USDC|Prepay|Opt in at)/ });
     await expect(action).toBeEnabled({ timeout: 60_000 });
     const label = await action.innerText();
@@ -54,7 +55,10 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
       result[`step${i + 1}`] = { label };
     }
   }
-  await expect(panel.getByRole("heading", { name: "Protected" })).toBeVisible({ timeout: 60_000 });
+  // New cover waits out the Executor's waiting period (20 s on the fork stack) before an exit can run, and the panel
+  // counts it down; "Protected" means armed, so it appears only after that.
+  await expect(panel.getByRole("heading", { name: /^Cover arms in|^Protected$/ })).toBeVisible({ timeout: 60_000 });
+  await expect(armed).toBeVisible({ timeout: 90_000 });
 
   const optIns = await client.getContractEvents({
     address: deployment.PositionRegistry as Address,

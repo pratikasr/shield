@@ -172,6 +172,17 @@
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-panel);
   }
+  /* A tap target of at least 44 px around a smaller control, without changing how it looks. The element must already
+     be positioned (relative or absolute). */
+  .hit::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -11,10 +11,13 @@ import type { Cover } from "./useShieldPosition";
 export interface ChainExit {
   txHash: string;
   blockNumber: bigint;
+  collateral: string;
   repaid: bigint;
+  seized: bigint;
   savedVsAave: bigint;
   healthFactorBefore: bigint;
   healthFactorAfter: bigint;
+  flashLoanAmount: bigint;
 }
 
 /**
@@ -40,14 +43,25 @@ export function useChainExit(borrower: Address | undefined, cover: Cover | undef
       });
       const last = logs.at(-1);
       if (!last) return null;
-      const a = last.args as { repaid: bigint; savedVsAave: bigint; healthFactorBefore: bigint; healthFactorAfter: bigint };
+      const a = last.args as {
+        collateral: Address;
+        repaid: bigint;
+        seized: bigint;
+        savedVsAave: bigint;
+        healthFactorBefore: bigint;
+        healthFactorAfter: bigint;
+        flashLoanAmount: bigint;
+      };
       return {
         txHash: last.transactionHash,
         blockNumber: last.blockNumber,
+        collateral: a.collateral,
         repaid: a.repaid,
+        seized: a.seized,
         savedVsAave: a.savedVsAave,
         healthFactorBefore: a.healthFactorBefore,
         healthFactorAfter: a.healthFactorAfter,
+        flashLoanAmount: a.flashLoanAmount,
       };
     },
   });

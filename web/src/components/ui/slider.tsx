@@ -11,8 +11,12 @@ function Slider({
   min = 0,
   max = 100,
   "aria-label": ariaLabel,
+  valueText,
   ...props
-}: React.ComponentProps<typeof SliderPrimitive.Root>) {
+}: React.ComponentProps<typeof SliderPrimitive.Root> & {
+  /** Spoken value, for example "$100,000" instead of the slider's raw position. */
+  valueText?: string
+}) {
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -50,6 +54,7 @@ function Slider({
           data-slot="slider-thumb"
           key={index}
           aria-label={ariaLabel}
+          aria-valuetext={valueText}
           className="relative block size-5 shrink-0 rounded-full border-2 border-foreground bg-white shadow-sm ring-ring/40 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden active:ring-4 disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
