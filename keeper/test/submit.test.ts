@@ -338,7 +338,8 @@ describe("Submitter after unclear send failures (audit M1, M2)", () => {
         return receipt(raw, keccak256(raw));
       },
     };
-    const s = submitter(script, [], sent);
+    const lines: string[] = [];
+    const s = submitter(script, [], sent, lines);
     await expect(s.send(exit)).rejects.toBeInstanceOf(TxInFlightError);
     const exitHash = keccak256(sent[0]!);
     expect(s.pending?.hash).toBe(exitHash);
@@ -351,6 +352,9 @@ describe("Submitter after unclear send failures (audit M1, M2)", () => {
     mined.add(exitHash);
     await s.send({ label: "repriceMany", to: TO, data: "0xbbbb", maxGas: 6_000_000n });
     expect(sent.map((r) => parseTransaction(r).nonce)).toEqual([7, 8]);
+    // The late inclusion is logged like any other, with the contract and the gas limit, for scripts/proof.sh.
+    const late = lines.map((l) => JSON.parse(l)).find((l) => l.event === "tx.included" && l.late);
+    expect(late).toMatchObject({ label: "exit", to: TO, hash: exitHash, gasLimit: "115000" });
   });
 
   it("reuses the nonce only after an unknown hash has stayed unknown past the grace period", async () => {

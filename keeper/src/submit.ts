@@ -193,6 +193,7 @@ interface PendingTx {
   nonce: number;
   label: string;
   to: Address;
+  gasLimit: bigint;
   since: number;
   known: boolean;
 }
@@ -286,6 +287,8 @@ export class Submitter {
         block: receipt.blockNumber,
         status: receipt.status,
         gasUsed: receipt.gasUsed,
+        gasLimit: p.gasLimit,
+        latencyMs: Date.now() - p.since,
         late: true,
       });
       return "mined";
@@ -335,7 +338,7 @@ export class Submitter {
     try {
       result = await this.broadcast(serialized, hash);
     } catch (err) {
-      throw await this.onSendFailure(err, tx, nonce, hash);
+      throw await this.onSendFailure(err, tx, nonce, hash, gas);
     }
     this.nonce = nonce + 1;
     const latencyMs = Date.now() - started;
@@ -405,9 +408,9 @@ export class Submitter {
   }
 
   /** Classifies a failed broadcast and returns the error to throw. Never lets the nonce be reused while unsure. */
-  private async onSendFailure(err: unknown, tx: TxRequest, nonce: number, hash: Hex): Promise<Error> {
+  private async onSendFailure(err: unknown, tx: TxRequest, nonce: number, hash: Hex, gasLimit: bigint): Promise<Error> {
     const markPending = (known: boolean, why: string) => {
-      this.pending = { hash, nonce, label: tx.label, to: tx.to, since: Date.now(), known };
+      this.pending = { hash, nonce, label: tx.label, to: tx.to, gasLimit, since: Date.now(), known };
       this.logger.warn("tx.pending", { label: tx.label, hash, nonce, known, why });
       return new TxInFlightError(hash, tx.label);
     };
