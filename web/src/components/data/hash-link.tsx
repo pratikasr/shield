@@ -20,7 +20,7 @@ export function HashLink({ value, kind = "tx", className }: { value: string; kin
     }
   };
   return (
-    <span className={cn("inline-flex items-center gap-1 num", className)}>
+    <span className={cn("relative inline-flex items-center gap-1 num", className)}>
       <a href={href} target="_blank" rel="noreferrer" className="rounded-sm underline decoration-border underline-offset-4 hover:decoration-foreground" title={value}>
         {truncateHex(value)}
         <span className="sr-only"> (opens the explorer)</span>

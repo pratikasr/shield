@@ -8,7 +8,7 @@ export function Wordmark({ className }: { className?: string }) {
         <rect x="11" y="1" width="3" height="16" rx="1.5" className="fill-caution" />
         <circle cx="20.5" cy="9" r="3" className="fill-safe" />
       </svg>
-      <span className="text-lg font-semibold tracking-tight" style={{ fontStretch: "125%" }}>
+      <span className="hidden text-lg font-semibold tracking-tight min-[420px]:inline" style={{ fontStretch: "125%" }}>
         Shield
       </span>
     </span>

@@ -15,6 +15,8 @@ const unusedOptionalModules = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // A second server (a dev build for screenshots) can use its own directory next to a production build.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   devIndicators: false,
   webpack: (config) => {
     config.resolve.alias = {

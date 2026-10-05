@@ -130,8 +130,8 @@ function Table({ title, empty, children, minWidth }: { title: string; empty: str
       {empty ? (
         <p className="px-5 pb-5 pt-2 text-sm text-muted-foreground sm:px-7">{empty}</p>
       ) : (
-        <div className="overflow-x-auto px-2 pb-3 sm:px-4">
-          <table className="mt-3 w-full text-left text-sm" style={{ minWidth }}>
+        <div className="relative overflow-x-auto px-2 pb-3 sm:px-4">
+          <table className="mt-3 w-full [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap text-left text-sm" style={{ minWidth }}>
             {children}
           </table>
         </div>
@@ -159,8 +159,8 @@ export function VaultView() {
   const indexerMissing = !envioUrl ? "History comes from the Envio indexer. Set NEXT_PUBLIC_ENVIO_GRAPHQL_URL to show it." : null;
   const h = history.data;
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]">
-      <div className="grid min-w-0 gap-6">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:col-start-1">
         <div>
           <h1 className="text-[1.75rem] font-semibold">Provide liquidity</h1>
           <p className="mt-2 max-w-[62ch] text-muted-foreground">
@@ -174,14 +174,20 @@ export function VaultView() {
               Could not read the vault from Monad: {error.message.split("\n")[0]}. Check your connection and reload.
             </p>
           ) : isLoading || !vault ? (
-            <div className="grid grid-cols-2 gap-6 sm:grid-cols-3" aria-busy="true" aria-label="Loading vault">
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="space-y-2">
-                  <Skeleton className="h-3.5 w-24" />
-                  <Skeleton className="h-7 w-28" />
-                </div>
-              ))}
-            </div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3" aria-busy="true" aria-label="Loading vault">
+              {["Vault value", "Premium rate now", "Premium earned", "Exits executed", "Average discount captured", "Share price"].map(
+                (label, i) => (
+                  <Stat
+                    key={label}
+                    size={i === 0 ? "lg" : "md"}
+                    className={i === 0 ? "col-span-2 sm:col-span-1" : undefined}
+                    label={label}
+                    value={<Skeleton className={i === 0 ? "h-9 w-36" : "h-7 w-28"} />}
+                    hint={i === 3 ? undefined : <Skeleton className={i === 0 ? "h-8 w-full max-w-60" : "h-4 w-24"} />}
+                  />
+                ),
+              )}
+            </dl>
           ) : (
             <dl className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3">
               <Stat
@@ -220,6 +226,11 @@ export function VaultView() {
           )}
         </section>
 
+      </div>
+      <aside className="min-w-0 lg:sticky lg:top-6 lg:col-start-2 lg:row-span-2 lg:row-start-1" aria-label="Deposit or withdraw">
+        <DepositWithdraw />
+      </aside>
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:col-start-1">
         <Table
           title="Exits"
           minWidth="36rem"
@@ -293,9 +304,6 @@ export function VaultView() {
           </tbody>
         </Table>
       </div>
-      <aside className="lg:sticky lg:top-6" aria-label="Deposit or withdraw">
-        <DepositWithdraw />
-      </aside>
     </div>
   );
 }

@@ -41,7 +41,7 @@ export function AppHeader() {
         Skip to content
       </a>
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-4 sm:gap-8">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-8">
           <Link href="/" className="rounded-md" aria-label="Shield home">
             <Wordmark />
           </Link>
@@ -54,7 +54,7 @@ export function AppHeader() {
                   href={n.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "whitespace-nowrap rounded-md px-2.5 py-2 text-sm sm:px-3",
+                    "whitespace-nowrap rounded-md px-2 py-2 text-sm sm:px-3",
                     active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -71,7 +71,7 @@ export function AppHeader() {
             })}
           </nav>
         </div>
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-2">
           <BlockPill />
           <ThemeToggle />
           <ConnectButton.Custom>
@@ -86,8 +86,9 @@ export function AppHeader() {
                 );
               }
               return (
-                <Button variant="outline" onClick={openAccountModal} className="num">
-                  {truncateHex(account.address, 4, 4)}
+                <Button variant="outline" onClick={openAccountModal} className="num px-3 sm:px-4">
+                  <span className="sm:hidden">{truncateHex(account.address, 4, 2)}</span>
+                  <span className="hidden sm:inline">{truncateHex(account.address, 4, 4)}</span>
                 </Button>
               );
             }}

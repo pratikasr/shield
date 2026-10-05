@@ -78,8 +78,8 @@ export function ExitHistory({
           No exits yet. If your health factor reaches the trigger, the exit and the penalty it avoided appear here.
         </p>
       ) : (
-        <div className="overflow-x-auto px-2 pb-3 sm:px-4">
-          <table className="mt-3 w-full min-w-[36rem] text-left text-sm">
+        <div className="relative overflow-x-auto px-2 pb-3 sm:px-4">
+          <table className="mt-3 w-full [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap min-w-[36rem] text-left text-sm">
             <thead>
               <tr className="text-[0.8125rem] text-muted-foreground">
                 <th scope="col" className="px-3 py-2 font-normal">When</th>
@@ -121,8 +121,8 @@ export function RepriceHistory({ history }: { history?: BorrowerHistory }) {
         Recent repricing
       </h2>
       <p className="px-5 pt-1 text-[0.8125rem] text-muted-foreground sm:px-7">Each row is one block&rsquo;s reprice transaction from the keeper.</p>
-      <div className="overflow-x-auto px-2 pb-3 sm:px-4">
-        <table className="mt-3 w-full min-w-[34rem] text-left text-sm">
+      <div className="relative overflow-x-auto px-2 pb-3 sm:px-4">
+        <table className="mt-3 w-full [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap min-w-[34rem] text-left text-sm">
           <thead>
             <tr className="text-[0.8125rem] text-muted-foreground">
               <th scope="col" className="px-3 py-2 font-normal">Block</th>

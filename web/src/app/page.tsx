@@ -56,7 +56,7 @@ export default function Landing() {
           </a>
           <ThemeToggle />
           <Button asChild>
-            <Link href="/app/borrow">Launch app</Link>
+            <Link href="/app/borrow" prefetch={false}>Launch app</Link>
           </Button>
         </nav>
       </header>
@@ -74,10 +74,10 @@ export default function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="lg">
-                <Link href="/app/borrow">Protect a position</Link>
+                <Link href="/app/borrow" prefetch={false}>Protect a position</Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/app/vault">Provide liquidity</Link>
+                <Link href="/app/vault" prefetch={false}>Provide liquidity</Link>
               </Button>
             </div>
           </div>
@@ -107,7 +107,7 @@ export default function Landing() {
                 },
               ].map((step, i) => (
                 <li key={step.title} className="grid grid-cols-[2rem_1fr] gap-x-3">
-                  <span className="reading text-xl font-semibold text-caution" aria-hidden>
+                  <span className="reading text-xl font-semibold text-muted-foreground" aria-hidden>
                     {i + 1}
                   </span>
                   <div>
@@ -129,12 +129,12 @@ export default function Landing() {
               Pre-liquidation is not new. Covering Aave, the largest lender on Monad, is. For collateral you could sell cheaply,
               a swap-based tool will cost you less, and we would rather say so here.
             </p>
-            <div className="mt-8 overflow-x-auto rounded-lg border">
+            <div className="relative mt-8 overflow-x-auto rounded-lg border bg-card">
               <table className="w-full min-w-[46rem] border-collapse text-left text-sm">
                 <caption className="sr-only">Shield compared with Morpho pre-liquidation, Euler V2 and DeFi Saver</caption>
                 <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th scope="col" className="w-40 px-4 py-3 font-medium text-muted-foreground">
+                  <tr className="border-b bg-muted">
+                    <th scope="col" className="sticky left-0 w-36 bg-muted px-4 py-3 font-medium text-muted-foreground">
                       <span className="sr-only">Property</span>
                     </th>
                     <th scope="col" className="px-4 py-3 font-semibold">Shield</th>
@@ -146,7 +146,7 @@ export default function Landing() {
                 <tbody>
                   {comparison.map((r) => (
                     <tr key={r.row} className="border-b last:border-b-0 align-top">
-                      <th scope="row" className="px-4 py-3 font-medium text-muted-foreground">
+                      <th scope="row" className="sticky left-0 bg-card px-4 py-3 font-medium text-muted-foreground shadow-[1px_0_0_var(--border)]">
                         {r.row}
                       </th>
                       {r.cells.map((c, i) => (

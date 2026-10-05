@@ -1,89 +1,17 @@
-import { expect, test, type Page } from "@playwright/test";
-import { readFileSync, writeFileSync } from "node:fs";
-import {
-  createPublicClient,
-  createTestClient,
-  createWalletClient,
-  decodeEventLog,
-  getAddress,
-  http,
-  parseAbi,
-  type Address,
-  type Hex,
-} from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { monad } from "viem/chains";
+import { expect, test } from "@playwright/test";
+import { writeFileSync } from "node:fs";
+import { decodeEventLog, type Address } from "viem";
 import { executorAbi } from "../src/lib/abi/Executor";
 import { positionRegistryAbi } from "../src/lib/abi/PositionRegistry";
 import { repricerAbi } from "../src/lib/abi/Repricer";
+import { AAVE_ORACLE, WETH, borrower, client, deployment, oracleAbi, setWethPrice, statValue, usd } from "./helpers";
 
 /**
  * The SPEC.md video script, walked through the real app on a fork: connect, opt in, premium ticks, the price
  * moves, the keeper exits, the Exited event lands, the borrower sees the penalty avoided, the LP page updates.
  * Every on-screen claim is checked against receipts and logs from the fork.
  */
-const rpc = process.env.E2E_RPC_URL ?? "http://127.0.0.1:8545";
-const deployment = JSON.parse(readFileSync(process.env.E2E_DEPLOYMENT!, "utf8")) as Record<string, string>;
-const borrower = getAddress(process.env.E2E_BORROWER!) as Address;
-const chain = { ...monad, rpcUrls: { default: { http: [rpc] } } };
-const client = createPublicClient({ chain, transport: http(rpc) });
-const testClient = createTestClient({ chain, mode: "anvil", transport: http(rpc) });
-const admin = createWalletClient({ chain, transport: http(rpc), account: privateKeyToAccount(process.env.E2E_ADMIN_KEY as Hex) });
-
-const WETH = getAddress("0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242");
-const AAVE_ORACLE = getAddress("0x0c02b2c2038066C10Eab8fe1D5Cdb73d5a78A1Bf");
-const ACL_ADMIN = getAddress("0xa9d0EAFF48cE1DF468f9eAeb7e628c413343F6A2");
-const oracleAbi = parseAbi([
-  "function getAssetPrice(address) view returns (uint256)",
-  "function setAssetSources(address[] assets, address[] sources)",
-]);
-
 const result: Record<string, unknown> = { borrower, deployment };
-
-async function statValue(page: Page, label: string): Promise<string> {
-  return (await page.locator("dt", { hasText: label }).first().locator("xpath=following-sibling::dd[1]").innerText()).trim();
-}
-
-function usd(text: string): number {
-  return Number(text.replace(/[^0-9.]/g, ""));
-}
-
-/** Retries a fork call: the fork fetches untouched mainnet state on demand and the upstream RPC can time out. */
-async function retry<T>(fn: () => Promise<T>, tries = 5): Promise<T> {
-  for (let i = 1; ; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (i >= tries) throw err;
-      await new Promise((r) => setTimeout(r, 2_000 * i));
-    }
-  }
-}
-
-/** Moves Aave's WETH price on the fork the way Aave's pool admin would: a new source for the asset. */
-async function setWethPrice(price8: bigint) {
-  return retry(() => setWethPriceOnce(price8));
-}
-
-async function setWethPriceOnce(price8: bigint) {
-  const artifact = JSON.parse(readFileSync("../contracts/out/ForkBase.sol/FixedPriceAggregator.json", "utf8")) as {
-    abi: unknown[];
-    bytecode: { object: Hex };
-  };
-  const hash = await admin.deployContract({ abi: artifact.abi, bytecode: artifact.bytecode.object, args: [price8] });
-  const agg = (await client.waitForTransactionReceipt({ hash })).contractAddress!;
-  await testClient.impersonateAccount({ address: ACL_ADMIN });
-  await testClient.setBalance({ address: ACL_ADMIN, value: 10n ** 20n });
-  const tx = await createWalletClient({ chain, transport: http(rpc), account: ACL_ADMIN }).writeContract({
-    address: AAVE_ORACLE,
-    abi: oracleAbi,
-    functionName: "setAssetSources",
-    args: [[WETH], [agg]],
-  });
-  await client.waitForTransactionReceipt({ hash: tx });
-  await testClient.stopImpersonatingAccount({ address: ACL_ADMIN });
-  return { aggregator: agg, tx };
-}
 
 test("the video script, end to end on a Monad mainnet fork", async ({ page }) => {
   // 1. Position page, connect.

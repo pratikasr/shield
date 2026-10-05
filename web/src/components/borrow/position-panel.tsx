@@ -117,10 +117,10 @@ export function PositionPanel({
                 trigger at 80% volatility pays 2% of its debt a year. The keeper reprices every block.
               </Info>
             </p>
-            <p className="reading mt-0.5 flex items-center gap-3 text-xl font-semibold" aria-live="off">
+            <p className="reading mt-0.5 text-xl font-semibold" aria-live="off">
               {cover.lapsed ? "Paused" : formatUsd(cover.livePremiumPerBlockUsd)}
-              <Sparkline values={[...premiumHistory, cover.livePremiumPerBlockUsd]} />
             </p>
+            <Sparkline values={[...premiumHistory, cover.livePremiumPerBlockUsd]} className="mt-1 h-5 w-full max-w-36" />
             <p className="mt-1 text-[0.8125rem] text-muted-foreground">{formatUsd(cover.annualPremiumUsd)} a year at this rate</p>
           </div>
           <Stat
@@ -142,8 +142,8 @@ export function ReservesTable({ position }: { position: AavePosition }) {
       <h2 id="reserves-heading" className="px-5 pt-5 text-base font-semibold sm:px-7">
         Aave reserves on this wallet
       </h2>
-      <div className="overflow-x-auto px-2 pb-3 sm:px-4">
-        <table className="mt-3 w-full min-w-[30rem] text-left text-sm">
+      <div className="relative overflow-x-auto px-2 pb-3 sm:px-4">
+        <table className="mt-3 w-full [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap min-w-[30rem] text-left text-sm">
           <thead>
             <tr className="text-[0.8125rem] text-muted-foreground">
               <th scope="col" className="px-3 py-2 font-normal">Asset</th>

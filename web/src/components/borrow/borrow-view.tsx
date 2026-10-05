@@ -1,9 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getAddress, isAddress, type Address } from "viem";
 import { useAccount } from "wagmi";
 import { CoverManage, CoverSetup, CoverUnavailable } from "@/components/borrow/cover-panel";
@@ -32,7 +30,6 @@ function Notice({ title, children, action }: { title: string; children: React.Re
 
 /** Read-only view of any address, for anyone without that wallet (a judge checking the demo position). */
 function WatchForm() {
-  const router = useRouter();
   const [value, setValue] = useState("");
   const valid = isAddress(value.trim());
   return (
@@ -40,7 +37,7 @@ function WatchForm() {
       className="mx-auto mt-6 flex max-w-md gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) router.push(`/app/borrow?address=${getAddress(value.trim())}`);
+        if (valid) window.location.assign(`/app/borrow?address=${getAddress(value.trim())}`);
       }}
     >
       <label htmlFor="watch" className="sr-only">
@@ -56,8 +53,14 @@ function WatchForm() {
 
 export function BorrowView() {
   const { address, isConnected } = useAccount();
-  const search = useSearchParams();
-  const watchParam = search.get("address") ?? "";
+  // Read after mount: useSearchParams would make Next skip server rendering of the whole page.
+  const [watchParam, setWatchParam] = useState("");
+  useEffect(() => {
+    const read = () => setWatchParam(new URLSearchParams(window.location.search).get("address") ?? "");
+    read();
+    window.addEventListener("popstate", read);
+    return () => window.removeEventListener("popstate", read);
+  }, []);
   const watching = !isConnected && isAddress(watchParam) ? (getAddress(watchParam) as Address) : undefined;
   const viewer = isConnected ? address : watching;
   const wrongNetwork = useWrongNetwork();
@@ -90,9 +93,6 @@ export function BorrowView() {
         <WatchForm />
       </>
     );
-  }
-  if (wrongNetwork) {
-    return <Notice title="Switch to Monad">Your position lives on Monad. Use the switch button above to continue.</Notice>;
   }
   if (error) {
     return (
@@ -132,16 +132,16 @@ export function BorrowView() {
   const canCover = position.eMode === 0 && collateral && (position.reserves.find((r) => r.symbol === "USDC")?.borrowed ?? 0) > 0;
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]">
-      <div className="grid min-w-0 gap-6">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:col-start-1">
         {watching && (
           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-raised px-4 py-3 text-sm">
             <span>
               Viewing <span className="num">{truncateHex(watching)}</span>, read only. Connect that wallet to change its cover.
             </span>
-            <Link href="/app/borrow" className="rounded-sm underline underline-offset-4">
+            <a href="/app/borrow" className="rounded-sm underline underline-offset-4">
               Stop viewing
-            </Link>
+            </a>
           </div>
         )}
         <div>
@@ -160,11 +160,8 @@ export function BorrowView() {
           )}
         </div>
         <PositionPanel position={position} cover={cover} previewTrigger={cover?.active ? undefined : previewTrigger} premiumHistory={premiumHistory} />
-        <ExitHistory history={history.data} isLoading={history.isLoading} error={history.error} chainExit={chainExit.data} />
-        <RepriceHistory history={history.data} />
-        <ReservesTable position={position} />
       </div>
-      <aside className="lg:sticky lg:top-6" aria-label="Cover">
+      <aside className="min-w-0 lg:sticky lg:top-6 lg:col-start-2 lg:row-span-2 lg:row-start-1" aria-label="Cover">
         {watching ? (
           <WatchedCover cover={cover} />
         ) : !canCover ? (
@@ -183,6 +180,11 @@ export function BorrowView() {
           />
         )}
       </aside>
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:col-start-1">
+        <ExitHistory history={history.data} isLoading={history.isLoading} error={history.error} chainExit={chainExit.data} />
+        <RepriceHistory history={history.data} />
+        <ReservesTable position={position} />
+      </div>
     </div>
   );
 }
@@ -199,7 +201,9 @@ function WatchedCover({ cover }: { cover?: import("@/hooks/useShieldPosition").C
         </div>
         <div>
           <dt className="text-muted-foreground">Trigger</dt>
-          <dd className="reading font-semibold text-caution">{cover?.active ? cover.trigger.toFixed(2) : "Not set"}</dd>
+          <dd className={cover?.active ? "reading font-semibold text-caution" : "reading font-semibold text-muted-foreground"}>
+            {cover?.active ? cover.trigger.toFixed(2) : "Not set"}
+          </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Prepaid</dt>
