@@ -2,6 +2,7 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Eye, ShieldCheck, Wallet } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress, type Address } from "viem";
 import { useAccount } from "wagmi";
@@ -9,7 +10,7 @@ import { CoverManage } from "@/components/borrow/cover-manage";
 import { CoverSetup, CoverUnavailable } from "@/components/borrow/cover-setup";
 import { ExitSummary, PrepaidCard, WatchedCover } from "@/components/borrow/cover-extras";
 import { AAVE_APP, KEEPER_IDLE_BLOCKS } from "@/components/borrow/cover-shared";
-import { ActivityPanel, exitRows, useBorrowerHistory } from "@/components/borrow/history";
+import { ActivityPanel, HfHistorySkeleton, exitRows, useBorrowerHistory } from "@/components/borrow/history";
 import { PositionHeader, PositionPanel, PositionSkeleton, ReservesTable, pickCollateral } from "@/components/borrow/position-panel";
 import { SourcesPanel } from "@/components/borrow/sources-panel";
 import { HashLink } from "@/components/data/hash-link";
@@ -27,6 +28,9 @@ import { useTx } from "@/hooks/useTx";
 import { LOADING_ARM, computeArm } from "@/lib/cover-status";
 import { collateralName, isDeployed } from "@/lib/env";
 import { firstLine, formatUsd, toNumber, truncateHex } from "@/lib/format";
+
+/** Below the fold and not needed for the first paint: its code loads after the page is interactive. */
+const HfHistoryPanel = dynamic(() => import("@/components/borrow/hf-history"), { ssr: false, loading: () => <HfHistorySkeleton /> });
 
 function Notice({ icon, title, children, action, footer }: { icon?: React.ReactNode; title: string; children: React.ReactNode; action?: React.ReactNode; footer?: React.ReactNode }) {
   return (
@@ -374,7 +378,8 @@ export function BorrowView({ initialWatch = "", walletHint = false }: { initialW
           {panel}
           {!watching && cover && !cover.active && cover.prepaidWad > 0n && <PrepaidCard cover={cover} disabled={wrongNetwork} refetch={refetch} />}
         </aside>
-        <div className="min-w-0 lg:col-start-1">
+        <div className="grid min-w-0 gap-6 self-start lg:col-start-1">
+          <HfHistoryPanel borrower={viewer} liveHf={position.healthFactor} trigger={cover?.active ? cover.trigger : undefined} active={Boolean(cover?.active)} nowSec={chainNow} />
           <ActivityPanel history={history.data} isLoading={history.isLoading} error={history.error} chainExit={chainExit.data} active={Boolean(cover?.active)} />
         </div>
         <div className="grid min-w-0 gap-6 self-start lg:col-start-1">

@@ -1,4 +1,5 @@
 import { envioUrl } from "./env";
+import { toNumber } from "./format";
 
 /** Why history is missing, as the end of the sentence "History unavailable: ...". Never a raw "Failed to fetch". */
 export class IndexerError extends Error {
@@ -97,6 +98,132 @@ export const BORROWER_HISTORY = `
     }
     Exit(where: { borrower: { _eq: $borrower } }, order_by: { blockNumber: desc }) {
       ${EXIT_FIELDS}
+    }
+  }`;
+
+/** Reprices a borrower's health-factor chart loads, newest first: about 2.5 minutes of every-block repricing. */
+export const CHART_REPRICE_LIMIT = 500;
+
+export interface ChartRepriceRow {
+  blockNumber: string;
+  logIndex: number;
+  timestamp: string;
+  healthFactor: string;
+  charged: string;
+}
+
+export interface ChartExitRow {
+  blockNumber: string;
+  timestamp: string;
+  healthFactorBefore: string;
+  healthFactorAfter: string;
+  /** HF x 1e4 when the exit ran. */
+  trigger: number;
+  savedVsAave: string;
+  txHash: string;
+}
+
+export interface BorrowerChart {
+  Reprice: ChartRepriceRow[];
+  Exit: ChartExitRow[];
+  /** premiumPaid is the borrower's total over every cover, 18-decimal USDC units; optedInAt is the latest opt-in. */
+  Position: { premiumPaid: string; repriceCount: number; optedInAt: string }[];
+}
+
+/** A borrower's latest reprices (health factor and premium charged), every exit, and the premium paid in total. */
+export const BORROWER_CHART = `
+  query BorrowerChart($borrower: String!) {
+    Reprice(where: { borrower: { _eq: $borrower } }, order_by: [{ blockNumber: desc }, { logIndex: desc }], limit: ${CHART_REPRICE_LIMIT}) {
+      blockNumber logIndex timestamp healthFactor charged
+    }
+    Exit(where: { borrower: { _eq: $borrower } }, order_by: { blockNumber: desc }) {
+      blockNumber timestamp healthFactorBefore healthFactorAfter trigger savedVsAave txHash
+    }
+    Position(where: { borrower: { _eq: $borrower } }) { premiumPaid repriceCount optedInAt }
+  }`;
+
+/** More than this between two readings and the chart's line is dashed: no reprice was recorded in between. */
+export const GAP_SECONDS = 300;
+
+/** One reading on a borrower's health-factor chart. */
+export interface HfPoint {
+  /** Unix seconds. */
+  t: number;
+  block: number;
+  hf: number;
+  /** Premium paid across every cover once this reprice was charged, in USD; undefined for exits and the live reading. */
+  cum?: number;
+  /** What this reprice charged, in USD. */
+  charged?: number;
+  kind: "reprice" | "exitBefore" | "exit" | "live";
+  exit?: ChartExitRow;
+  gapBefore?: boolean;
+}
+
+/** Aave reports type(uint256).max with no debt: no health factor to plot. */
+const plottable = (hf: number) => Number.isFinite(hf) && hf < 1e9;
+
+/**
+ * A borrower's chart series, oldest first: each reprice's health factor and the premium paid once it was charged
+ * (counted back from the indexer's total), each exit as the reading before it and the one after, and, while a cover is
+ * active, the live reading `live`. When the reprice list was cut at the limit, exits older than the first loaded
+ * reprice are left out, so a dashed gap never claims "no reprice" over reprices that were only not loaded.
+ */
+export function buildHfSeries(data: BorrowerChart | undefined, live?: { hf: number; t: number }): { points: HfPoint[]; truncated: boolean; droppedExits: number } {
+  if (!data) return { points: [], truncated: false, droppedExits: 0 };
+  const desc = data.Reprice;
+  const repriceCount = data.Position[0]?.repriceCount ?? desc.length;
+  const truncated = desc.length >= CHART_REPRICE_LIMIT && repriceCount > desc.length;
+  const total = data.Position[0] ? toNumber(BigInt(data.Position[0].premiumPaid), 18) : desc.reduce((s, r) => s + toNumber(BigInt(r.charged), 18), 0);
+
+  let cum = total;
+  const reprices: HfPoint[] = desc
+    .map((r) => {
+      const charged = toNumber(BigInt(r.charged), 18);
+      const p: HfPoint = { t: Number(r.timestamp), block: Number(r.blockNumber), hf: toNumber(BigInt(r.healthFactor), 18), cum: Math.max(cum, 0), charged, kind: "reprice" };
+      cum -= charged;
+      return p;
+    })
+    .reverse();
+  const firstBlock = reprices[0]?.block ?? Number.POSITIVE_INFINITY;
+  const kept = data.Exit.filter((e) => !truncated || Number(e.blockNumber) >= firstBlock);
+  const exits: HfPoint[] = kept.flatMap((e) => {
+    const block = Number(e.blockNumber);
+    const t = Number(e.timestamp);
+    // The exit transaction's own reprice already carries the reading before it.
+    const before: HfPoint[] = reprices.some((r) => r.block === block) ? [] : [{ t, block, hf: toNumber(BigInt(e.healthFactorBefore), 18), kind: "exitBefore", exit: e }];
+    return [...before, { t, block, hf: toNumber(BigInt(e.healthFactorAfter), 18), kind: "exit" as const, exit: e }];
+  });
+  const order = { reprice: 0, exitBefore: 1, exit: 2, live: 3 } as const;
+  const points = [...reprices, ...exits].filter((p) => plottable(p.hf)).sort((a, b) => a.block - b.block || order[a.kind] - order[b.kind]);
+  const last = points.at(-1);
+  if (live && plottable(live.hf) && (!last || live.t >= last.t)) points.push({ t: live.t, block: Number.NaN, hf: live.hf, kind: "live" });
+  points.forEach((p, i) => {
+    if (i > 0 && p.kind !== "exit") p.gapBefore = p.t - points[i - 1]!.t > GAP_SECONDS;
+  });
+  return { points, truncated, droppedExits: data.Exit.length - kept.length };
+}
+
+/**
+ * Platform earnings since deployment (ADR-038). Premium fields are 18-decimal USDC units as charged; exitDiscount,
+ * debtRepaid, savedVsAave and protocolPaid are USDC units (6 decimals).
+ */
+export interface EarningsAll {
+  premiumCharged: string;
+  premiumToVault: string;
+  premiumToProtocol: string;
+  protocolPaid: string;
+  exitDiscount: string;
+  exits: number;
+  debtRepaid: string;
+  savedVsAave: string;
+  reprices: number;
+}
+
+export const EARNINGS_ALL = `
+  query EarningsAll {
+    EarningsBucket(where: { id: { _eq: "all" } }) {
+      premiumCharged premiumToVault premiumToProtocol protocolPaid exitDiscount exits debtRepaid savedVsAave reprices
     }
   }`;
 
