@@ -2,7 +2,8 @@
  * Number and hash formatting used everywhere in the app. Every number on screen goes through here.
  */
 const usd2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const usdCompact = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 });
+// minimumFractionDigits is explicit: without it some ICU versions (Node 22, older browsers) pad "$200K" to "$200.00K".
+const usdCompact = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 /** The smallest dollar figure shown in digits; anything below reads "<$0.000000001". */
 const USD_FLOOR = 1e-9;

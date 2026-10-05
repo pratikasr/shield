@@ -141,7 +141,7 @@ Every check rerun on `main` after the protocol share (ADR-037) and the analytics
 | Static analysis | as in Round 1 | Slither 8 high and 19 medium, the new medium the same deliberate remainder as `sweep`; Aderyn the same 2 highs; all justified in docs/SECURITY.md |
 | Keeper | `pnpm --filter keeper test` | 81 pass, 2 live smoke tests skipped by default |
 | Indexer | `pnpm --filter shield-indexer test` | 6 pass (a new one checks the per-charge split, hourly, daily and all-time buckets, payouts and the exit's trigger and discount) |
-| Web unit tests | `pnpm --filter web test` | 47 pass: amounts, risk maths (health factor at a price, simulator thresholds, chance of touching a price), analytics series |
+| Web unit tests | `pnpm --filter web test`, on Node 24 and on Node 22 as in CI | 49 pass: amounts, formatting, risk maths (health factor at a price, simulator thresholds, chance of touching a price), analytics series |
 | Workspace | `pnpm lint` and `pnpm --filter web build` | clean |
 | End to end, clean fork of block 110760655 | `MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/e2e.sh` | pass: opt-in in block 110761050; reprices in blocks 110761051, 110761052 and 110761053 with keeper receipts 298 ms and 302 ms apart; exit in block 110761123, HF 1.0529 to 1.1200, 1.186543 USDC saved on 26.37 USDC repaid; exit gas 699,739 on the fork |
 | The scripted mainnet flow, clean fork of block 110762163 | `fork.sh`, `deploy-mainnet.sh --fork`, `demo-position.sh seed/open/keeper/nudge --fork`, `sweepProtocol()`, `proof.sh --fork` | pass; the treasury received its share on chain; details in [DEMO.md](DEMO.md), run 5 |
@@ -156,4 +156,5 @@ Defects found in this round and fixed:
 4. **The video-script test moved the wrong slider**: the new price simulator is the first slider on the page. Both specs now find the trigger slider by its name.
 5. **The MetaMask SDK loaded on every app page** (about 450 KB) through RainbowKit's MetaMask entry. MetaMask now connects through its extension; blocking time on the app pages fell by about two thirds.
 6. **A Vitest config committed before Vitest was installed broke a web build** in the stack. Vitest is now a web dev dependency.
+7. **Compact dollar figures read "$200.00K" on Node 22** (CI) and "$200K" on Node 24: some ICU versions pad compact currency to two decimals unless told not to, and browsers differ the same way. The formatter now sets the minimum explicitly, with a test, and the web suite was run on both Node versions.
 
