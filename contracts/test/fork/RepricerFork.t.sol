@@ -105,12 +105,12 @@ contract RepricerForkTest is ForkBase {
         assertEq(d.registry.treasury(), address(this), "treasury defaults to the owner");
         _nextBlock();
         d.repricer.reprice(borrower, _none());
-        uint256 accruedBefore = d.registry.record(borrower).accrued;
         vm.roll(block.number + 200_000);
         vm.warp(block.timestamp + 60_000);
         d.repricer.reprice(borrower, _none());
-        uint256 charged = d.registry.record(borrower).accrued - accruedBefore;
-        assertEq(uint256(d.repricer.pendingToTreasury()), charged * 1000 / 10_000);
+        // Every charge since opt-in, split charge by charge (each split rounds down, so allow one unit per charge).
+        uint256 accrued = d.registry.record(borrower).accrued;
+        assertApproxEqAbs(uint256(d.repricer.pendingToTreasury()), accrued * 1000 / 10_000, 2);
         uint256 owed = d.repricer.pendingProtocolPremium();
         assertGt(owed, 0);
         uint256 before = usdc.balanceOf(address(this));
@@ -121,7 +121,8 @@ contract RepricerForkTest is ForkBase {
         assertEq(
             d.vault.totalPremiumEarned() * 1e12 + owed * 1e12 + d.repricer.pendingToVault()
                 + d.repricer.pendingToTreasury(),
-            charged
+            accrued,
+            "every unit charged is with the vault, the treasury, or pending"
         );
     }
 }

@@ -138,7 +138,7 @@ Filled during M6 with Monad mainnet transactions only, from `bash scripts/proof.
 | Opt-in tx | not yet (M6) |
 | Three consecutive repricing txs | not yet (M6) |
 | Exit tx (`Exited` event) | not yet (M6) |
-| Gas (forge snapshot, Monad execution, cold state, after the audit fixes) | `exit` funded by the vault 1,175,748; `exit` through the flash-loan fallback 1,850,421; `reprice` of one borrower 524,163; `repriceMany` of three 699,754; vault `unwind` 849,073. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
+| Gas (forge snapshot, Monad execution, cold state, with the protocol share) | `exit` funded by the vault 1,178,113; `exit` through the flash-loan fallback 1,852,786; `reprice` of one borrower 526,248; `repriceMany` of three 704,199; vault `unwind` 849,073. The protocol share added about 2,100 gas to a reprice (0.4%) and 2,400 to an exit. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
 | Gas with the keeper's access list (mainnet fork, measured before the audit fixes with `pnpm --filter keeper measure`) | steady-state `repriceMany` for one borrower 192,094 (523,194 without); `exit` 682,349 (1,203,849 without) |
 | Envio indexer endpoint | not yet (needs the owner's Envio login) |
 | Demo video | not yet (M6) |
@@ -203,10 +203,10 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 
 | What | Command | Result |
 | --- | --- | --- |
-| Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 122 tests pass: 82 unit, fuzz and invariant (mocks), 40 fork tests against real Aave on Monad |
+| Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 130 tests pass: 89 unit, fuzz and invariant (mocks), 41 fork tests against real Aave on Monad |
 | Static analysis | Slither 0.11.6, Aderyn 0.6.8 | every high and medium fixed or justified in [docs/SECURITY.md](docs/SECURITY.md) |
 | Keeper | `pnpm --filter keeper test` | 81 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
-| Indexer | `pnpm --filter shield-indexer test` | 5 tests pass |
+| Indexer | `pnpm --filter shield-indexer test` | 6 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
 | Lighthouse (mobile) | landing, borrower, LP | performance 97, 92, 91; accessibility and best practices 100 on all; CLS 0 |

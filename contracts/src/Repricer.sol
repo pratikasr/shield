@@ -47,9 +47,9 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
 
     /// @notice Block time used to turn an annual premium into a per-block premium (MIP-12: 300 ms).
     uint32 public blockTimeMs = 300;
-    /// @notice Premium owed to the vault that is smaller than one asset unit, in 18-decimal units.
-    /// @notice Charged premium not yet swept, 18-decimal units: the vault's part and the protocol's (ADR-037).
-    /// One slot, so a charge writes both with a single cold store.
+    /// @notice Charged premium not yet swept, in 18-decimal units: the vault's part and the protocol's (ADR-037).
+    /// Sweeps move whole asset units and leave the remainder here. One slot, so a charge writes both with a single
+    /// cold store.
     uint128 public pendingToVault;
     uint128 public pendingToTreasury;
 
@@ -176,9 +176,9 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         uint256 pending = pendingToTreasury;
         amount = pending / scale;
         if (amount == 0) return 0;
+        pendingToTreasury = uint128(pending - amount * scale);
         // A share above zero can only be set together with a treasury, so this is never address(0).
         address treasury = registry.treasury();
-        pendingToTreasury = uint128(pending - amount * scale);
         asset.safeTransfer(treasury, amount);
         emit ProtocolPremiumPaid(treasury, amount);
     }

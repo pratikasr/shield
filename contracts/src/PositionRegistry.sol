@@ -56,7 +56,7 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
     mapping(address collateral => AssetConfig) private _assetConfig;
     address[] private _assets;
     address[] private _active;
-    /// @notice Receives the protocol share of premiums (Repricer.sweep).
+    /// @notice Receives the protocol share of premiums (Repricer.sweepProtocol).
     address public treasury;
 
     modifier onlyRepricer() {
@@ -241,7 +241,6 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
         emit AssetConfigured(collateral, cfg.id, pythFeedId, k, sigmaFallback, enabled);
     }
 
-    /// @notice Exit discount (bps), post-exit HF buffer and premium distance floor (both HF x 1e4).
     /// @notice Sets the protocol's share of premiums and the treasury that receives it. The share applies to charges
     /// from the next reprice on; premium already charged keeps the split it was charged with.
     function setProtocolShare(address treasury_, uint16 protocolShareBps_) external onlyOwner {
@@ -251,6 +250,7 @@ contract PositionRegistry is IPositionRegistry, Ownable2Step {
         emit ProtocolShareSet(treasury_, protocolShareBps_);
     }
 
+    /// @notice Exit discount (bps), post-exit HF buffer and premium distance floor (both HF x 1e4).
     function setExitParams(uint16 exitDiscountBps_, uint32 exitHfBuffer_, uint32 dMin_) external onlyOwner {
         if (exitDiscountBps_ == 0 || exitDiscountBps_ > MAX_DISCOUNT_CEILING_BPS) revert InvalidParameter();
         if (exitHfBuffer_ < 100 || exitHfBuffer_ > 5000) revert InvalidParameter();
