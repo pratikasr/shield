@@ -16,6 +16,8 @@ export const LAUNCH_EXIT = { discountBps: 100, hfBuffer: 0.06, dMin: 0.01, minCo
 /** Aave V3.7 liquidation constants (LiquidationLogic.sol). */
 export const AAVE_MIN_BASE_MAX_CLOSE_FACTOR_USD = 2000;
 export const AAVE_CLOSE_FACTOR = 0.5;
+/** At or below this health factor Aave lifts the half-debt cap (CLOSE_FACTOR_HF_THRESHOLD). */
+export const AAVE_CLOSE_FACTOR_HF_THRESHOLD = 0.95;
 /** Blocks per day at the Repricer's 300 ms block time: what turns the per-block premium into days. */
 export const BLOCK_SECONDS = 0.3;
 export const BLOCKS_PER_DAY = 86_400 / BLOCK_SECONDS;
@@ -32,7 +34,10 @@ export interface AaveLiquidation {
   basis: "half" | "all" | "collateral";
 }
 
-/** What an Aave liquidation of the USDC debt against one collateral takes, at a health factor just under 1.00. */
+/**
+ * What an Aave liquidation of the USDC debt against one collateral takes, at `healthFactor` (by default just under
+ * 1.00, where the half-debt cap applies to positions of $2,000 or more).
+ */
 export function aaveLiquidation(args: {
   totalDebtUsd: number;
   /** The debt reserve being liquidated (USDC). */
@@ -41,12 +46,15 @@ export function aaveLiquidation(args: {
   collateralUsd: number;
   /** Liquidation bonus, for example 1.055. */
   bonus: number;
+  /** The health factor at liquidation; at or below 0.95 a liquidator may repay all of the debt reserve. */
+  healthFactor?: number;
 }): AaveLiquidation {
   const { totalDebtUsd, debtReserveUsd, collateralUsd, bonus } = args;
   if (!(debtReserveUsd > 0) || !(collateralUsd > 0) || !(bonus > 1)) return { repayUsd: 0, penaltyUsd: 0, basis: "all" };
   let repay = debtReserveUsd;
   let basis: AaveLiquidation["basis"] = "all";
-  if (collateralUsd >= AAVE_MIN_BASE_MAX_CLOSE_FACTOR_USD && debtReserveUsd >= AAVE_MIN_BASE_MAX_CLOSE_FACTOR_USD) {
+  const halfCapApplies = args.healthFactor === undefined || args.healthFactor > AAVE_CLOSE_FACTOR_HF_THRESHOLD;
+  if (halfCapApplies && collateralUsd >= AAVE_MIN_BASE_MAX_CLOSE_FACTOR_USD && debtReserveUsd >= AAVE_MIN_BASE_MAX_CLOSE_FACTOR_USD) {
     const half = totalDebtUsd * AAVE_CLOSE_FACTOR;
     if (debtReserveUsd > half) {
       repay = half;
@@ -69,11 +77,15 @@ export interface ShieldExit {
   reachable: boolean;
 }
 
-/** What Shield's exit at `trigger` repays and costs, sized the way the Executor sizes it. */
+/**
+ * What Shield's exit at `trigger` repays and costs, sized the way the Executor sizes it. `healthFactor` is the reading
+ * the exit runs at: the trigger itself on the way down (the default), or lower when the exit was already due.
+ */
 export function shieldExit(args: {
   totalDebtUsd: number;
   usdcDebtUsd: number;
   trigger: number;
+  healthFactor?: number;
   /** The covered collateral's liquidation threshold. */
   liquidationThreshold: number;
   /** The covered collateral's value at the trigger; caps the exit. */
@@ -85,7 +97,8 @@ export function shieldExit(args: {
   const target = args.trigger + args.hfBuffer;
   const denom = target - (1 + delta) * args.liquidationThreshold;
   if (!(denom > 0) || !(args.totalDebtUsd > 0)) return { repayUsd: 0, costUsd: 0, target, reachable: false };
-  let repay = (args.totalDebtUsd * (target - args.trigger)) / denom;
+  const hf = Math.min(args.healthFactor ?? args.trigger, args.trigger);
+  let repay = (args.totalDebtUsd * (target - hf)) / denom;
   repay = Math.min(repay, args.usdcDebtUsd);
   if (args.collateralUsd !== undefined && repay * (1 + delta) > args.collateralUsd) repay = Math.max(args.collateralUsd, 0) / (1 + delta);
   return { repayUsd: repay, costUsd: repay * delta, target, reachable: true };
