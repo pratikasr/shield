@@ -10,6 +10,8 @@
 #   Aave's aWETH and aUSDC contracts (which hold the underlying) through Anvil impersonation.
 # Env: MONAD_RPC_URL (default https://rpc.monad.xyz), FORK_BLOCK (default latest), FORK_PORT (default 8545),
 #      FORK_BLOCK_TIME (default 0.3 seconds).
+# Refuses to start when something already listens on FORK_PORT. `stop` kills only the Anvil whose PID this script
+# recorded in .fork/anvil.pid (scripts/procs.sh).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,15 +19,27 @@ DIR="$ROOT/.fork"
 PORT="${FORK_PORT:-8545}"
 RPC="http://127.0.0.1:$PORT"
 mkdir -p "$DIR"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/procs.sh"
+unset ETH_PASSWORD  # a keystore password file makes cast reject the unlocked sends below
 
 if [ "${1:-}" = "stop" ]; then
-  if [ -f "$DIR/anvil.pid" ]; then kill "$(cat "$DIR/anvil.pid")" 2>/dev/null || true; rm -f "$DIR/anvil.pid"; fi
+  stop_pidfile "$DIR/anvil.pid" anvil anvil
   echo "fork stopped"
   exit 0
 fi
 
 # shellcheck disable=SC1091
 source "$ROOT/scripts/require-foundry.sh"
+port_busy() {
+  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then return 0; fi
+  cast chain-id --rpc-url "$RPC" >/dev/null 2>&1
+}
+if port_busy; then
+  echo "port $PORT is already in use, so no fork was started. If it is this repo's fork, stop it with" >&2
+  echo "bash scripts/fork.sh stop (or bash scripts/stack.sh down); otherwise set FORK_PORT to a free port." >&2
+  exit 1
+fi
 UPSTREAM="${MONAD_RPC_URL:-https://rpc.monad.xyz}"
 BLOCK="${FORK_BLOCK:-$(cast block-number --rpc-url "$UPSTREAM")}"
 ARGS=(--fork-url "$UPSTREAM" --fork-block-number "$BLOCK" --block-time "${FORK_BLOCK_TIME:-0.3}" --port "$PORT"
@@ -35,7 +49,7 @@ if [ -z "${MONAD_RPC_URL:-}" ]; then
 fi
 
 anvil "${ARGS[@]}" > "$DIR/anvil.log" 2>&1 &
-echo $! > "$DIR/anvil.pid"
+pid_record $! "$DIR/anvil.pid"
 for _ in $(seq 1 120); do
   if cast chain-id --rpc-url "$RPC" >/dev/null 2>&1; then break; fi
   sleep 0.5
@@ -74,5 +88,5 @@ DEMO_PRIVATE_KEY=$(key 2)
 LP_ADDRESS=$LP
 LP_PRIVATE_KEY=$(key 3)
 ENV
-echo "fork of Monad mainnet block $BLOCK running at $RPC (pid $(cat "$DIR/anvil.pid"))"
+echo "fork of Monad mainnet block $BLOCK running at $RPC (pid $(sed -n 1p "$DIR/anvil.pid"))"
 echo "accounts in .fork/accounts.env (throwaway Anvil keys; never use them on a real network)"

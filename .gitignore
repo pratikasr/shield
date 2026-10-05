@@ -30,6 +30,9 @@ playwright-report/
 indexer/.envio/
 .fork/
 contracts/deployments/fork-*.json
+# a mainnet deployment waiting for its code check, and replaced deployment files (scripts/deploy-mainnet.sh)
+contracts/deployments/*.pending.json
+contracts/deployments/*.bak
 contracts/broadcast/
 
 # agent worktrees
