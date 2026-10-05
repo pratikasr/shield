@@ -1,5 +1,6 @@
 import { ArrowRight, Check, Code2, Eye, FileCheck2, Gauge, KeyRound, Minus, ScanSearch, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { LendersStrip } from "@/components/analytics/lenders";
 import { TokenIcon } from "@/components/data/token";
 import { HeroShot } from "@/components/landing/hero-shot";
 import { SavingsCalculator } from "@/components/landing/savings-calculator";
@@ -51,7 +52,7 @@ const faqs: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "What can the owner change?",
-    a: "Parameters within set bounds: the exit discount (at most 5% and never above your maximum), the exit buffer, the premium floor, each collateral's pricing constant (at most ten times the launch value) and fallback volatility (10% to 500%), the waiting period (up to 7 days), the oracle and slippage bounds, and which swap adapter sells the vault's collateral (every sale is checked by the USDC actually received, within at most 10% of Aave's price). With these the owner can raise your premium within those bounds or pause exits. No owner function can transfer your aTokens or the vault's USDC, the contracts are not upgradeable, and ownership transfers in two steps.",
+    a: "Parameters within set bounds: the exit discount (at most 5% and never above your maximum), the exit buffer, the premium floor, each collateral's pricing constant (at most ten times the launch value) and fallback volatility (10% to 500%), the waiting period (up to 7 days), the oracle and slippage bounds, and which swap adapter sells the vault's collateral (every sale is checked by the USDC actually received, within at most 10% of Aave's price). The owner can also set the protocol share of premiums, up to 20%, and the treasury it is paid to; the share splits what you pay and never adds to it. With these the owner can raise your premium within those bounds or pause exits. No owner function can transfer your aTokens or the vault's USDC, the contracts are not upgradeable, and ownership transfers in two steps.",
   },
   {
     q: "What if the vault is empty when I reach my trigger?",
@@ -83,7 +84,21 @@ const faqs: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "How do liquidity providers earn?",
-    a: "LPs deposit USDC into an ERC-4626 vault. The vault earns every covered borrower's premium, block by block, and takes collateral worth 1% more than it repays at each exit. Seized collateral stays in Aave until the owner or the unwinder sells it through the swap adapter for no less than Aave's price minus 3% (the owner can set at most 10%); a sale can cost more than the 1% earned, and collateral cannot be withdrawn until it is sold. Exit gains reach the share price over 6 hours.",
+    a: "LPs deposit USDC into an ERC-4626 vault. The vault earns 90% of every covered borrower's premium, block by block, and the whole exit discount: it takes collateral worth 1% more than it repays at each exit. The other 10% of premiums goes to the protocol treasury at launch; the contract caps that share at 20%, and the owner can change it within the cap. Seized collateral stays in Aave until the owner or the unwinder sells it through the swap adapter for no less than Aave's price minus 3% (the owner can set at most 10%); a sale can cost more than the 1% earned, and collateral cannot be withdrawn until it is sold. Exit gains reach the share price over 6 hours.",
+  },
+  {
+    q: "How does Shield make money?",
+    a: (
+      <>
+        From a share of premiums: 10% of every premium goes to the protocol treasury at launch, split off when the premium is charged. The contract caps the share at
+        20%, and the owner can change it within the cap. The exit discount goes entirely to liquidity providers, and the share never changes what a borrower pays.
+        Every figure is on the{" "}
+        <Link href="/app/analytics" prefetch={false} className="font-medium text-foreground underline underline-offset-4">
+          analytics page
+        </Link>
+        .
+      </>
+    ),
   },
 ];
 
@@ -137,6 +152,13 @@ export default function Landing() {
             </nav>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
+            <Link
+              href="/app/analytics"
+              prefetch={false}
+              className="hit relative hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:inline"
+            >
+              Analytics
+            </Link>
             <a href={DOCS_LINK} {...EXT} className="hit relative hidden rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline">
               Docs
             </a>
@@ -419,6 +441,11 @@ export default function Landing() {
                   See the test report
                 </a>
               </Button>
+              <Button asChild variant="outline" className="bg-card">
+                <Link href="/app/analytics" prefetch={false}>
+                  Live analytics
+                </Link>
+              </Button>
               <Button asChild variant="ghost">
                 <a href={REPO} {...EXT}>
                   Source code
@@ -426,6 +453,26 @@ export default function Landing() {
                 </a>
               </Button>
             </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="lenders" className="mx-auto max-w-[76rem] px-4 pt-24 sm:px-6 lg:pt-32">
+          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+            <div className="max-w-2xl">
+              <h2 id="lenders" className="text-[1.75rem] font-medium tracking-[-0.03em] sm:text-[2.25rem]">
+                Aave first, then the rest of Monad
+              </h2>
+              <p className="mt-3 text-lg text-muted-foreground">
+                Shield covers Aave V3, Monad&rsquo;s largest lender. Each of the others needs its own exit path and fork tests before it is covered.
+              </p>
+            </div>
+            <Link href="/app/analytics" prefetch={false} className="inline-flex items-center gap-1.5 rounded-sm text-sm font-medium hover:underline hover:underline-offset-4">
+              See live analytics
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </div>
+          <div className="mt-8">
+            <LendersStrip />
           </div>
         </section>
 

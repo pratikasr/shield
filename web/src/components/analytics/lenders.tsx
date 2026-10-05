@@ -77,13 +77,19 @@ export function LendersStrip() {
     <div>
       <ul className="grid gap-px overflow-hidden rounded-[14px] border bg-border sm:grid-cols-2 lg:grid-cols-5">
         {MONAD_LENDERS.map((l) => (
-          <li key={l.name} className="flex items-center gap-3 bg-card px-4 py-4">
-            <Initials text={l.initials} size={30} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{l.name}</p>
-              <p className="text-[0.8125rem] text-muted-foreground num">{formatTvl(l.tvlUsd)} on Monad</p>
+          // Two columns leave five cells one short: Aave, the live one, takes a full row there.
+          <li key={l.name} className={cn("bg-card px-4 py-4 sm:px-5", l.status === "Live" && "sm:col-span-2 lg:col-span-1")}>
+            <div className="flex items-center gap-3">
+              <Initials text={l.initials} size={30} />
+              <span className="min-w-0 truncate font-medium">{l.name}</span>
             </div>
-            <StatusChip status={l.status} />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-muted-foreground num">
+                {formatTvl(l.tvlUsd)}
+                <span className="sr-only"> total value locked on Monad</span>
+              </span>
+              <StatusChip status={l.status} />
+            </div>
           </li>
         ))}
       </ul>
