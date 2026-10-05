@@ -30,7 +30,7 @@ Playwright (`web/e2e/video-script.spec.ts`) then walks the video script in a rea
 | 6 | Cover panel | Click "Prepay $5.00" | "Prepayment finalised in block N" |
 | 7 | Cover panel | Click "Opt in at 1.06" | Heading "Protected"; "Premium paid so far" rises every block; "Cover this block" shows the per-block premium |
 | 8 | (fork only) | The test moves Aave's WETH price down 1.6% through a fork-only oracle source | HF 1.0529, under the trigger |
-| 9 | Borrower page | Nothing to click | The keeper exits on the next block; the exit history reads "penalty avoided" with the amount from the `Exited` event and an explorer link |
+| 9 | Borrower page | Nothing to click | The keeper exits; the exit history reads "penalty avoided" with the amount from the `Exited` event and an explorer link |
 | 10 | http://localhost:3200/app/vault | Open the LP page | Exits executed 1, the exit transaction in the table, premium earned above zero, average discount captured |
 
 Step 8 is the only part of the rehearsal that cannot happen on mainnet. On mainnet the HF reaches the trigger through the market or through `scripts/demo-position.sh nudge`, a real extra borrow (Part 2).
@@ -99,7 +99,7 @@ Fork of mainnet block 110644465. Every command exited 0. HF after `open` 1.0700;
 | Reprice 3 | 110644626 | `0x256a44e7ec0083efdd08a18eebfa9cc0be0a58f1307a0621a45d0d45834512ea`, receipt 03:27:10.078Z (301 ms later) |
 | Exit | 110644689 | `0xb973c01b6aa47354b2343fc57620f9c3cd4298cc612baff6a42b5be8f74263c7`, 683,186 gas of a 785,664 limit |
 
-The keeper saw HF 1.0449 at block 110644686 and decided to exit at 03:27:28.164Z; the receipt arrived at 03:27:29.755Z, three blocks later. The send itself took 291 ms. The rest went to gas estimation and access-list creation, which on a fork fetch cold Aave storage from the public RPC one slot at a time; a mainnet node holds that state locally.
+The keeper saw HF 1.0449 at block 110644686 and decided to exit at 03:27:28.164Z; the receipt arrived at 03:27:29.755Z, three blocks later. The send itself took 291 ms. The rest went to gas estimation and access-list creation against the fork, which fetches any state it has not cached from the public RPC; the mainnet timing will be measured in M6.
 
 `scripts/proof.sh --fork` checked every address for code and every hash for a successful receipt and printed the README rows. On mainnet the same script prints them with MonadVision links.
 
@@ -176,7 +176,7 @@ The SPEC.md script with the mainnet steps above:
 
 1. Borrower page at the web app: connect a browser wallet (MetaMask or Rabby) holding the borrower key, on Monad mainnet. HF 1.07, WETH collateral, USDC debt. Set the trigger to 1.05 with the slider, prepay 5 USDC, run the four steps. The premium quote ticks every block; the comparison line reads "Aave penalty if liquidated: $X. Shield: $Y."
 2. MonadVision: the opt-in transaction, then three repricing transactions in consecutive blocks (the keeper log has the hashes; `scripts/proof.sh` prints them).
-3. Run the nudge. HF falls to 1.045; the keeper exits on the next block. Show the `Exited` event on MonadVision and the borrower page reading "penalty avoided".
+3. Run the nudge. HF falls to 1.045; the keeper exits within a few blocks (three on the fork). Show the `Exited` event on MonadVision and the borrower page reading "penalty avoided".
 4. LP page: premium earned, exits executed, average discount captured.
 5. The comparison table on the landing page, 10 seconds.
 6. One sentence on why Monad: per-block repricing and a page-warmed registry.

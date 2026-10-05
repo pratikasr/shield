@@ -119,7 +119,7 @@ Not deployed yet. `bash scripts/deploy-mainnet.sh` deploys, verifies on MonadVis
 
 ## Proof
 
-Filled during M6 with Monad mainnet transactions only; every item will open on [monadvision.com](https://monadvision.com) or [monadscan.com](https://monadscan.com). The fork rehearsals in [docs/DEMO.md](docs/DEMO.md) are tests, not proof.
+Filled during M6 with Monad mainnet transactions only, from `bash scripts/proof.sh`, which checks every address and receipt on chain first; every item will open on [monadvision.com](https://monadvision.com) or [monadscan.com](https://monadscan.com). The fork rehearsals in [docs/DEMO.md](docs/DEMO.md) are tests, not proof.
 
 | Item | Value |
 | --- | --- |
@@ -155,6 +155,8 @@ pnpm test
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
 
+The first fork-test run takes about 12 minutes, because every state read goes to the public RPC. Foundry caches that state per pinned block, so pin one with `FORK_BLOCK=<block>` (public RPCs keep about 100,000 blocks of state, roughly eight hours): a rerun at the same block took 4.4 minutes on 5 Oct 2026. Test runs do not rewrite the committed gas figures; `FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` refreshes them at the block they were measured at, for as long as Foundry's cache or an archive RPC holds it.
+
 ### Run the whole thing locally
 
 Everything against a local fork of Monad mainnet (a test environment; the header says "Local fork"):
@@ -187,6 +189,7 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 | Keeper | `pnpm --filter keeper test` | 33 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
 | Indexer | `pnpm --filter shield-indexer test` | 2 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
+| Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
 | Lighthouse (mobile) | landing, borrower, LP | performance 98, 92, 91; accessibility 100 on all |
 
 Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md).

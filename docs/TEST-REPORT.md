@@ -6,7 +6,7 @@ Five rounds, all run on 5 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (
 
 | Check | Command | Outcome |
 | --- | --- | --- |
-| Foundry, all suites | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` | 101 tests pass in 9 suites: PremiumMath 10, PositionRegistry 24, Repricer 28, ShieldVault 9, AccountingInvariant 1 (3 invariants, 128 runs, 5,120 calls, 0 reverts), ExitFork 23, RepricerFork 5, ExitInvariant 1 (2 invariants on the fork, 6 runs x 20 calls) |
+| Foundry, all suites | `cd contracts && FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` | 101 tests pass in 9 suites: PremiumMath 10, PositionRegistry 24, Repricer 28, ShieldVault 9, AccountingInvariant 1 (3 invariants, 128 runs, 5,120 calls, 0 reverts), ExitFork 23, RepricerFork 5, ExitInvariant 1 (2 invariants on the fork, 6 runs x 20 calls) |
 | Repricer math | `forge test --match-contract PremiumMathTest` | pass, including the k calibration (`test_calibration_kGivesTwoPercentAtD5Sigma80`) and a 512-run monotonicity fuzz |
 | Registry packing | `forge test --match-contract PositionRegistryTest` | pass, including 512-run fuzzes of page alignment, packing round trip and active-list consistency |
 | Every Aave path on a mainnet fork | `forge test --match-contract ExitForkTest` | pass: vault-funded exit, flash-loan fallback with the vault empty, mixed funding, every refusal (see Round 3), NAV and unwind |
@@ -83,7 +83,20 @@ Each scenario has a test that reproduces it; all pass.
 
 ## Round 4: fresh clone
 
-Filled below once run.
+An empty directory, the README Quick start commands in order, word for word, with Foundry 1.8.4 first on PATH (as `foundryup` leaves it), Node 24.6 and pnpm 11.3. The clone was of `main` at `1dc476c`.
+
+| Step | Command | Outcome | Time |
+| --- | --- | --- | --- |
+| Clone | `git clone --recurse-submodules https://github.com/pratikasr/shield.git` | pass, including Aave's nested submodules | 2 min |
+| Build | `cd contracts && forge build` | pass | 3 s |
+| Unit tests, offline | `forge test` | 72 pass; the 3 fork suites skip themselves | 3 s |
+| Fork tests against live mainnet | `MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 101 pass, 0 fail | 12 min |
+| Install | `pnpm install` | pass | 11 s |
+| Build | `pnpm -r build` | pass (keeper, indexer codegen, web production build) | 27 s |
+| Lint | `pnpm lint` | pass | 5 s |
+| Test | `pnpm test` | keeper 33 pass (2 live smoke tests skipped), indexer 2 pass | 4 s |
+
+Defects found: none that stopped a step. Three found around it, all fixed: running the fork tests rewrote the committed gas figures in `contracts/snapshots/` (block-dependent), leaving the clone dirty, so `foundry.toml` now sets `gas_snapshot_emit = false` and the refresh command sets `FORGE_SNAPSHOT_EMIT=true`; the fork tests take 12 minutes on a first run because every state read goes to the public RPC, which the README now says, with `FORK_BLOCK` for cached reruns (4.4 minutes, measured); and a forge older than 1.8 first on PATH fails with a config error that does not name the fix (the scripts now check, Round 5). Pinning every fork test in a run to one shared block was tried and made no difference to a first run (693 s against 734 s), so it was not kept.
 
 ## Round 5: demo rehearsal
 

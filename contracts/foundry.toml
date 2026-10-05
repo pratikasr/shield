@@ -22,6 +22,9 @@ remappings = [
   "aave-v3-origin/=lib/aave-v3-origin/src/",
 ]
 fs_permissions = [{ access = "read", path = "./" }, { access = "read-write", path = "./deployments" }]
+# Test runs leave snapshots/ alone (fork gas varies with the block); refresh the committed figures with
+# FORGE_SNAPSHOT_EMIT=true forge snapshot (see README, Proof).
+gas_snapshot_emit = false
 
 [profile.default.fuzz]
 runs = 512

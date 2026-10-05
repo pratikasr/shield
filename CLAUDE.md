@@ -38,6 +38,9 @@ pnpm lint && pnpm test
 bash scripts/export-abi.sh                 # after any contract ABI change
 pnpm --filter keeper dev
 pnpm --filter web dev
+bash scripts/stack.sh up                   # whole stack on a local mainnet fork (tests only); `down` stops it
+bash scripts/e2e.sh                        # the video script under Playwright on that fork
+bash scripts/proof.sh                      # README Deployments and Proof rows, each checked on chain
 ```
 
 ## Milestones

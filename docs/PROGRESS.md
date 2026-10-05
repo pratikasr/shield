@@ -2,6 +2,17 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 5 Oct 2026, M4 Web, M5 Indexer, test rounds 1 to 5, M6 and M7 prepared
+
+- M4 done (`1138fb0`, `4945088`): landing at `/` (pitch, live block demo, comparison table, Why Monad, limits), borrower page `/app/borrow` (Aave position, opt-in with trigger slider, max discount, aToken approval, prepay, premium ticking per block with sparkline, "Aave penalty if liquidated: $X. Shield: $Y.", unprotected state, exit history with penalty avoided) and LP page `/app/vault` (deposit, withdraw, NAV, premium earned, exits, average discount, Envio tables). Design system in docs/DESIGN.md; two screenshot review passes at 375, 768 and 1440 px in docs/screenshots/. Lighthouse (mobile): performance 98, 92, 91 and accessibility 100 on all three routes.
+- M5 done locally (`572be50`): Envio HyperIndex 3.12 config, handlers and entities for every Shield event; the web history views read its GraphQL endpoint; README names Envio under Bounties. The hosted deployment waits for the owner's Envio login (`scripts/deploy-indexer.sh`), so the "reads from the hosted endpoint" criterion is open.
+- Tests (`4049b06`, `66e127f`, `eb5da03`, `1dc476c`): all five rounds in docs/TEST-REPORT.md. Round 1: 101 Foundry tests including fork, fuzz and invariant; Slither and Aderyn findings fixed or justified in docs/SECURITY.md; keeper 33, indexer 2; workspace lint, test and build clean. Round 2: the video script under Playwright on a mainnet fork, every claim checked against receipts. Round 3: 27 adversarial scenarios, each with a test. Round 4: a fresh clone followed the README quick start word for word; every step passed, 101 Foundry tests against live mainnet. Round 5: two clean-fork rehearsals plus the scripted mainnet flow, recorded in docs/DEMO.md.
+- M6 prepared: `scripts/deploy-mainnet.sh`, `scripts/demo-position.sh` (seed, position, open, keeper, nudge), `scripts/proof.sh`, `scripts/web-env.sh` and `scripts/deploy-indexer.sh`; the first four exercised on a fork. Runbook, account funding and video steps in docs/DEMO.md.
+- M7 prepared: README has Why Monad, the comparison table, gas numbers, the Envio statement, both disclosures and the license; the Deployments and Proof tables fill from `scripts/proof.sh`.
+- CI: paused at the owner's request during the build (`8f059c8`), restored in the final commit of this session.
+- Next, for the owner: fund the four mainnet accounts and run docs/DEMO.md Part 2; Envio login and hosted indexer; record the video; flip the repo to public; register and submit on hackathon.monad.xyz.
+- Blocked on the owner: mainnet MON, WETH and USDC and the four keys; testnet MON for the live `eth_sendRawTransactionSync` smoke check (`0xeDA6994BC554131E1c5370f5fE9Afe4dD02c4089`); Envio login and HyperSync token; the exact Envio bounty card text (portal login); repo visibility. Optional: Pyth Hermes key, WalletConnect project id, Monadscan API key.
+
 ## 5 Oct 2026, M3 Keeper
 
 - Done: keeper (heads with monadNewHeads, newHeads and polling fallbacks; multicall observation on proposed state; exit then repriceMany; measured gas with buffer and headroom; page-compressed access lists; eth_sendRawTransactionSync with fallback; nonce resync; out-of-gas recovery; JSON logs). 33 vitest tests plus an env-gated live smoke test that passes against mainnet and testnet `monadNewHeads`.

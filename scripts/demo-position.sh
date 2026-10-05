@@ -9,7 +9,7 @@
 #   bash scripts/demo-position.sh keeper    starts the keeper (KEEPER_PRIVATE_KEY) against the deployment; its JSON log
 #                                           also goes to KEEPER_LOG [keeper.log, or .fork/demo-keeper.log on a fork]
 #   bash scripts/demo-position.sh nudge     borrower borrows more until HF is DEMO_NUDGE_HF_BPS, at or under the
-#                                           trigger, so the keeper exits on the next block
+#                                           trigger, so the keeper exits
 #   bash scripts/demo-position.sh all       seed, open, then keeper
 #
 # Add --fork to run against the local fork from scripts/fork.sh (test keys from .fork/accounts.env).
