@@ -27,9 +27,9 @@ fi
 UPSTREAM="${MONAD_RPC_URL:-https://rpc.monad.xyz}"
 BLOCK="${FORK_BLOCK:-$(cast block-number --rpc-url "$UPSTREAM")}"
 ARGS=(--fork-url "$UPSTREAM" --fork-block-number "$BLOCK" --block-time "${FORK_BLOCK_TIME:-0.3}" --port "$PORT"
-  --no-rate-limit --config-out "$DIR/anvil.json")
+  --no-rate-limit --retries 12 --timeout 30000 --config-out "$DIR/anvil.json")
 if [ -z "${MONAD_RPC_URL:-}" ]; then
-  ARGS+=(--fork-url https://rpc1.monad.xyz --fork-url https://rpc-mainnet.monadinfra.com)
+  ARGS+=(--fork-url https://rpc1.monad.xyz)
 fi
 
 anvil "${ARGS[@]}" > "$DIR/anvil.log" 2>&1 &

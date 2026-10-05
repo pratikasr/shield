@@ -13,7 +13,9 @@ import { useWrongNetwork } from "@/components/shell/network-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HashLink } from "@/components/data/hash-link";
 import { useAavePosition } from "@/hooks/useAavePosition";
+import { useChainExit } from "@/hooks/useChainExit";
 import { useShieldPosition } from "@/hooks/useShieldPosition";
 import { isDeployed } from "@/lib/env";
 import { formatUsd, toNumber, truncateHex } from "@/lib/format";
@@ -63,6 +65,7 @@ export function BorrowView() {
   const collateral = position ? pickCollateral(position) : undefined;
   const { cover, refetch } = useShieldPosition(viewer, collateral?.aToken);
   const history = useBorrowerHistory(viewer);
+  const chainExit = useChainExit(viewer, cover);
   const [previewTrigger, setPreviewTrigger] = useState<number>();
   const onTrigger = useCallback((t: number) => setPreviewTrigger(t), []);
 
@@ -143,15 +146,21 @@ export function BorrowView() {
         )}
         <div>
           <h1 className="text-[1.75rem] font-semibold">{watching ? "Aave position" : "Your Aave position"}</h1>
-          {cover?.exited && lastExit && !cover.active && (
-            <p className="mt-2 text-base" role="status">
-              Exited {new Date(Number(lastExit.timestamp) * 1000).toLocaleString()}: penalty avoided{" "}
-              <strong className="reading text-safe">{formatUsd(toNumber(BigInt(lastExit.savedVsAave), 6))}</strong>.
+          {cover?.exited && !cover.active && (lastExit || chainExit.data) && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 text-base" role="status">
+              <span>
+                Exited in block {(chainExit.data?.blockNumber ?? BigInt(lastExit!.blockNumber)).toLocaleString("en-US")}: penalty avoided{" "}
+                <strong className="reading text-safe">
+                  {formatUsd(toNumber(chainExit.data?.savedVsAave ?? BigInt(lastExit!.savedVsAave), 6))}
+                </strong>
+                .
+              </span>
+              <HashLink value={chainExit.data?.txHash ?? lastExit!.txHash} />
             </p>
           )}
         </div>
         <PositionPanel position={position} cover={cover} previewTrigger={cover?.active ? undefined : previewTrigger} premiumHistory={premiumHistory} />
-        <ExitHistory history={history.data} isLoading={history.isLoading} error={history.error} />
+        <ExitHistory history={history.data} isLoading={history.isLoading} error={history.error} chainExit={chainExit.data} />
         <RepriceHistory history={history.data} />
         <ReservesTable position={position} />
       </div>

@@ -21,6 +21,8 @@ const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
  * leave the variable empty and never include it.
  */
 const e2eAccount = process.env.NEXT_PUBLIC_E2E_ACCOUNT as `0x${string}` | undefined;
+/** Fork test builds only: start the test wallet on Monad testnet to exercise the wrong-network guard. */
+const e2eWrongChain = process.env.NEXT_PUBLIC_E2E_WRONG_CHAIN === "1";
 const forkTestWallet = (): Wallet => ({
   id: "fork-test-wallet",
   name: "Fork test wallet",
@@ -62,7 +64,11 @@ function Rainbow({ children }: { children: ReactNode }) {
   const { resolvedTheme } = useTheme();
   const accent = { accentColor: resolvedTheme === "light" ? "#0e1424" : "#e7ebf3", accentColorForeground: resolvedTheme === "light" ? "#ffffff" : "#0e1424", borderRadius: "small" as const, fontStack: "system" as const };
   return (
-    <RainbowKitProvider theme={resolvedTheme === "light" ? lightTheme(accent) : darkTheme(accent)} initialChain={monadMainnet} modalSize="compact">
+    <RainbowKitProvider
+      theme={resolvedTheme === "light" ? lightTheme(accent) : darkTheme(accent)}
+      initialChain={e2eWrongChain ? monadTestnet : monadMainnet}
+      modalSize="compact"
+    >
       {children}
     </RainbowKitProvider>
   );

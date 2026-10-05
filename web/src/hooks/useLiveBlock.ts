@@ -6,7 +6,7 @@ import { monadMainnet } from "@/lib/chains";
 
 /** The latest (proposed) block number, refreshed as blocks arrive; Monad produces one about every 300 ms. */
 export function useLiveBlock() {
-  return useBlockNumber({ chainId: monadMainnet.id, watch: { pollingInterval: 300 }, query: { refetchInterval: false } });
+  return useBlockNumber({ chainId: monadMainnet.id, watch: { enabled: true, pollingInterval: 300 }, query: { refetchInterval: false } });
 }
 
 /** Runs `onBlock` once per new block. */

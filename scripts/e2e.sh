@@ -22,6 +22,7 @@ stop_ours() {
   # The servers outlive their wrapping subshells, so stop them by command line (only this script's processes).
   pkill -f "next start -p $WEB_PORT" 2>/dev/null || true
   pkill -f "tsx --env-file-if-exists=.env src/index.ts" 2>/dev/null || true
+  pkill -f "$ROOT/indexer/node_modules/.bin/../envio/bin.mjs" 2>/dev/null || true
 }
 
 cleanup() {
@@ -76,10 +77,14 @@ ENVIO_TUI=false
 HASURA_EXTERNAL_PORT=$HASURA_PORT
 HASURA_GRAPHQL_ENDPOINT=http://localhost:$HASURA_PORT/v1/metadata
 ENV
+# `envio dev` stalls without a terminal, so bring up Postgres and Hasura, reset the schema, then `envio start`.
 (cd indexer && pnpm exec envio stop >/dev/null 2>&1 || true)
-(cd indexer && ENVIO_TUI=false pnpm dev > "$DIR/e2e-envio.log" 2>&1) &
-PIDS+=($!)
+(cd indexer && set -a && . ./.env && set +a && pnpm exec envio local docker up > "$DIR/e2e-envio.log" 2>&1)
 wait_for "http://localhost:$HASURA_PORT/healthz" "hasura" 180
+(cd indexer && set -a && . ./.env && set +a && export ENVIO_PG_PORT=5433 ENVIO_PG_PASSWORD=testing ENVIO_PG_USER=postgres \
+  ENVIO_PG_DATABASE=envio-dev ENVIO_TUI=false && pnpm exec envio local db-migrate setup >> "$DIR/e2e-envio.log" 2>&1 \
+  && pnpm exec envio start < /dev/null >> "$DIR/e2e-envio.log" 2>&1) &
+PIDS+=($!)
 
 echo "== keeper"
 (MONAD_RPC_URL="$FORK_RPC_URL" MONAD_WS_URL="$FORK_WS_URL" CHAIN_ID=143 KEEPER_PRIVATE_KEY="$KEEPER_PRIVATE_KEY" \
@@ -94,6 +99,7 @@ PIDS+=($!)
 wait_for "http://localhost:$WEB_PORT/" "web" 120
 
 echo "== playwright"
+(cd contracts && forge build > "$DIR/e2e-forge-build.log" 2>&1)   # the spec deploys the fork-only price feed artifact
 E2E_BASE_URL="http://localhost:$WEB_PORT" E2E_RPC_URL="$FORK_RPC_URL" E2E_DEPLOYMENT="$DEPLOYMENT" \
   E2E_BORROWER="$DEMO_ADDRESS" E2E_ADMIN_KEY="$DEPLOYER_PRIVATE_KEY" E2E_RESULT="$DIR/e2e-result.json" \
   pnpm --filter web exec playwright test

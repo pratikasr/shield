@@ -48,8 +48,24 @@ function usd(text: string): number {
   return Number(text.replace(/[^0-9.]/g, ""));
 }
 
+/** Retries a fork call: the fork fetches untouched mainnet state on demand and the upstream RPC can time out. */
+async function retry<T>(fn: () => Promise<T>, tries = 5): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i >= tries) throw err;
+      await new Promise((r) => setTimeout(r, 2_000 * i));
+    }
+  }
+}
+
 /** Moves Aave's WETH price on the fork the way Aave's pool admin would: a new source for the asset. */
 async function setWethPrice(price8: bigint) {
+  return retry(() => setWethPriceOnce(price8));
+}
+
+async function setWethPriceOnce(price8: bigint) {
   const artifact = JSON.parse(readFileSync("../contracts/out/ForkBase.sol/FixedPriceAggregator.json", "utf8")) as {
     abi: unknown[];
     bytecode: { object: Hex };

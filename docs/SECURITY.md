@@ -35,7 +35,14 @@ What Shield trusts, what it defends against, and how every medium and high stati
 
 ## Static analysis
 
-Run on 5 Oct 2026 against `contracts/src` with Slither 0.11.6 (`slither . --filter-paths "lib/|test/|script/" --exclude-informational --exclude-optimization`) and Aderyn 0.6.8 (`aderyn . --src src`). Results after the fixes below are in [TEST-REPORT.md](TEST-REPORT.md).
+Run on 5 Oct 2026 against `contracts/src` with Slither 0.11.6 (`slither . --filter-paths "lib/|test/|script/" --exclude-informational --exclude-optimization`) and Aderyn 0.6.8 (`aderyn . --src src`).
+
+| Run | Slither high | Slither medium | Aderyn high |
+| --- | --- | --- | --- |
+| Before fixes | 5 | 22 | 3 |
+| After fixes | 5 (all justified below) | 16 (all justified below) | 2 (both justified below) |
+
+Slither still lists `pyth-unchecked-confidence` after the fix because both checks run on a local copy of the `try ... returns (price)` value, which its detector does not follow. The checks are at `Executor._checkPyth` (confidence against the deviation bound) and `Repricer._sample` (confidence under 1% of price), each with a regression test.
 
 ### Fixed
 

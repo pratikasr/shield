@@ -6,6 +6,7 @@ import { HashLink } from "@/components/data/hash-link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BORROWER_HISTORY, envioQuery, type ExitRow, type PositionRow, type RepriceRow } from "@/lib/envio";
 import { envioUrl } from "@/lib/env";
+import type { ChainExit } from "@/hooks/useChainExit";
 import { formatHf, formatUsd, timeAgo, toNumber } from "@/lib/format";
 
 export interface BorrowerHistory {
@@ -23,26 +24,56 @@ export function useBorrowerHistory(user?: Address) {
   });
 }
 
-export function ExitHistory({ history, isLoading, error }: { history?: BorrowerHistory; isLoading: boolean; error: Error | null }) {
+export function ExitHistory({
+  history,
+  isLoading,
+  error,
+  chainExit,
+}: {
+  history?: BorrowerHistory;
+  isLoading: boolean;
+  error: Error | null;
+  /** An exit read from the chain that the indexer may not have yet. */
+  chainExit?: ChainExit | null;
+}) {
+  const indexed = history?.Exit ?? [];
+  const pending: ExitRow[] =
+    chainExit && !indexed.some((e) => e.txHash.toLowerCase() === chainExit.txHash.toLowerCase())
+      ? [
+          {
+            borrower: "",
+            repaid: chainExit.repaid.toString(),
+            seized: "0",
+            savedVsAave: chainExit.savedVsAave.toString(),
+            healthFactorBefore: chainExit.healthFactorBefore.toString(),
+            healthFactorAfter: chainExit.healthFactorAfter.toString(),
+            flashLoanAmount: "0",
+            blockNumber: chainExit.blockNumber.toString(),
+            timestamp: "",
+            txHash: chainExit.txHash,
+          },
+        ]
+      : [];
+  const rows = [...pending, ...indexed];
   return (
     <section aria-labelledby="exits-heading" className="rounded-xl border bg-card">
       <h2 id="exits-heading" className="px-5 pt-5 text-base font-semibold sm:px-7">
         Exits
       </h2>
-      {!envioUrl ? (
+      {!envioUrl && rows.length === 0 ? (
         <p className="px-5 pb-5 pt-2 text-sm text-muted-foreground sm:px-7">
           History comes from the Envio indexer. Set NEXT_PUBLIC_ENVIO_GRAPHQL_URL to its GraphQL endpoint to show it.
         </p>
-      ) : error ? (
+      ) : error && rows.length === 0 ? (
         <p className="px-5 pb-5 pt-2 text-sm text-danger sm:px-7" role="alert">
           {error.message}
         </p>
-      ) : isLoading ? (
+      ) : isLoading && rows.length === 0 ? (
         <div className="space-y-2 px-5 pb-5 pt-3 sm:px-7" aria-busy="true" aria-label="Loading exits">
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
         </div>
-      ) : !history?.Exit.length ? (
+      ) : rows.length === 0 ? (
         <p className="px-5 pb-5 pt-2 text-sm text-muted-foreground sm:px-7">
           No exits yet. If your health factor reaches the trigger, the exit and the penalty it avoided appear here.
         </p>
@@ -59,9 +90,11 @@ export function ExitHistory({ history, isLoading, error }: { history?: BorrowerH
               </tr>
             </thead>
             <tbody className="num">
-              {history.Exit.map((e) => (
+              {rows.map((e) => (
                 <tr key={e.txHash} className="border-t">
-                  <td className="px-3 py-2.5 text-muted-foreground">{timeAgo(Number(e.timestamp))}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">
+                    {e.timestamp ? timeAgo(Number(e.timestamp)) : `Block ${Number(e.blockNumber).toLocaleString("en-US")}`}
+                  </td>
                   <td className="px-3 py-2.5 text-right">{formatUsd(toNumber(BigInt(e.repaid), 6))}</td>
                   <td className="px-3 py-2.5 text-right font-semibold text-safe">{formatUsd(toNumber(BigInt(e.savedVsAave), 6))}</td>
                   <td className="px-3 py-2.5 text-right">
