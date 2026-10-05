@@ -48,8 +48,11 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
     await action.click();
     if (!status.source.startsWith("^Opt-in")) {
       await expect(panel.getByText(status)).toBeVisible({ timeout: 60_000 });
+      const hash = await panel.locator('[role="status"] a[title^="0x"]').first().getAttribute("title");
+      result[`step${i + 1}`] = { label, tx: hash };
+    } else {
+      result[`step${i + 1}`] = { label };
     }
-    result[`step${i + 1}`] = label;
   }
   await expect(panel.getByRole("heading", { name: "Protected" })).toBeVisible({ timeout: 60_000 });
 

@@ -2,9 +2,12 @@
 # The demo's on-chain steps. Every step is a real transaction signed by a key from the environment.
 #
 #   bash scripts/demo-position.sh seed      LP deposits VAULT_SEED USDC units into the ShieldVault (LP_PRIVATE_KEY)
+#   bash scripts/demo-position.sh position  borrower supplies DEMO_WETH and borrows USDC to DEMO_HF_BPS, no cover
+#                                           (for the video, where the opt-in happens in the web app on camera)
 #   bash scripts/demo-position.sh open      borrower supplies DEMO_WETH, borrows USDC to DEMO_HF_BPS, approves the
 #                                           Executor on aWETH, opts in with DEMO_TRIGGER_BPS, prepays DEMO_PREPAY
-#   bash scripts/demo-position.sh keeper    starts the keeper (KEEPER_PRIVATE_KEY) against the deployment
+#   bash scripts/demo-position.sh keeper    starts the keeper (KEEPER_PRIVATE_KEY) against the deployment; its JSON log
+#                                           also goes to KEEPER_LOG [keeper.log, or .fork/demo-keeper.log on a fork]
 #   bash scripts/demo-position.sh nudge     borrower borrows more until HF is DEMO_NUDGE_HF_BPS, at or under the
 #                                           trigger, so the keeper exits on the next block
 #   bash scripts/demo-position.sh all       seed, open, then keeper
@@ -21,14 +24,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CMD="${1:-}"
 MODE="${2:-}"
 [ "$CMD" = "--fork" ] && { CMD="${2:-}"; MODE="--fork"; }
+case "$CMD" in seed|position|open|nudge|keeper|all) ;; *) sed -n '2,24p' "$0"; exit 1 ;; esac
 
 if [ "$MODE" = "--fork" ]; then
   # shellcheck disable=SC1091
   source "$ROOT/.fork/accounts.env"
   RPC="$FORK_RPC_URL"; WS="$FORK_WS_URL"; DEPLOYMENT="$ROOT/contracts/deployments/fork-143.json"
+  KEEPER_LOG="${KEEPER_LOG:-$ROOT/.fork/demo-keeper.log}"
 else
   : "${MONAD_RPC_URL:?set MONAD_RPC_URL}"
   RPC="$MONAD_RPC_URL"; WS="${MONAD_WS_URL:-}"; DEPLOYMENT="$ROOT/contracts/deployments/143.json"
+  KEEPER_LOG="${KEEPER_LOG:-$ROOT/keeper.log}"
 fi
 [ -f "$DEPLOYMENT" ] || { echo "no deployment at $DEPLOYMENT; run scripts/deploy-mainnet.sh first" >&2; exit 1; }
 
@@ -42,6 +48,8 @@ export VAULT_SEED="${VAULT_SEED:-100000000}"
 forge_run() { # key target [forge args...]
   local key="$1" target="$2"
   shift 2
+  # shellcheck disable=SC1091
+  source "$ROOT/scripts/require-foundry.sh"
   (cd "$ROOT/contracts" && forge script "$target" "$@" --rpc-url "$RPC" --private-key "$key" --broadcast --slow)
 }
 
@@ -55,6 +63,11 @@ open() {
   forge_run "$DEMO_PRIVATE_KEY" script/DemoPosition.s.sol:DemoPosition --sig "open()"
 }
 
+position() {
+  : "${DEMO_PRIVATE_KEY:?set DEMO_PRIVATE_KEY}"
+  forge_run "$DEMO_PRIVATE_KEY" script/DemoPosition.s.sol:DemoPosition --sig "openPosition()"
+}
+
 nudge() {
   : "${DEMO_PRIVATE_KEY:?set DEMO_PRIVATE_KEY}"
   DEMO_HF_BPS="${DEMO_NUDGE_HF_BPS:-10450}" forge_run "$DEMO_PRIVATE_KEY" script/DemoPosition.s.sol:DemoPosition --sig "borrowTo()"
@@ -64,14 +77,15 @@ keeper() {
   : "${KEEPER_PRIVATE_KEY:?set KEEPER_PRIVATE_KEY}"
   cd "$ROOT"
   MONAD_RPC_URL="$RPC" MONAD_WS_URL="$WS" CHAIN_ID=143 KEEPER_PRIVATE_KEY="$KEEPER_PRIVATE_KEY" \
-    SHIELD_DEPLOYMENT_FILE="$DEPLOYMENT" pnpm --filter keeper start
+    SHIELD_DEPLOYMENT_FILE="$DEPLOYMENT" pnpm --filter keeper start 2>&1 | tee -a "$KEEPER_LOG"
 }
 
 case "$CMD" in
   seed) seed ;;
+  position) position ;;
   open) open ;;
   nudge) nudge ;;
   keeper) keeper ;;
   all) seed; open; keeper ;;
-  *) sed -n '2,21p' "$0"; exit 1 ;;
+  *) sed -n '2,24p' "$0"; exit 1 ;;
 esac

@@ -24,6 +24,8 @@ if [ "${1:-}" = "stop" ]; then
   exit 0
 fi
 
+# shellcheck disable=SC1091
+source "$ROOT/scripts/require-foundry.sh"
 UPSTREAM="${MONAD_RPC_URL:-https://rpc.monad.xyz}"
 BLOCK="${FORK_BLOCK:-$(cast block-number --rpc-url "$UPSTREAM")}"
 ARGS=(--fork-url "$UPSTREAM" --fork-block-number "$BLOCK" --block-time "${FORK_BLOCK_TIME:-0.3}" --port "$PORT"

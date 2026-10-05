@@ -23,7 +23,9 @@ if ! cli indexer get "$NAME" >/dev/null 2>&1; then
   cli indexer add --name "$NAME" --repo shield --branch main
 fi
 cli indexer settings set "$NAME" --root-dir indexer --config-file config.yaml --auto-deploy true || true
-cat > /tmp/shield-indexer.env <<ENV
+ENV_FILE=$(mktemp)  # holds the HyperSync token; private to this user and removed on exit
+trap 'rm -f "$ENV_FILE"' EXIT
+cat > "$ENV_FILE" <<ENV
 ENVIO_API_TOKEN=$ENVIO_API_TOKEN
 ENVIO_START_BLOCK=$(j block)
 ENVIO_REGISTRY_ADDRESS=$(j PositionRegistry)
@@ -33,8 +35,7 @@ ENVIO_VAULT_ADDRESS=$(j ShieldVault)
 ENVIO_RPC_URL=https://rpc.monad.xyz
 ENVIO_RPC_FOR=fallback
 ENV
-cli indexer env import "$NAME" /tmp/shield-indexer.env
-rm -f /tmp/shield-indexer.env
+cli indexer env import "$NAME" "$ENV_FILE"
 COMMIT=$(git -C "$ROOT" rev-parse HEAD)
 echo "deploying commit $COMMIT; Envio builds on push when auto-deploy is on"
 cli deployment status "$NAME" "$COMMIT" --watch-till-synced || true

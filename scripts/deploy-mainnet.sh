@@ -11,6 +11,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/require-foundry.sh"
 cd "$ROOT/contracts"
 
 if [ "${1:-}" = "--fork" ]; then

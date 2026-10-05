@@ -64,7 +64,10 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 | `PositionRegistry` | One packed record per opted-in borrower, page-aligned for MIP-8 |
 | `Repricer` | Per-block premium from Pyth price, realised volatility and distance to trigger; accrues against the prepaid balance |
 | `Executor` | The exit: vault funds or flash loan, `Pool.repay` on behalf of the borrower, `aToken.transferFrom` at 1.01x, reverts unless HF improves and stays above 1.0 |
-| `ShieldVault` | ERC-4626 vault; LPs fund exits and earn premiums plus the 1% discount |
+| `ShieldVault` | ERC-4626 vault in USDC; LPs fund exits and earn premiums plus the 1% discount. NAV is USDC, seized aTokens at Aave's oracle, and premium accrued at the Repricer |
+| `UniswapV3Swapper` | Helper: the bounded swap the flash-loan fallback and vault unwinds use (Uniswap V3 on Monad) |
+
+The exit is permissionless: anyone may call `Executor.exit` when the conditions hold, and the contract checks every one of them. The keeper is a convenience, not a trust assumption. Trust model and static-analysis results: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Compared with what exists
 
@@ -81,12 +84,12 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 
 | Path | What |
 | --- | --- |
-| `contracts/` | Foundry project: the four contracts, tests, deploy scripts |
+| `contracts/` | Foundry project: contracts, unit, fork, fuzz and invariant tests, deploy and demo scripts |
 | `keeper/` | TypeScript keeper on viem |
-| `web/` | Next.js app: borrower opt-in, LP dashboard |
-| `indexer/` | Envio HyperIndex for positions, repricing and exits |
-| `docs/` | Build spec, technical decisions, progress log |
-| `scripts/` | Deployment, demo setup, repricing capture |
+| `web/` | Next.js app: landing, borrower page, LP page; Playwright end-to-end and review specs |
+| `indexer/` | Envio HyperIndex for positions, repricing, exits and vault flows |
+| `docs/` | Spec, technical decisions, design, security, test report, demo runbook, progress log |
+| `scripts/` | Mainnet deploy, demo position, indexer deploy, local fork stack, end-to-end run |
 | `CLAUDE.md` | Guide for coding agents working in this repo |
 
 ## Status
@@ -96,60 +99,106 @@ Full design: [docs/SPEC.md](docs/SPEC.md). Stack and reasoning: [docs/TECH-DECIS
 | M0 Verify external facts | done |
 | M1 Scaffold contracts, keeper, web, indexer | done |
 | M2 Contracts and Foundry tests | done |
-| M3 Keeper | done (on a mainnet fork; Aave is not on testnet, ADR-020) |
-| M4 Web | not started |
-| M5 Envio indexer | not started |
-| M6 Mainnet deployment and proof | not started |
-| M7 Submission | not started |
+| M3 Keeper | done, on a mainnet fork (Aave is not on Monad testnet, ADR-020) |
+| M4 Web | done, rehearsed end to end on a mainnet fork |
+| M5 Envio indexer | done locally; the hosted deployment needs the owner's Envio login (`scripts/deploy-indexer.sh`) |
+| M6 Mainnet deployment and proof | scripted and rehearsed; waiting for mainnet funds and keys |
+| M7 Submission | waiting for M6 and the video |
 
 ## Deployments (Monad mainnet, chain id 143)
 
+Not deployed yet. `bash scripts/deploy-mainnet.sh` deploys, verifies on MonadVision (and Monadscan with `ETHERSCAN_API_KEY`) and writes `contracts/deployments/143.json`; the addresses go here.
+
 | Contract | Address |
 | --- | --- |
-| PositionRegistry | pending M6 |
-| Repricer | pending M6 |
-| Executor | pending M6 |
-| ShieldVault | pending M6 |
+| PositionRegistry | not deployed yet (M6) |
+| Repricer | not deployed yet (M6) |
+| Executor | not deployed yet (M6) |
+| ShieldVault | not deployed yet (M6) |
+| UniswapV3Swapper | not deployed yet (M6) |
 
 ## Proof
 
-Filled during M6. Every item opens on [monadvision.com](https://monadvision.com) or [monadscan.com](https://monadscan.com).
+Filled during M6 with Monad mainnet transactions only; every item will open on [monadvision.com](https://monadvision.com) or [monadscan.com](https://monadscan.com). The fork rehearsals in [docs/DEMO.md](docs/DEMO.md) are tests, not proof.
 
 | Item | Value |
 | --- | --- |
-| Opt-in tx | pending M6 |
-| Three consecutive repricing txs | pending M6 |
-| Exit tx (`Exited` event) | pending M6 |
-| Executor gas (forge snapshot, Monad execution, cold state) | `exit` funded by the vault: 1,112,530; `exit` through the flash-loan fallback: 1,715,888; `reprice` (one borrower): 523,162; `repriceMany` (three borrowers): 715,031. With the keeper's access list a steady-state `repriceMany` for one borrower uses 192,094 and an `exit` 682,349. Source: [contracts/snapshots/](contracts/snapshots/) and [contracts/.gas-snapshot](contracts/.gas-snapshot) |
-| Envio indexer endpoint | pending M5 |
-| Demo video | pending M6 |
+| Opt-in tx | not yet (M6) |
+| Three consecutive repricing txs | not yet (M6) |
+| Exit tx (`Exited` event) | not yet (M6) |
+| Gas (forge snapshot, Monad execution, cold state) | `exit` funded by the vault 1,113,356; `exit` through the flash-loan fallback 1,716,714; `reprice` of one borrower 523,633; `repriceMany` of three 716,151. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
+| Gas with the keeper's access list (mainnet fork) | steady-state `repriceMany` for one borrower 192,094 (523,194 without); `exit` 682,349 (1,203,849 without) |
+| Envio indexer endpoint | not yet (needs the owner's Envio login) |
+| Demo video | not yet (M6) |
 
 ## Quick start
 
-Requirements: git, [Foundry](https://getfoundry.sh) 1.8 or later (Monad execution), Node 22 or later, pnpm 11.
+Requirements: git, [Foundry](https://getfoundry.sh) 1.8 or later (`foundryup`; earlier versions have no Monad execution), Node 22 or later, pnpm 11, and Docker for the local indexer.
 
 ```bash
 git clone --recurse-submodules https://github.com/pratikasr/shield.git
 cd shield
 
-# contracts
-cd contracts && forge build && forge test && cd ..
+# contracts: unit tests run offline; set MONAD_RPC_URL to also run the fork tests against real Aave on Monad
+cd contracts
+forge build
+forge test
+MONAD_RPC_URL=https://rpc.monad.xyz forge test
+cd ..
 
 # keeper, web, indexer
 pnpm install
 pnpm -r build
+pnpm lint
+pnpm test
 ```
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
 
+### Run the whole thing locally
+
+Everything against a local fork of Monad mainnet (a test environment; the header says "Local fork"):
+
+```bash
+bash scripts/stack.sh up      # fork, Shield deployment, LP deposit, a borrower position, Envio, keeper, web
+```
+
+Open http://localhost:3200, choose "Fork test wallet" in Connect, set a trigger, approve, prepay and opt in. The keeper reprices every block. `bash scripts/stack.sh down` stops everything. `bash scripts/e2e.sh` runs the same flow under Playwright and checks every on-screen claim against the fork's receipts.
+
+### On Monad mainnet
+
+```bash
+MONAD_RPC_URL=https://rpc.monad.xyz DEPLOYER_PRIVATE_KEY=0x... KEEPER_ADDRESS=0x... bash scripts/deploy-mainnet.sh
+LP_PRIVATE_KEY=0x... MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/demo-position.sh seed
+DEMO_PRIVATE_KEY=0x... MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/demo-position.sh open
+KEEPER_PRIVATE_KEY=0x... MONAD_RPC_URL=https://rpc.monad.xyz MONAD_WS_URL=wss://rpc.monad.xyz bash scripts/demo-position.sh keeper
+bash scripts/web-env.sh && pnpm --filter web build && pnpm --filter web start
+MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/proof.sh   # Deployments and Proof rows, each checked on chain
+```
+
+The full runbook, account funding, the video steps and the fork rehearsals are in [docs/DEMO.md](docs/DEMO.md).
+
+## Tests
+
+| What | Command | Result |
+| --- | --- | --- |
+| Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 101 tests pass |
+| Static analysis | Slither 0.11.6, Aderyn 0.6.8 | every high and medium fixed or justified in [docs/SECURITY.md](docs/SECURITY.md) |
+| Keeper | `pnpm --filter keeper test` | 33 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
+| Indexer | `pnpm --filter shield-indexer test` | 2 tests pass |
+| End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
+| Lighthouse (mobile) | landing, borrower, LP | performance 98, 92, 91; accessibility 100 on all |
+
+Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
+
 ## Bounties
 
-Envio: positions, repricing and exits are indexed with Envio HyperIndex (`indexer/`) and served to the web app from Envio's hosted endpoint.
+Envio: every Shield event (opt-ins, triggers, each per-block reprice, exits, vault deposits, withdrawals, premiums and collateral flows) is indexed with Envio HyperIndex (`indexer/`). The web app's exit history, repricing history, covered-positions table, vault activity and the LP premium rate read from its GraphQL endpoint. HyperSync serves Monad mainnet; the same indexer runs against the local fork over RPC.
 
 ## Disclosures
 
 - Pre-existing code: none. Everything in this repository was written for this hackathon. OpenZeppelin Contracts, Aave V3 interfaces and the Pyth Solidity SDK are dependencies.
-- AI tools: Claude (Anthropic) via Claude Code and Cowork, used for research, specification and code generation.
+- AI tools: Claude (Anthropic) via Claude Code and Cowork, used for research, specification, code generation, testing and documentation.
 
 ## License
 
