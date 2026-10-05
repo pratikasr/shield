@@ -13,11 +13,15 @@ export function ShieldMark({ className, size = 22 }: { className?: string; size?
   );
 }
 
-export function Wordmark({ className, compact }: { className?: string; compact?: boolean }) {
+/**
+ * The mark and the name. `compact` drops the name below 420 px; `textClassName` hides it at other widths where the
+ * header is crowded (the app header between 768 and 1024 px).
+ */
+export function Wordmark({ className, compact, textClassName }: { className?: string; compact?: boolean; textClassName?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <ShieldMark />
-      <span className={cn("text-[1.0625rem] font-semibold tracking-[-0.01em]", compact && "hidden min-[420px]:inline")}>Shield</span>
+      <span className={cn("text-[1.0625rem] font-semibold tracking-[-0.01em]", compact && "hidden min-[420px]:inline", textClassName)}>Shield</span>
     </span>
   );
 }

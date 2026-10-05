@@ -16,6 +16,7 @@ import { Wordmark } from "./wordmark";
 const NAV = [
   { href: "/app/borrow", label: "Protect" },
   { href: "/app/vault", label: "Earn" },
+  { href: "/app/analytics", label: "Analytics" },
 ];
 
 /** The network the app reads, with the latest proposed block: proof the page is live, not a mock. */
@@ -73,6 +74,32 @@ function WalletButton() {
   );
 }
 
+/** The page links. Inline beside the mark from 640 px; on phones, a row of their own under the header bar. */
+function AppNav({ pathname, row }: { pathname: string | null; row?: boolean }) {
+  return (
+    <nav aria-label="App" className={row ? "mx-auto flex h-11 max-w-[76rem] items-stretch px-4 sm:hidden" : "hidden items-center gap-1 sm:flex"}>
+      {NAV.map((n) => {
+        const active = pathname?.startsWith(n.href);
+        return (
+          <Link
+            key={n.href}
+            href={n.href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "hit relative rounded-md text-sm font-medium transition-colors",
+              row ? "flex flex-1 items-center justify-center" : "px-3 py-2",
+              active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {n.label}
+            {active && <span className={cn("absolute h-0.5 rounded-full bg-foreground", row ? "inset-x-4 bottom-0" : "inset-x-3 -bottom-[13px]")} aria-hidden />}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function AppHeader() {
   const pathname = usePathname();
   return (
@@ -83,33 +110,19 @@ export function AppHeader() {
       <div className="mx-auto flex h-16 max-w-[76rem] items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3 sm:gap-8">
           <Link href="/" className="rounded-md" aria-label="Shield home">
-            <Wordmark compact />
+            {/* From 768 px the network chip joins the bar; until 1024 px the name gives it room. */}
+            <Wordmark textClassName="md:max-lg:hidden" />
           </Link>
-          <nav aria-label="App" className="flex items-center gap-1">
-            {NAV.map((n) => {
-              const active = pathname?.startsWith(n.href);
-              return (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "hit relative rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {n.label}
-                  {active && <span className="absolute inset-x-3 -bottom-[13px] h-0.5 rounded-full bg-foreground" aria-hidden />}
-                </Link>
-              );
-            })}
-          </nav>
+          <AppNav pathname={pathname} />
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <NetworkChip />
           <ThemeToggle />
           <WalletButton />
         </div>
+      </div>
+      <div className="border-t sm:hidden">
+        <AppNav pathname={pathname} row />
       </div>
     </header>
   );

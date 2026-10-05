@@ -61,6 +61,7 @@ export function SiteFooter() {
           <Column title="Product">
             <Item href="/app/borrow">Protect a position</Item>
             <Item href="/app/vault">Earn as a liquidity provider</Item>
+            <Item href="/app/analytics">Analytics</Item>
             <Item href="/#how">How an exit works</Item>
             <Item href="/#faq">Questions</Item>
           </Column>
@@ -105,6 +106,7 @@ export function AppFooter() {
       <div className="mx-auto flex max-w-[76rem] flex-col gap-3 px-4 py-6 text-[0.8125rem] text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between">
         <p className="max-w-3xl">{DISCLAIMER}</p>
         <nav aria-label="Resources" className="flex shrink-0 flex-wrap gap-x-5 gap-y-1">
+          <Link href="/app/analytics" prefetch={false} className="hit relative hover:text-foreground">Analytics</Link>
           <a href={DOCS.security} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">Security</a>
           <a href={DOCS.tests} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">Tests</a>
           <a href={REPO} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">GitHub</a>
