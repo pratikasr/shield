@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { monadTestnet } from "viem/chains";
 import { createConfig, createConnector, http, useAccount, WagmiProvider } from "wagmi";
-import { mock } from "wagmi/connectors";
+import { injected, mock } from "wagmi/connectors";
 import { monadMainnet, supportedChains } from "@/lib/chains";
 import { isFork } from "@/lib/env";
 import { setWalletCookie } from "@/lib/wallet-cookie";
@@ -34,6 +34,29 @@ const forkTestWallet = (): Wallet => ({
     createConnector((config) => ({ ...mock({ accounts: [e2eAccount!], features: { reconnect: true } })(config), ...details })),
 });
 
+/**
+ * MetaMask through its browser extension only. RainbowKit's own MetaMask entry uses wagmi's MetaMask SDK connector,
+ * which loads the SDK (about 450 KB of script) on every page as soon as the app checks for a returning wallet, and
+ * cost the app pages several Lighthouse points. This keeps RainbowKit's name, icon and install links and connects
+ * with the injected provider, as the extension expects. MetaMask Mobile still works in its in-app browser, and
+ * through WalletConnect when a project id is set.
+ */
+const metaMaskExtensionWallet = (params: Parameters<typeof metaMaskWallet>[0]): Wallet => {
+  const { id, name, rdns, iconUrl, iconAccent, iconBackground, installed, downloadUrls, extension } = metaMaskWallet(params);
+  return {
+    id,
+    name,
+    rdns,
+    iconUrl,
+    iconAccent,
+    iconBackground,
+    installed,
+    downloadUrls,
+    extension,
+    createConnector: (details) => createConnector((config) => ({ ...injected({ target: "metaMask" })(config), ...details })),
+  };
+};
+
 const connectors = connectorsForWallets(
   [
     {
@@ -41,7 +64,7 @@ const connectors = connectorsForWallets(
       wallets: [
         ...(e2eAccount ? [forkTestWallet] : []),
         injectedWallet,
-        metaMaskWallet,
+        metaMaskExtensionWallet,
         rabbyWallet,
         ...(projectId ? [walletConnectWallet] : []),
       ],
