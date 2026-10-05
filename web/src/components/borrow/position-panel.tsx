@@ -197,7 +197,7 @@ export function PositionPanel({
         exitTarget={trigger !== undefined && buffer !== undefined ? trigger + buffer : undefined}
         trail={trail.current}
         armed={active && arm.armed}
-        triggerNote={active ? arm.triggerNote : "Trigger, not armed"}
+        triggerNote={active ? arm.triggerNote : "Trigger, preview"}
       />
 
       {noDebt && <p className="mt-6 border-t pt-5 text-sm text-muted-foreground">No debt on this position, so nothing can be liquidated and no exit can run.</p>}

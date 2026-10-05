@@ -24,6 +24,8 @@ async function shoot(page: Page, name: string, themes: ("dark" | "light")[] = ["
     await theme(page, t);
     for (const w of widths) {
       await page.setViewportSize({ width: w, height: 900 });
+      // A full-page shot draws sticky elements (header, side panel) where the current scroll puts them.
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(700);
       await page.screenshot({ path: `${out}/${name}-${w}-${t}.png`, fullPage: true });
     }

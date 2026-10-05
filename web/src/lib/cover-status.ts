@@ -251,9 +251,9 @@ function statusFix(status: Cover["exitStatus"]): FixAction | undefined {
   }
 }
 
-/** The header's short status: "Protected at 1.05", "Cover arms in 12:04", "Not armed: ...", "Exit due", "Exited". */
+/** The header's short status: "Protected at 1.05", "Cover arms in 12:04 (at 15:48)", "Not armed: ...", "Exit due", "Exited". */
 export function headerStatus(arm: ArmState, cover: Cover | undefined): string {
   if (arm.kind === "armed" && cover) return `Protected at ${cover.trigger.toFixed(2)}`;
-  if (arm.kind === "warming" && arm.armsAtClock) return `${arm.title}, arms at ${arm.armsAtClock}`;
+  if (arm.kind === "warming" && arm.armsAtClock) return `${arm.title} (at ${arm.armsAtClock})`;
   return arm.title;
 }
