@@ -18,6 +18,8 @@ export interface AssetConfig {
   k: number;
   /** Fallback volatility, as a fraction (0.8 = 80% a year). */
   sigmaFallback: number;
+  /** The same, x 1e18 as stored, for passing back to the Repricer's `sigmaOf`. */
+  sigmaFallbackRaw: bigint;
 }
 
 /** The owner-set parameters every rule on the page must match, read from the registry and the Executor. */
@@ -34,6 +36,10 @@ export interface ShieldConfig {
   maxOracleDeviationBps: number;
   /** Oldest Pyth price an exit accepts, in seconds. */
   exitMaxPriceAge: number;
+  /** Share of each premium charge that goes to the protocol treasury, in bps (ADR-037); the vault keeps the rest. */
+  protocolShareBps: number;
+  /** Where the protocol's share is paid. */
+  treasury: Address;
 }
 
 /** Registry and Executor parameters. They change only by owner transactions, so they refresh every 30 s, not every block. */
@@ -55,6 +61,8 @@ export function useShieldConfig() {
         { address: shield.executor!, abi: executorAbi, functionName: "minCoverSeconds", chainId },
         { address: shield.executor!, abi: executorAbi, functionName: "maxOracleDeviationBps", chainId },
         { address: shield.executor!, abi: executorAbi, functionName: "exitMaxPriceAge", chainId },
+        { address: shield.registry!, abi: positionRegistryAbi, functionName: "protocolShareBps", chainId },
+        { address: shield.registry!, abi: positionRegistryAbi, functionName: "treasury", chainId },
         ...assets.map((a) => ({ address: shield.registry!, abi: positionRegistryAbi, functionName: "assetConfig", args: [a], chainId })),
       ]
     : [];
@@ -74,14 +82,21 @@ export function useShieldConfig() {
       minCoverSeconds: Number(d[3]),
       maxOracleDeviationBps: Number(d[4]),
       exitMaxPriceAge: Number(d[5]),
+      protocolShareBps: Number(d[6]),
+      treasury: d[7] as Address,
       assets: assets.map((asset, i) => {
-        const c = d[6 + i] as { enabled: boolean; id: number; pythFeedId: Hex; k: bigint; sigmaFallback: bigint };
-        return { asset, enabled: c.enabled, id: Number(c.id), pythFeedId: c.pythFeedId, k: Number(c.k) / 1e18, sigmaFallback: Number(c.sigmaFallback) / 1e18 };
+        const c = d[8 + i] as { enabled: boolean; id: number; pythFeedId: Hex; k: bigint; sigmaFallback: bigint };
+        return { asset, enabled: c.enabled, id: Number(c.id), pythFeedId: c.pythFeedId, k: Number(c.k) / 1e18, sigmaFallback: Number(c.sigmaFallback) / 1e18, sigmaFallbackRaw: BigInt(c.sigmaFallback) };
       }),
     };
   }, [reads.data, assets]);
 
   return { config, isLoading: list.isLoading || reads.isLoading, error: list.error ?? reads.error };
+}
+
+/** The liquidity providers' share of each premium, as a fraction (0.9 at a 10% protocol share). */
+export function lpPremiumShare(config: Pick<ShieldConfig, "protocolShareBps">): number {
+  return 1 - config.protocolShareBps / 10_000;
 }
 
 /** The registry's settings for one collateral, if listed. */

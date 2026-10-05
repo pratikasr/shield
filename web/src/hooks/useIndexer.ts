@@ -6,16 +6,17 @@ import { IndexerError, envioQuery } from "@/lib/envio";
 import { envioUrl } from "@/lib/env";
 
 /**
- * Polls the Envio indexer every 2 s. React Query puts a query that never succeeded back to "pending, no error" on each
- * poll, which would show "Loading" forever while the indexer is down; this keeps the failure until a success, so each
- * tab can say "History unavailable" instead.
+ * Polls the Envio indexer, every 2 s unless `refetchMs` says otherwise (larger queries, such as a chart's few hundred
+ * rows, poll less often). React Query puts a query that never succeeded back to "pending, no error" on each poll, which
+ * would show "Loading" forever while the indexer is down; this keeps the failure until a success, so each tab can say
+ * "History unavailable" instead.
  */
-export function useIndexerQuery<T>(key: readonly unknown[], query: string, variables: Record<string, unknown> = {}, enabled = true) {
+export function useIndexerQuery<T>(key: readonly unknown[], query: string, variables: Record<string, unknown> = {}, enabled = true, refetchMs = 2_000) {
   const q = useQuery({
     queryKey: key,
     queryFn: () => envioQuery<T>(query, variables),
     enabled: enabled && Boolean(envioUrl),
-    refetchInterval: 2_000,
+    refetchInterval: refetchMs,
     retry: 1,
   });
   const last = useRef<Error | null>(null);
