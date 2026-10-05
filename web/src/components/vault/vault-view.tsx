@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { VaultIncome, exactly, headlineUsd } from "@/components/vault/vault-income";
+import { VaultIncome, headlineUsd } from "@/components/vault/vault-income";
 import { lpPremiumShare, useShieldConfig } from "@/hooks/useShieldConfig";
 import { useTx } from "@/hooks/useTx";
 import { useVault, type VaultState } from "@/hooks/useVault";
@@ -419,7 +419,7 @@ export function VaultView() {
               <>
                 <Composition vault={vault} />
                 <dl className="mt-6 grid grid-cols-1 gap-x-6 gap-y-5 border-t pt-5 sm:grid-cols-3">
-                  <Stat label="Premium earned" value={headlineUsd(vault.premiumEarned)} hint={`${exactly(vault.premiumEarned)}The vault's share, counted every block`} />
+                  <Stat label="Premium earned" value={headlineUsd(vault.premiumEarned)} hint="The vault's share, counted every block" />
                   <Stat
                     label="Exits executed"
                     value={vault.exitsExecuted.toLocaleString("en-US")}
