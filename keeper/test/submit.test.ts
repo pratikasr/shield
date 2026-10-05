@@ -68,6 +68,8 @@ interface Script {
   sync?: (raw: Hex, n: number) => unknown;
   /** eth_call replay of a reverted tx: throw this message, or succeed when undefined. */
   replayError?: string;
+  /** Per-block replay errors, keyed by the block parameter ("0x10" or "latest"); overrides replayError. */
+  replayAt?: Record<string, string>;
   /** Hashes whose receipt eth_getTransactionReceipt returns. */
   mined?: Set<string>;
   /** Hashes eth_getTransactionByHash knows (in the mempool). */
@@ -105,9 +107,12 @@ function client(script: Script, calls: string[], sent: Hex[] = []) {
             sent.push(raw);
             return keccak256(raw);
           }
-          case "eth_call":
-            if (script.replayError) throw Object.assign(new Error(script.replayError), { code: -32000 });
+          case "eth_call": {
+            const at = String((params as unknown[])[1]);
+            const error = script.replayAt ? script.replayAt[at] : script.replayError;
+            if (error) throw Object.assign(new Error(error), { code: -32000 });
             return "0x";
+          }
           case "eth_getTransactionReceipt": {
             const hash = (params as string[])[0]!;
             if (script.mined && !script.mined.has(hash)) return null;
@@ -263,6 +268,21 @@ describe("Submitter on Monad receipts (audit H2)", () => {
     // A flash-loan exit measured at 1.4M gas fits under MAX_GAS_EXIT=3M: 1.4M x 1.15 = 1.61M.
     script.estimate = 1_400_000n;
     expect(await s.measureGas(exit)).toBe(1_610_000n);
+  });
+
+  it("replays on the latest block when the node has no state for the receipt's block", async () => {
+    const calls: string[] = [];
+    const s = submitter(
+      {
+        sync: (raw) => receipt(raw, keccak256(raw), "0x0"),
+        replayAt: { "0x10": "missing trie node", latest: "out of gas" },
+      },
+      calls,
+    );
+    const r = await s.send(exit);
+    expect(r.outOfGas).toBe(true);
+    expect(calls.filter((c) => c === "eth_call")).toHaveLength(2);
+    expect(s.extraBufferBps.get("exit")).toBe(2_000);
   });
 
   it("never refuses an exit because of an extra buffer: the ceiling ignores it and caps it", async () => {

@@ -377,22 +377,31 @@ export class Submitter {
     return { hash: receipt.transactionHash, receipt, gasLimit: gas, mode: result.mode, latencyMs, outOfGas };
   }
 
-  /** eth_call of the reverted transaction at its own gas limit, on the state of its block. */
+  /**
+   * eth_call of the reverted transaction at its own gas limit, on the state of its block. When the node cannot
+   * run a call at that block (no history), it is replayed once on the latest block instead.
+   */
   private async replay(tx: TxRequest, gas: bigint, blockNumber: bigint): Promise<{ outOfGas: boolean; reason?: string }> {
-    try {
-      await this.client.call({
+    const call = (at: { blockNumber: bigint } | { blockTag: "latest" }) =>
+      this.client.call({
         account: this.account.address,
         to: tx.to,
         data: tx.data,
         value: tx.value,
         accessList: tx.accessList,
         gas,
-        blockNumber,
+        ...at,
       });
-      return { outOfGas: false, reason: "replay succeeded (state changed in the block)" };
-    } catch (err) {
-      return { outOfGas: isOutOfGas(err), reason: messageOf(err).trim().slice(0, 200) };
+    for (const at of [{ blockNumber }, { blockTag: "latest" as const }]) {
+      try {
+        await call(at);
+        return { outOfGas: false, reason: "replay succeeded (state changed in the block)" };
+      } catch (err) {
+        if (isOutOfGas(err) || isRevert(err)) return { outOfGas: isOutOfGas(err), reason: messageOf(err).trim().slice(0, 200) };
+        if ("blockTag" in at) return { outOfGas: false, reason: `replay failed: ${messageOf(err).trim().slice(0, 160)}` };
+      }
     }
+    return { outOfGas: false };
   }
 
   /** Classifies a failed broadcast and returns the error to throw. Never lets the nonce be reused while unsure. */
