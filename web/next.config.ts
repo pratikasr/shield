@@ -15,6 +15,7 @@ const unusedOptionalModules = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
