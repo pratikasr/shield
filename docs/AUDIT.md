@@ -17,7 +17,7 @@ An internal review before the Monad mainnet deployment. It is not an external au
 - **Keeper, indexer and scripts:** 6 high, 14 medium.
 - **Web app:** 1 critical, 6 high, 17 medium.
 
-Every critical, high and medium issue is fixed, each with a regression test or, for documents, a correction. The low issues not fixed are accepted and disclosed below and in [SECURITY.md](SECURITY.md).
+Every critical, high and medium issue is fixed (what "fixed" means is defined below). The low issues not fixed are accepted and disclosed below and in [SECURITY.md](SECURITY.md).
 
 After the fixes:
 
@@ -26,6 +26,7 @@ After the fixes:
 - **Indexer:** 5 tests pass.
 - **Static analysis:** Slither and Aderyn were rerun, and every high and medium finding is fixed or justified.
 - **End to end:** the video-script test passes against the full stack on two fresh forks.
+- **Mainnet runbook:** the scripted flow (deploy, seed, open, keeper, nudge, exit, `proof.sh`) passes on a fresh fork after the script changes ([DEMO.md](DEMO.md), run 4).
 - **Web:** Lighthouse (mobile) landing 97, borrower 92, LP 91 for performance, 100 for accessibility and best practices, CLS 0; 48 review captures in [screenshots/pass-4](screenshots/pass-4/).
 
 Severity follows impact on users' funds first, then on what users are told, then on operations. "Fixed" means the change is merged. Contract and keeper fixes each carry a regression test; web fixes were rechecked in a browser against the full local stack; document fixes are the corrected text.
