@@ -46,6 +46,12 @@ async function afterExit(page: Page) {
   await expect.poll(async () => statValue(page, "Exits executed"), { timeout: 90_000 }).toBe("1");
   await page.waitForTimeout(3000);
   await shoot(page, "vault-after-exit", ["dark", "light"]);
+
+  await page.goto("/app/analytics");
+  await expect(page.getByRole("heading", { name: "Analytics", level: 1 })).toBeVisible({ timeout: 60_000 });
+  await expect.poll(async () => statValue(page, "Exits"), { timeout: 90_000 }).toBe("1");
+  await page.waitForTimeout(3000);
+  await shoot(page, "analytics", ["light", "dark"]);
 }
 
 test.describe("design review captures", () => {
