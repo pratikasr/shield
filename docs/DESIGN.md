@@ -185,7 +185,8 @@ Layout:
 
 - **Header band:** market chip (Aave and Monad icons), page title, cover status (Not protected, Protected at x.xx, Unprotected, or Exited), and net worth, collateral, debt and health factor on the right.
 - **Left column:**
-  - "Liquidation risk": the gauge; collateral price now, liquidation price and exit price; the cost comparison; and, while protected, the cover rate, prepaid balance and premium paid.
+  - "Liquidation risk": the gauge; collateral price now, liquidation price and exit price; the estimated chance the collateral touches the exit price within 24 hours and 7 days (zero-drift lognormal at the cover's volatility, with its assumptions in an info note); the cost comparison; while protected, the cover rate, prepaid balance and premium paid; and "If WETH moves", a -30% to +30% simulator showing the health factor at that price, whether the exit would run or Aave could liquidate, and the cost of each.
+  - "Health factor history": a line chart of the health factor from the indexer's reprices, with the trigger, Aave's 1.00 line and exit markers, and premium paid below it; ranges This cover, Last hour, 24 hours and All; hover and keyboard readout and a table alternative. Loaded after the page is interactive.
   - "Activity": Exits and Repricing tabs.
   - "Your assets on Aave".
   - "Sources and contracts": Aave's oracle price against Pyth, with the gap an exit allows (2%), and every contract that can act on the position, each linked to the explorer.
@@ -225,6 +226,7 @@ Layout:
 - **Header band:** "Shield vault, USDC" chip, title "Earn by funding exits", a one-line explanation, and vault value, premium rate now and share price on the right.
 - **Left column:**
   - "Vault overview": a composition bar (USDC, collateral from exits, premium to sweep), then premium earned, exits executed and average discount captured.
+  - "Income since launch": where liquidity providers' earnings come from (premiums to the vault, gross exit discounts) with the protocol's share of premiums shown apart, the split read from the registry, and a link to Analytics.
   - "Activity": Exits, Covered positions and Vault flows tabs.
 - **Right column (sticky):** deposit and withdraw.
 
