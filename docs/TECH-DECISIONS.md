@@ -172,6 +172,12 @@ Decision: every keeper transaction carries an EIP-2930 access list: the node's `
 
 Why: under MIP-8 an access-list address costs 2,400 and a key 1,900, against 10,100 for a cold account and 8,100 for a cold page. Measured on the fork: `repriceMany` 523,194 gas without a list, 192,094 with it (63% less); `exit` 1,203,849 without, 682,349 with (43% less). This is the "page-warmed registry" claim in numbers.
 
+## ADR-028 Keeper spending limits and repricing defaults (5 Oct 2026, from the pre-mainnet audit)
+
+Decision: supersedes the defaults in ADR-025. The keeper reprices every block for `REPRICE_WINDOW_BLOCKS` (default 600, about 3 minutes) from its start, then every `REPRICE_IDLE_EVERY_N_BLOCKS` (200) counted from the last reprice; 0 still means no end and fork rehearsals use it. It reprices only records that are active, not lapsed, with prepaid premium left and a clean preview, riskiest first, in chunks under `MAX_GAS_REPRICE`. Below `MIN_BALANCE_FOR_EXIT_WEI` (0.2 MON) it stops repricing and keeps the balance for exits. A `repriceMany` gas limit is measured when the batch changes and again every 20 blocks or after a failure; in between, the last limit measured for the same batch is reused, so every transaction still carries a measured limit. A reverted receipt counts as out of gas only when an `eth_call` replay at the same limit runs out of gas, because Monad receipts report gas used equal to the limit.
+
+Why: with no window, every-block repricing of one borrower costs about 8,500 MON a day (ADR-025), and a keeper left running would spend its balance on reprices while a due exit could not be paid for. Lapsed or empty covers cannot be charged, so repricing them only spends gas. One `repriceMany` for every borrower stops fitting under the ceiling at about 50 borrowers, and one reverting borrower blocked the whole batch. The cached limit and access list cut a steady pass from 9 sequential round trips to 3, which keeps three reprices in consecutive 300 ms blocks within reach on mainnet.
+
 ## Verified facts
 
 Append one line per fact, with the date checked and the source. Agents append here as M0 items are resolved.
