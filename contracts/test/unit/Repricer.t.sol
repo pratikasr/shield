@@ -244,9 +244,12 @@ contract RepricerTest is Test {
         reg.setProtocolShare(treasury, 1500);
         uint256 owed = _chargeLarge(100);
         uint256 toTreasury = owed * 1500 / 10_000;
+        assertEq(rp.sweep(), (owed - toTreasury) / 1e12, "returns the vault's part");
+        assertEq(usdc.balanceOf(treasury), 0, "the vault's sweep never pays the treasury");
         vm.expectEmit(true, false, false, true, address(rp));
         emit IRepricer.ProtocolPremiumPaid(treasury, toTreasury / 1e12);
-        assertEq(rp.sweep(), (owed - toTreasury) / 1e12, "returns the vault's part");
+        assertEq(rp.sweepProtocol(), toTreasury / 1e12, "returns the treasury's part");
+        assertEq(rp.sweepProtocol(), 0, "nothing left to pay");
         assertEq(usdc.balanceOf(treasury), toTreasury / 1e12);
         assertEq(usdc.balanceOf(address(vault)), (owed - toTreasury) / 1e12);
         assertEq(vault.totalPremiumEarned(), (owed - toTreasury) / 1e12);
@@ -265,7 +268,7 @@ contract RepricerTest is Test {
         assertEq(rp.pendingToTreasury(), first * 2000 / 10_000, "the second charge owes the protocol nothing");
         assertEq(rp.pendingToVault(), first - first * 2000 / 10_000 + second);
         // Premium charged at the old share is still paid out after the share drops to zero.
-        rp.sweep();
+        rp.sweepProtocol();
         assertEq(usdc.balanceOf(treasury), first * 2000 / 10_000 / 1e12);
     }
 
@@ -276,16 +279,27 @@ contract RepricerTest is Test {
         assertEq(rp.pendingToVault(), owed);
     }
 
-    function test_protocolShare_vaultSweepAlsoPaysTreasury() public {
+    /// @notice A treasury that cannot receive USDC never blocks the vault: exits and withdrawals sweep only the
+    /// vault's part, and only `sweepProtocol` fails.
+    function test_protocolShare_failingTreasuryNeverBlocksTheVault() public {
         reg.setProtocolShare(treasury, 1000);
         _chargeLarge(1000);
+        usdc.setBlocked(treasury, true);
         uint256 vaultPart = rp.pendingPremium();
         uint256 protocolPart = rp.pendingProtocolPremium();
         assertGt(protocolPart, 0);
         vm.prank(executor);
         vault.fundExit(vaultPart);
-        assertEq(usdc.balanceOf(treasury), protocolPart, "the vault's sweep pays the treasury too");
-        assertEq(usdc.balanceOf(executor), vaultPart);
+        assertEq(usdc.balanceOf(executor), vaultPart, "the exit was funded");
+        vm.expectRevert();
+        rp.sweepProtocol();
+        assertEq(
+            rp.pendingProtocolPremium(), protocolPart, "the protocol's part waits for a working treasury"
+        );
+        address next = makeAddr("next treasury");
+        reg.setProtocolShare(next, 1000);
+        rp.sweepProtocol();
+        assertEq(usdc.balanceOf(next), protocolPart);
     }
 
     function testFuzz_protocolShare_conservesEveryCharge(uint16 share, uint32 blocks) public {
@@ -301,6 +315,7 @@ contract RepricerTest is Test {
         assertEq(uint256(rp.pendingToVault()) + rp.pendingToTreasury(), charged, "nothing created or lost");
         assertLe(rp.pendingToTreasury(), charged * share / 10_000 + 1);
         rp.sweep();
+        rp.sweepProtocol();
         assertEq(
             usdc.balanceOf(address(vault)) * 1e12 + usdc.balanceOf(treasury) * 1e12 + rp.pendingToVault()
                 + rp.pendingToTreasury(),

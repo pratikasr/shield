@@ -40,6 +40,15 @@ flowchart TB
 
 Premium per block: `p = k * sigma * V / max(d, d_min) * dt`, where V is the borrower's total Aave debt in USD (not the smaller amount an exit repays), sigma is realised collateral volatility from the last 200 Pyth observations, d is the distance between current HF and the trigger (at or below the trigger d is taken as d_min, the most expensive rate), d_min bounds the premium, and dt is one block. Each interval is billed at the higher of the stored and the live rate. The borrower prepays at least 1 USDC; when it runs out, cover lapses and the UI shows "unprotected". New, restored or raised cover can exit only after a 15-minute waiting period (ADR-031).
 
+### Who earns what
+
+| Income | Liquidity providers (the vault) | Protocol treasury |
+| --- | --- | --- |
+| Premiums, charged every block | 90% | 10% at launch; the owner can set 0% to 20%, capped in the contract (ADR-037) |
+| Exit discount, 1% of the debt an exit repays | 100%: it pays for holding the seized collateral's price risk | none |
+
+The borrower's cost is the same either way: the protocol's part comes out of the premium, never on top of it. The Repricer splits each charge when it bills it, so a change of share never reaches premium already charged. Earnings by hour, day and since deployment come from the Envio indexer and appear on the app's Analytics page.
+
 ### Pricing parameters
 
 | Parameter | Value | Meaning |
@@ -54,6 +63,7 @@ Premium per block: `p = k * sigma * V / max(d, d_min) * dt`, where V is the borr
 | Minimum prepay | 1 USDC | Needed to opt in |
 | Exit discount | 1% | Borrower's max discount must be at least this (default 1%, at most 5%) |
 | Exit target | trigger + 0.06 | The exit repays enough debt to bring HF back to this |
+| Protocol share | 10% of premiums | Paid to the treasury by `sweepProtocol()`, which anyone may call; at most 20% (`MAX_PROTOCOL_SHARE_BPS`) |
 
 The calibration is a Foundry test: `test_calibration_kGivesTwoPercentAtD5Sigma80` in [contracts/test/unit/PremiumMath.t.sol](contracts/test/unit/PremiumMath.t.sol).
 

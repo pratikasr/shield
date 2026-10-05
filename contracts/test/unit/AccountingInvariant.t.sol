@@ -116,6 +116,10 @@ contract AccountingHandler is Test {
         rp.sweep();
     }
 
+    function sweepProtocol() external {
+        rp.sweepProtocol();
+    }
+
     function repriceOne(uint256 seed) external {
         address u = _user(seed);
         if (reg.record(u).flags & reg.FLAG_ACTIVE() == 0) return;

@@ -115,6 +115,8 @@ contract RepricerForkTest is ForkBase {
         assertGt(owed, 0);
         uint256 before = usdc.balanceOf(address(this));
         d.repricer.sweep();
+        assertEq(usdc.balanceOf(address(this)), before, "the vault's sweep does not pay the treasury");
+        d.repricer.sweepProtocol();
         assertEq(usdc.balanceOf(address(this)) - before, owed, "treasury paid in USDC");
         assertEq(
             d.vault.totalPremiumEarned() * 1e12 + owed * 1e12 + d.repricer.pendingToVault()

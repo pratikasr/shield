@@ -468,6 +468,19 @@ export const repricerAbi = [
   },
   {
     "type": "function",
+    "name": "sweepProtocol",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "topUp",
     "inputs": [
       {

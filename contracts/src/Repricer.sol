@@ -154,28 +154,33 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
         _charge(borrower, r, false, _ctx());
     }
 
-    /// @notice Moves charged premium, in whole asset units, to the vault and the protocol's share to the treasury;
-    /// remainders under one unit wait. Anyone may call it, and the vault calls it whenever it moves money.
-    /// Repricing itself never transfers tokens, so its gas stays the same block after block.
+    /// @notice Moves the vault's part of charged premium, in whole asset units, to the vault; the remainder waits.
+    /// Anyone may call it, and the vault calls it whenever it moves money. Repricing itself never transfers
+    /// tokens, so its gas stays the same block after block.
     /// @return amount Asset units sent to the vault.
     function sweep() external nonReentrant returns (uint256 amount) {
         uint256 pending = pendingToVault;
         amount = pending / scale;
-        if (amount != 0) {
-            pendingToVault = uint128(pending - amount * scale);
-            asset.safeTransfer(address(vault), amount);
-            vault.notifyPremium(amount);
-            emit PremiumForwarded(amount);
-        }
-        uint256 pendingProtocol = pendingToTreasury;
-        uint256 toTreasury = pendingProtocol / scale;
-        if (toTreasury != 0) {
-            // A share above zero can only be set together with a treasury, so this is never address(0).
-            address treasury = registry.treasury();
-            pendingToTreasury = uint128(pendingProtocol - toTreasury * scale);
-            asset.safeTransfer(treasury, toTreasury);
-            emit ProtocolPremiumPaid(treasury, toTreasury);
-        }
+        if (amount == 0) return 0;
+        pendingToVault = uint128(pending - amount * scale);
+        asset.safeTransfer(address(vault), amount);
+        vault.notifyPremium(amount);
+        emit PremiumForwarded(amount);
+    }
+
+    /// @notice Pays the protocol's part of charged premium, in whole asset units, to the registry's treasury; the
+    /// remainder waits. Anyone may call it. Kept apart from `sweep`, which the vault calls before every withdrawal
+    /// and exit, so a treasury transfer that fails (a blocklisted address, say) can never stop the vault.
+    /// @return amount Asset units sent to the treasury.
+    function sweepProtocol() external nonReentrant returns (uint256 amount) {
+        uint256 pending = pendingToTreasury;
+        amount = pending / scale;
+        if (amount == 0) return 0;
+        // A share above zero can only be set together with a treasury, so this is never address(0).
+        address treasury = registry.treasury();
+        pendingToTreasury = uint128(pending - amount * scale);
+        asset.safeTransfer(treasury, amount);
+        emit ProtocolPremiumPaid(treasury, amount);
     }
 
     /// @notice Premium charged for the vault and not yet swept, in asset units.

@@ -36,6 +36,7 @@ interface IRepricer {
     function topUp(uint256 amount) external;
     function withdrawUnused(uint256 amount) external;
     function sweep() external returns (uint256 amount);
+    function sweepProtocol() external returns (uint256 amount);
     function pendingPremium() external view returns (uint256);
     function pendingProtocolPremium() external view returns (uint256);
 
