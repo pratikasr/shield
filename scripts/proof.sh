@@ -141,5 +141,15 @@ async function optInTx() {
     const b = await minedBlock(exit.hash);
     console.log(`| Exit tx (\`Exited\` event) | ${b ? `${txLink(exit.hash)} (block ${b}, gas used ${exit.gasUsed} of a ${exit.gasLimit} limit)` : `${exit.hash}: no successful receipt`} |`);
   } else console.log("| Exit tx (`Exited` event) | none in the keeper log yet |");
+
+  // The protocol share paid to the treasury (ADR-037): the latest ProtocolPremiumPaid from this deployment's Repricer.
+  const PAID = "0xfd39072c2b34476c7ed9336cfc10d31d8fef474d73ee23607e478aa6e3101301"; // ProtocolPremiumPaid(address,uint256)
+  const fromBlock = `0x${BigInt(d.block || 0).toString(16)}`;
+  const paid = await rpc("eth_getLogs", [{ address: d.Repricer, topics: [PAID], fromBlock, toBlock: "latest" }]);
+  const last = Array.isArray(paid) && paid.length ? paid[paid.length - 1] : null;
+  if (last) {
+    const units = BigInt(last.data);
+    console.log(`| Protocol share paid to the treasury (\`ProtocolPremiumPaid\`) | ${txLink(last.transactionHash)} (block ${BigInt(last.blockNumber)}, ${units} USDC units of 6 decimals) |`);
+  } else console.log("| Protocol share paid to the treasury | none yet: anyone can call Repricer.sweepProtocol() once a whole USDC unit is owed |");
 })();
 NODE

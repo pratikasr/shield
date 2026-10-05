@@ -1,6 +1,6 @@
 # Shield test report
 
-Six rounds, all run on 5 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
+Seven rounds, all run on 5 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
 
 ## Round 1: contracts, static analysis, keeper, workspace
 
@@ -130,3 +130,30 @@ Every check rerun on `main` after the audit fixes were merged ([AUDIT.md](AUDIT.
 Defects found in this round and fixed. First, on a cold fork the borrower page never left its loading state. Its first batch of reads touches every Aave reserve, and each uncached storage slot is a round trip to the upstream RPC (350 to 700 ms measured), so the batch outlasted viem's 10-second default timeout and was aborted and restarted every time. The web transport now allows 30 seconds, and `scripts/stack.sh` runs `scripts/warm-fork.mjs` first, which makes the pages' reads once in parallel (101 s on this fork). A mainnet RPC serves these reads from local state; the longer timeout only matters there if the public RPC is slow.
 
 Second, Lighthouse performance on the borrower page fell from 94 to 76 (largest paint 6.2 s). An audit fix rendered a skeleton for every visitor until scripts ran, so that a returning wallet would not flash "Connect wallet" while it reconnects. The page now reads `?address=` and a data-free cookie on the server, so a first visit gets the connect prompt in the HTML and only a returning wallet sees the skeleton (92, 3.3 s). Third, Anvil answers any query on the `pending` tag with "Required data unavailable" while a transaction waits for the next block, and a keeper repricing every block always has one waiting. That failed the review run's price move and the first nudge of the scripted flow. The price helper now sends with fixed gas limits, and the fork demo keeper uses the mainnet repricing cadence. Monad's `pending` tag is the proposed block, so mainnet is not affected.
+
+## Round 7: the protocol share and analytics
+
+Every check rerun on `main` after the protocol share (ADR-037) and the analytics work (ADR-038).
+
+| Check | Command | Outcome |
+| --- | --- | --- |
+| Foundry, all suites | `cd contracts && FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` | 130 pass, 0 fail: 89 unit, fuzz and invariant tests (7 new for the share, including a fuzz of conservation across the split and a treasury that cannot receive USDC), 41 fork tests (a new one pays the treasury in real USDC); gas snapshot refreshed |
+| Static analysis | as in Round 1 | Slither 8 high and 19 medium, the new medium the same deliberate remainder as `sweep`; Aderyn the same 2 highs; all justified in docs/SECURITY.md |
+| Keeper | `pnpm --filter keeper test` | 81 pass, 2 live smoke tests skipped by default |
+| Indexer | `pnpm --filter shield-indexer test` | 6 pass (a new one checks the per-charge split, hourly, daily and all-time buckets, payouts and the exit's trigger and discount) |
+| Web unit tests | `pnpm --filter web test` | 47 pass: amounts, risk maths (health factor at a price, simulator thresholds, chance of touching a price), analytics series |
+| Workspace | `pnpm lint` and `pnpm --filter web build` | clean |
+| End to end, clean fork of block 110760655 | `MONAD_RPC_URL=https://rpc.monad.xyz bash scripts/e2e.sh` | pass: opt-in in block 110761050; reprices in blocks 110761051, 110761052 and 110761053 with keeper receipts 298 ms and 302 ms apart; exit in block 110761123, HF 1.0529 to 1.1200, 1.186543 USDC saved on 26.37 USDC repaid; exit gas 699,739 on the fork |
+| The scripted mainnet flow, clean fork of block 110762163 | `fork.sh`, `deploy-mainnet.sh --fork`, `demo-position.sh seed/open/keeper/nudge --fork`, `sweepProtocol()`, `proof.sh --fork` | pass; the treasury received its share on chain; details in [DEMO.md](DEMO.md), run 5 |
+| Design review captures | `REVIEW_DIR=... pnpm exec playwright test review` | pass: 54 captures in docs/screenshots/pass-5/, including the Analytics page; every 375 px capture exactly 375 px wide |
+| Lighthouse 12 (mobile, production build) | default (simulated throttling) and `--throttling-method=devtools` | devtools throttling: 99 / 100 / 100 on the landing, borrower, LP and analytics pages, largest paint equal to first paint (1.5 s). Simulated: landing 96; the app pages 84 to 90 between runs, on a machine where another project's processes used over three cores. In a browser at 4x CPU slowdown the largest paint landed within 0.1 s on every page |
+
+Defects found in this round and fixed:
+
+1. **A treasury that could not receive USDC would have blocked the vault.** The first version paid the treasury inside `sweep()`, which the vault calls before every withdrawal and exit; a blocklisted treasury would have made both revert. The treasury is now paid by its own `sweepProtocol()` (`test_protocolShare_failingTreasuryNeverBlocksTheVault`).
+2. **Aderyn flagged `sweepProtocol` for writing state after the registry read.** Harmless (a view call to the registry, behind the reentrancy guard), but the counter is now written first.
+3. **A first fork run failed seven tests**, five on the RPC resetting connections (Cloudflare 1015 on rpc1.monad.xyz) and two that passed on rerun; a new fork test of mine measured the vault's total against only the second charge. All pass on the rerun and the fixed test.
+4. **The video-script test moved the wrong slider**: the new price simulator is the first slider on the page. Both specs now find the trigger slider by its name.
+5. **The MetaMask SDK loaded on every app page** (about 450 KB) through RainbowKit's MetaMask entry. MetaMask now connects through its extension; blocking time on the app pages fell by about two thirds.
+6. **A Vitest config committed before Vitest was installed broke a web build** in the stack. Vitest is now a web dev dependency.
+

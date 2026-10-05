@@ -75,3 +75,14 @@ Critique and fixes:
 3. **Before opt-in the gauge called the slider's value "Trigger, not armed".** Nothing is armed or unarmed yet; it now says "Trigger, preview".
 4. **Capture artifact.** Full-page shots taken after the test had scrolled drew the sticky header and side panel mid-page. The capture now scrolls to the top first. Not a page defect.
 5. Checked: every 375 px capture is exactly 375 px wide.
+
+## Pass 5 (5 Oct 2026), `pass-5/`: analytics and the protocol share
+
+Captured from a fresh fork stack after the protocol share (ADR-037) and the analytics work (ADR-038). New: `analytics` (the public Analytics page after the exit, light and dark), and on the borrower page the price simulator, the chance of touching the exit price and the health-factor history; on the vault page the income panel; on the landing page the lenders strip and the earnings answers in the FAQ. The header now has three links.
+
+Critique and fixes:
+
+1. **The video-script test set the wrong slider.** It took the first slider on the page, which is now the price simulator, so the trigger stayed at 1.04. Both specs now find the trigger slider by its name, "Trigger health factor".
+2. **Lighthouse performance on the app pages fell under 90 in the default simulated mode.** RainbowKit's MetaMask entry loaded the MetaMask SDK (about 450 KB) on every page; MetaMask now connects through its extension with the same name and icon, and blocking time fell by about two thirds. The simulated score still varies (84 to 90) on a machine that was running other work; with devtools throttling every page scores 99, and in a browser at 4x CPU slowdown the largest paint lands within 0.1 s.
+3. Checked: every 375 px capture is exactly 375 px wide.
+

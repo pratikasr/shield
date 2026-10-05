@@ -119,6 +119,19 @@ The same commands as run 3, rerun because the audit changed the deploy, demo and
 
 Found on the way: the first nudge failed in forge's gas estimate with "Required data unavailable" from Anvil. The fork demo keeper repriced every block for as long as it ran, so one of its transactions was always waiting for the next block, and while one waits Anvil fails every query on the `pending` tag, which forge's estimate uses. The fork demo keeper now uses the mainnet cadence above, and the nudge went through after its 600-block window. Monad's `pending` tag is the proposed block, so this cannot happen on mainnet.
 
+### Run 5: the scripted mainnet flow with the protocol share, 5 Oct 2026 (fork, test only)
+
+The same commands again after the protocol share (ADR-037) changed the deploy and proof scripts, plus the new payout step. Fork of mainnet block 110762163.
+
+| Step | Outcome |
+| --- | --- |
+| `fork.sh`, `deploy-mainnet.sh --fork`, `seed --fork`, `open --fork` | exit 0; the deploy log shows the treasury (the deployer) and 1000 bps; HF after `open` 1.0700; opt-in `0xf07fa9740ad229d799e8646f8bd802e8e1cf571be3e9caa18f5b89e567e33735` in block 110762326 |
+| `keeper --fork` | 598 reprices in its 600-block window, then every 200 blocks |
+| `nudge --fork` | every preflight check passed (vault liquidity below the debt is a warning); HF 1.0450; `previewExit` Ready |
+| Exit by the keeper | `0xff90a63ee655a29ca3ad16338b458653e4c1cec578933aaf21aaceaca2dfbb29` in block 110762980; 721,379 gas of an 829,586 limit |
+| `sweepProtocol()` | `0xea7d6bf1b04f99323dd5b3be1daaa063644f79bb0c274de09bc03080ae1bbcb7` in block 110763033: 3 USDC units (0.000003 USDC) to the treasury, the whole units of its 10% owed so far |
+| `proof.sh --fork` | exit 0; Deployments with the Treasury row, and Proof with the opt-in, three consecutive reprices, the exit and the treasury payout, each checked on chain |
+
 ## Part 2: the mainnet runbook
 
 Everything here spends real MON and moves real tokens, so it is run by the repo owner. Use four fresh accounts. No key is ever typed on a command line, exported in the shell or stored inside the repo: three accounts live in encrypted Foundry keystores (`~/.foundry/keystores`) and the keeper's key lives in a chmod 600 file outside the repo, because the keeper is TypeScript and reads a raw key. The `*_PRIVATE_KEY` variables still work and are what the fork scripts use; do not use them on mainnet.
@@ -229,6 +242,9 @@ Borrowing alone cannot take a WETH position below HF 1.0435 (Aave allows borrowi
 After the exit:
 
 ```bash
+# Pay the protocol's share of premiums to the treasury (anyone may call it; it pays whole USDC units owed so far)
+cast send "$(node -e "console.log(require('./contracts/deployments/143.json').Repricer)")" "sweepProtocol()" \
+  --account shield-deployer --rpc-url "$MONAD_RPC_URL"
 ENVIO_GRAPHQL_URL=<endpoint from step 3> bash scripts/proof.sh   # README Deployments and Proof rows, each checked on chain
 ```
 

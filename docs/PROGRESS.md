@@ -2,6 +2,17 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 5 Oct 2026, protocol earnings and analytics
+
+- **Why.** The owner asked for protocol earnings, rich analytics in the style of THORChain's earnings dashboards, closer Monad alignment, and other lenders shown as coming soon; plan first, check it fits the hackathon, then build and test.
+- **Done.**
+  - Contracts (`93b6f34`, `ad4f703`, `f576085`): a protocol share of premiums, 10% at deploy and capped at 20% in code, split per charge and paid to a treasury by its own `sweepProtocol()`; the exit discount stays with liquidity providers (ADR-037). 130 contract tests pass; gas snapshot refreshed.
+  - Indexer (`93b6f34`): hourly, daily and all-time earnings buckets, config and treasury payouts.
+  - Web (merged in `d36374b` and the following commits): a public Analytics page with earnings over time, the earnings breakdown, a live Monad block stream showing commit states and Shield's reprices, keeper cost, covers and exits, the one Aave Monad liquidation as a worked example, and Monad lenders coming soon; on the borrower page, health-factor history, a price simulator and the chance of touching the exit price; on the vault page, income since launch. MetaMask connects without the SDK.
+  - Scripts and docs: the deploy and proof scripts show the treasury and its payouts; README "Who earns what"; SPEC, SECURITY, DESIGN, ADR-037 and ADR-038; verified facts on Monad lenders, Aave Monad's only liquidation and Monad's commit-state timings.
+- **Checks.** Round 7 in [TEST-REPORT.md](TEST-REPORT.md): all suites green; the video-script test and the scripted mainnet flow pass on clean forks; review pass 5 (docs/screenshots/pass-5/).
+- **Next.** Unchanged: M6 needs the owner's funds, keystores and Envio login; then the video, the repo going public, and the submission. The hosted indexer must be deployed from this schema.
+
 ## 5 Oct 2026, internal audit before mainnet
 
 - **Why.** The owner asked for a full audit: every case, happy and bad paths, UI and UX, bugs, red team.
