@@ -179,7 +179,8 @@ export LP_ADDRESS=$(cast wallet address --account shield-lp)                 # k
 export KEEPER_PRIVATE_KEY_FILE=~/.shield/keeper.key KEEPER_ADDRESS=$(cat ~/.shield/keeper.address)
 
 # 1. Deploy. Refuses when contracts/deployments/143.json exists (--force replaces it and keeps a timestamped backup).
-#    Writes 143.json only after the broadcast succeeded and every contract has code on chain.
+#    Writes 143.json only after the broadcast succeeded and every contract has code on chain. 10% of premiums go to
+#    the deployer as treasury unless SHIELD_TREASURY (an address) or SHIELD_PROTOCOL_SHARE_BPS (at most 2000) is set.
 bash scripts/deploy-mainnet.sh
 #    If forge stops part way (RPC error, timeout, low balance), finish the same deployment rather than starting over:
 #    bash scripts/deploy-mainnet.sh --resume

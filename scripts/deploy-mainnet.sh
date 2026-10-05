@@ -19,6 +19,8 @@
 #   KEEPER_ADDRESS            required: becomes the vault's unwinder. Checked against KEEPER_ACCOUNT,
 #                             KEEPER_PRIVATE_KEY_FILE or KEEPER_PRIVATE_KEY when one of them is set
 #   SHIELD_MIN_COVER_SECONDS  optional waiting period before new cover can exit; the contract default is 900
+#   SHIELD_TREASURY           optional address that receives the protocol share of premiums; default the deployer
+#   SHIELD_PROTOCOL_SHARE_BPS optional protocol share of premiums in bps, at most 2000; default 1000 (ADR-037)
 # Fork env: STACK_MIN_COVER_SECONDS (the fork deployment's waiting period, default 20 seconds).
 # No key is ever printed or needed on the command line.
 set -euo pipefail
@@ -116,6 +118,14 @@ if [ -n "${SHIELD_MIN_COVER_SECONDS:-}" ]; then
 else
   echo "waiting period 900 seconds (the contract default)"
 fi
+if [ -n "${SHIELD_PROTOCOL_SHARE_BPS:-}" ]; then
+  case "$SHIELD_PROTOCOL_SHARE_BPS" in '' | *[!0-9]*) echo "SHIELD_PROTOCOL_SHARE_BPS must be a whole number of bps" >&2; exit 1 ;; esac
+  if [ "$SHIELD_PROTOCOL_SHARE_BPS" -gt 2000 ]; then echo "SHIELD_PROTOCOL_SHARE_BPS is above the 2000 bps cap" >&2; exit 1; fi
+fi
+if [ -n "${SHIELD_TREASURY:-}" ] && ! [[ "$SHIELD_TREASURY" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+  echo "SHIELD_TREASURY must be a 0x address" >&2; exit 1
+fi
+echo "protocol share ${SHIELD_PROTOCOL_SHARE_BPS:-1000} bps of premiums to ${SHIELD_TREASURY:-the deployer}"
 echo "deployer $DEPLOYER balance $(cast balance "$DEPLOYER" --rpc-url "$MONAD_RPC_URL" --ether) MON"
 export DEPLOYMENT_NAME="$PENDING_NAME" KEEPER_ADDRESS
 RESUME_CMD="bash scripts/deploy-mainnet.sh --resume"

@@ -97,6 +97,15 @@ async function optInTx() {
     const ok = code && code !== "0x";
     console.log(`| ${name} | ${ok ? addrLink(d[name]) : `${d[name]}: no code at this address`} |`);
   }
+  // Where the protocol's share of premiums goes (ADR-037), read from the registry rather than the deployment file.
+  const word = async (selector) => rpc("eth_call", [{ to: d.PositionRegistry, data: selector }, "latest"]);
+  const treasuryWord = await word("0x61d027b3"); // treasury()
+  const shareWord = await word("0x37ed3f1e"); // protocolShareBps()
+  if (treasuryWord && shareWord) {
+    const treasury = `0x${treasuryWord.slice(-40)}`;
+    const shareBps = Number(BigInt(shareWord));
+    console.log(`| Treasury (receives ${shareBps / 100}% of premiums) | ${addrLink(treasury)} |`);
+  }
 
   const lines = fs.readFileSync(LOG, "utf8").split("\n").flatMap((l) => {
     try { return [JSON.parse(l)]; } catch { return []; }
