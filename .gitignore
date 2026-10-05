@@ -18,6 +18,7 @@ web/out/
 .pnpm-store/
 indexer/generated/
 keeper/dist/
+keeper/.keeper-*.lock
 
 # tooling
 .DS_Store
