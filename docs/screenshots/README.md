@@ -57,3 +57,21 @@ Critique and fixes:
 8. **Kept as designed:** HF in Aave's red band while the page reads "Protected at 1.04", so a reading means the same as on app.aave.com; the gauge shows where Shield acts.
 
 **Found while capturing:** `scripts/stack.sh down` matched the keeper as `tsx ...` but it runs as node with tsx loader flags, so every earlier keeper survived. Several keepers then sent transactions to each new fork, which caused nonce errors and an intermittent failure of the review run's fork-only price move. The pattern now matches both command lines. The after-exit captures in this pass were taken after a hand-run price move with `cast` (fork only).
+
+## Pass 4 (5 Oct 2026), `pass-4/`: after the internal audit
+
+Captured from a fresh fork stack after the audit fixes ([AUDIT.md](../AUDIT.md), web section). New state: `borrow-arming`, the waiting period after opt-in (20 seconds on the fork deployment, 900 seconds on mainnet), with its countdown, the clock time it arms and the protection check. `vault-before-exit` replaces `vault-covered`. What changed on screen since pass 3:
+
+- "Protected" appears only when every condition an exit needs holds; otherwise the header, gauge and panel say what is missing, for example "Cover arms in 0:18 (at 16:13)" or "Not armed: ...".
+- A protection check lists each condition with its state.
+- A prepaid balance card whenever prepaid USDC is left, including after an exit.
+- The setup panel states the minimum prepay and the waiting period before the first approval.
+- The vault overview shows exit gains still unlocking into the share price.
+
+Critique and fixes:
+
+1. **The borrower page painted late (Lighthouse performance 76, from 94).** An audit fix rendered a skeleton for every visitor until scripts ran, so a returning wallet would not flash "Connect wallet". The page now reads `?address=` and a data-free cookie on the server: a first visit gets the connect prompt in the HTML, a link with an address opens read only, and only a returning wallet sees the skeleton. Performance is 92 again, CLS 0.
+2. **"Cover arms in 0:18, arms at 15:48"** in the header. Now "Cover arms in 0:18 (at 15:48)", the same as the gauge.
+3. **Before opt-in the gauge called the slider's value "Trigger, not armed".** Nothing is armed or unarmed yet; it now says "Trigger, preview".
+4. **Capture artifact.** Full-page shots taken after the test had scrolled drew the sticky header and side panel mid-page. The capture now scrolls to the top first. Not a page defect.
+5. Checked: every 375 px capture is exactly 375 px wide.

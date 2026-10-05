@@ -193,13 +193,13 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 
 | What | Command | Result |
 | --- | --- | --- |
-| Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 101 tests pass |
+| Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 122 tests pass: 82 unit, fuzz and invariant (mocks), 40 fork tests against real Aave on Monad |
 | Static analysis | Slither 0.11.6, Aderyn 0.6.8 | every high and medium fixed or justified in [docs/SECURITY.md](docs/SECURITY.md) |
 | Keeper | `pnpm --filter keeper test` | 81 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
 | Indexer | `pnpm --filter shield-indexer test` | 5 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
-| Lighthouse (mobile) | landing, borrower, LP | performance 94, 94, 91; accessibility and best practices 100 on all |
+| Lighthouse (mobile) | landing, borrower, LP | performance 97, 92, 91; accessibility and best practices 100 on all; CLS 0 |
 
 Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md). The internal audit of 5 Oct 2026 (contracts, keeper, indexer, scripts, web, live QA and every claim in these docs), its findings and their fixes: [docs/AUDIT.md](docs/AUDIT.md). Shield has had no external audit.
 

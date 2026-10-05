@@ -2,6 +2,21 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 5 Oct 2026, internal audit before mainnet
+
+- **Why.** The owner asked for a full audit: every case, happy and bad paths, UI and UX, bugs, red team.
+- **How.** Six parallel reviewers (contracts security, contracts correctness, keeper/indexer/scripts, web code, live QA in a browser, every claim in the docs). Non-trivial findings needed a proof: a failing test, a code citation, a screenshot or a live source. Report: [AUDIT.md](AUDIT.md).
+- **Found.** 1 critical, 15 high, 35 medium, plus lows and notes, and 16 inaccurate claims. Every critical, high and medium item is fixed; accepted lows are disclosed in SECURITY.md.
+- **Done.**
+  - Contracts (`53df3ad`): balance-checked swaps on both unwind paths, a 900 s waiting period before cover can exit, the vault never loses on a flash-assisted exit, exit gains unlock over six hours, opt-out settles first, billing at the higher of stored and live rate, 1 USDC minimum prepay, bounded owner parameters, capped volatility input, cbBTC disabled at deploy. 122 tests pass (82 unit, 40 fork). ADR-028 to 035.
+  - Keeper, indexer and scripts (`751c52b`, `87d9d21`, `618e12e`, `72c6ec3`, `637081a`, merged in `f9a48ff`): correct out-of-gas detection on Monad, spending limits and a reserve for exits (ADR-036), per-borrower isolation, three round trips per pass, safe mainnet deploys, keystores instead of keys on command lines, PID-based process control. Keeper 81 tests, indexer 5.
+  - Web (`4f8c838`, `a16d3fc`, `eb60d4f`, merged in `054d7e7`; `343a9c3`): "Protected" only when every exit condition holds, a protection checklist, one safe amount parser, simulate before every send, stale RPC, keeper and indexer states, error boundaries, security headers, a 30 s RPC timeout.
+  - Docs (`4f7c1b4`): trust model with the owner's real powers, corrected claims across README, SPEC and site, static analysis rerun.
+- **Checks.** Round 6 in [TEST-REPORT.md](TEST-REPORT.md): all suites green; the video-script end-to-end test passes on two clean forks; Lighthouse (mobile) landing 97, borrower 92, LP 91 with accessibility and best practices 100, CLS 0; review pass 4 (docs/screenshots/pass-4/).
+- **Found while verifying** (`343a9c3`, `1356689`, `3ddc510`, `782020f`): the borrower page stayed on its loading state on a cold fork (30 s RPC timeout, and the stack now warms the fork); the reconnect fix had cost the borrower page its server-rendered first paint (Lighthouse 76, now 92); two copy fixes; capture and price-move flakes in the test harness.
+- **Next.** M6 needs the owner: funds, keystores, the Envio login. Then the video, the repo going public, and the submission.
+- **Open for the owner.** Whether to name the builder in the footer, and a security contact.
+
 ## 5 Oct 2026, M4 web redesign (version 2)
 
 - **Why.** The owner said version 1 "feels a little sus".

@@ -1,6 +1,6 @@
 # Shield test report
 
-Five rounds, all run on 5 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
+Six rounds, all run on 5 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
 
 ## Round 1: contracts, static analysis, keeper, workspace
 
@@ -108,3 +108,24 @@ Defects found: none that stopped a step. Three found around it, all fixed: runni
 | 3, the scripted mainnet flow on a clean fork of block 110644465 | `fork.sh`, `deploy-mainnet.sh --fork`, `demo-position.sh seed/open/keeper/nudge --fork`, `proof.sh --fork` | pass: every command exited 0; reprices in three consecutive blocks with receipts 299 ms and 301 ms apart; the nudge took HF to 1.045 and the keeper exited; `proof.sh` checked every address and hash on the fork |
 
 Click path, every block number and hash, and the mainnet runbook: [DEMO.md](DEMO.md). Defects found: the scripts ran whatever `forge` came first on PATH, and Homebrew's Foundry 1.7 has no `network = "monad"`; the forge scripts now stop with the fix (`scripts/require-foundry.sh`). The demo keeper now writes its JSON log to `keeper.log` so `scripts/proof.sh` can read the repricing and exit hashes from it, and `demo-position.sh position` opens the position without cover so the opt-in can happen on camera.
+
+## Round 6: after the internal audit
+
+Every check rerun on `main` after the audit fixes were merged ([AUDIT.md](AUDIT.md)).
+
+| Check | Command | Outcome |
+| --- | --- | --- |
+| Foundry, all suites | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 122 pass, 0 fail: 82 unit, fuzz and invariant tests (mocks), 40 fork tests against real Aave on Monad, including the 11 audit regression tests in `ExitHardening.t.sol` |
+| Gas snapshot | `FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` | refreshed; figures in the README |
+| Slither 0.11.6, Aderyn 0.6.8 | as in Round 1 | Slither 8 high and 18 medium, Aderyn 2 high, each fixed or justified in docs/SECURITY.md |
+| Keeper | `pnpm --filter keeper test` | 81 pass, 2 live smoke tests skipped by default |
+| Indexer | `pnpm --filter shield-indexer test` | 5 pass |
+| Workspace | `pnpm lint && pnpm test` | clean |
+| End to end, clean fork of block 110723988 | `MONAD_RPC_URL=https://rpc1.monad.xyz bash scripts/e2e.sh` | pass: opt-in in fork block 110724485 after the 20-second waiting period of the fork deployment; reprices in blocks 110724486, 110724487 and 110724488 with keeper receipts 301 ms and 299 ms apart; exit in block 110724596, HF 1.0529 to 1.1200, 1.186221 USDC saved against Aave's bonus on 26.36 USDC repaid |
+| End to end, second clean fork (block 110729247), after the borrower page change below | same | pass: opt-in in block 110729753; reprices in blocks 110729754, 110729755 and 110729756 with keeper receipts 299 ms and 300 ms apart; exit in block 110729830, HF 1.0529 to 1.1200, 1.185659 USDC saved on 26.35 USDC repaid; exit gas 697,349 on the fork |
+| Design review captures | `REVIEW_DIR=... pnpm exec playwright test review` against `scripts/stack.sh up` | pass: 48 captures in docs/screenshots/pass-4/, every 375 px capture exactly 375 px wide |
+| Lighthouse 12 (mobile emulation, production build) | as in Round 1 | landing 97 / 100 / 100; borrower 92 / 100 / 100; LP 91 / 100 / 100; CLS 0 on all three (performance / accessibility / best practices) |
+
+Defects found in this round and fixed. First, on a cold fork the borrower page never left its loading state. Its first batch of reads touches every Aave reserve, and each uncached storage slot is a round trip to the upstream RPC (350 to 700 ms measured), so the batch outlasted viem's 10-second default timeout and was aborted and restarted every time. The web transport now allows 30 seconds, and `scripts/stack.sh` runs `scripts/warm-fork.mjs` first, which makes the pages' reads once in parallel (101 s on this fork). A mainnet RPC serves these reads from local state; the longer timeout only matters there if the public RPC is slow.
+
+Second, Lighthouse performance on the borrower page fell from 94 to 76 (largest paint 6.2 s). An audit fix rendered a skeleton for every visitor until scripts ran, so that a returning wallet would not flash "Connect wallet" while it reconnects. The page now reads `?address=` and a data-free cookie on the server, so a first visit gets the connect prompt in the HTML and only a returning wallet sees the skeleton (92, 3.3 s). Third, the review run's fork-only price move failed in the fork's gas estimate ("Required data unavailable" from the upstream fetch); the helper now sends with fixed gas limits, and the whole capture run passed in one go.
