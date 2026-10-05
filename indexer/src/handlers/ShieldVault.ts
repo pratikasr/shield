@@ -37,13 +37,38 @@ indexer.onEvent({ contract: "ShieldVault", event: "Withdraw", fields }, async ({
   context.VaultFlow.set(flow(event, { kind: "Withdraw", account: owner, assets: event.params.assets, shares: event.params.shares }));
   const stats = await loadStats(context);
   const depositor = await context.Depositor.get(owner);
-  const left = (depositor?.shares ?? 0n) - event.params.shares;
+  const before = depositor?.shares ?? 0n;
+  const left = before - event.params.shares;
   context.Depositor.set({ id: owner, shares: left < 0n ? 0n : left });
   context.VaultStats.set({
     ...stats,
     withdrawn: stats.withdrawn + event.params.assets,
-    depositors: stats.depositors - (left <= 0n && stats.depositors > 0 ? 1 : 0),
+    depositors: stats.depositors - (before > 0n && left <= 0n && stats.depositors > 0 ? 1 : 0),
   });
+});
+
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+/**
+ * Share transfers between accounts. Mints and burns also emit Transfer, but Deposit and Withdraw already count
+ * them, so a Transfer from or to the zero address is skipped.
+ */
+indexer.onEvent({ contract: "ShieldVault", event: "Transfer" }, async ({ event, context }) => {
+  const from = event.params.from.toLowerCase();
+  const to = event.params.to.toLowerCase();
+  const value = event.params.value;
+  if (from === ZERO || to === ZERO || from === to || value === 0n) return;
+  const stats = await loadStats(context);
+  const sender = await context.Depositor.get(from);
+  const receiver = await context.Depositor.get(to);
+  const senderBefore = sender?.shares ?? 0n;
+  const receiverBefore = receiver?.shares ?? 0n;
+  const senderAfter = senderBefore > value ? senderBefore - value : 0n;
+  context.Depositor.set({ id: from, shares: senderAfter });
+  context.Depositor.set({ id: to, shares: receiverBefore + value });
+  const left = senderBefore > 0n && senderAfter === 0n ? 1 : 0;
+  const joined = receiverBefore === 0n ? 1 : 0;
+  context.VaultStats.set({ ...stats, depositors: Math.max(0, stats.depositors - left + joined) });
 });
 
 indexer.onEvent({ contract: "ShieldVault", event: "PremiumReceived", fields }, async ({ event, context }) => {
