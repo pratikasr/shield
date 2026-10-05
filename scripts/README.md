@@ -11,7 +11,8 @@ Deployment, demo position setup, the repricing capture used in the video, and th
 | `demo-position.sh` | The demo's on-chain steps: `seed`, `position`, `open`, `keeper`, `nudge` (with a preflight, `--force-nudge` to override) and `all`; `--fork` for the local fork. |
 | `proof.sh` | Prints the README Deployments and Proof rows after checking every address and receipt on chain, using only keeper log lines sent to this deployment. |
 | `fork.sh` | Starts (or `stop`s) a local Anvil fork of Monad mainnet with funded test accounts; refuses a port already in use. Tests and rehearsals only. |
-| `stack.sh` | `up` runs the whole stack on the fork (deployment, LP deposit, position, Envio, keeper, web); `down` stops exactly the processes `up` started. Tests only. |
+| `stack.sh` | `up` runs the whole stack on the fork (deployment, LP deposit, position, fork warm-up, Envio, keeper, web); `down` stops exactly the processes `up` started. Tests only. |
+| `warm-fork.mjs` | Makes the pages' Aave, Pyth and Shield reads once on a fresh fork, in parallel, so the first page load does not wait on hundreds of upstream fetches. Called by `stack.sh`. Tests only. |
 | `e2e.sh` | Brings the stack up and runs the Playwright video-script test against it; stops the stack afterwards. Tests only. |
 | `export-abi.sh` | Copies the Foundry ABIs into the keeper, web and indexer packages after a contract change. |
 | `require-foundry.sh` | Sourced: stops with the fix when forge is missing or older than 1.8. |

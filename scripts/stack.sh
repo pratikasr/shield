@@ -2,7 +2,8 @@
 # The whole Shield stack on a local fork of Monad mainnet, for tests, screenshots and rehearsals only (ADR-020).
 # Nothing that runs here is demo or proof material.
 #
-#   bash scripts/stack.sh up      fork, deployment, LP deposit, a borrower position (no cover), Envio, keeper, web
+#   bash scripts/stack.sh up      fork, deployment, LP deposit, a borrower position (no cover), a warm-up of the
+#                                 pages' reads (scripts/warm-fork.mjs), Envio, keeper, web
 #   bash scripts/stack.sh down    stop everything this script started, and nothing else
 #
 # Env: FORK_BLOCK (default latest), STACK_WEB_PORT (3200), STACK_HASURA_PORT (8088), STACK_WEB_MODE (start|dev),
@@ -90,6 +91,11 @@ up() {
     forge script script/DemoPosition.s.sol:DemoPosition --sig "openPosition()" --rpc-url "$FORK_RPC_URL" \
     --private-key "$DEMO_PRIVATE_KEY" --broadcast --slow) > "$DIR/stack-position.log" 2>&1
   grep -E "health factor" "$DIR/stack-position.log" || true
+
+  echo "== warm fork"
+  # The pages' first reads touch every Aave reserve; served cold from the upstream RPC they outlast the browser's
+  # timeout. Fetching that state once here, in parallel, lets the first page load finish in seconds.
+  node scripts/warm-fork.mjs "$FORK_RPC_URL" "$DEPLOYMENT" "$DEMO_ADDRESS" "$LP_ADDRESS"
 
   echo "== indexer"
   backup_unless_ours "$ROOT/indexer/.env"

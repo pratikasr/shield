@@ -55,7 +55,9 @@ export const wagmiConfig = createConfig({
   pollingInterval: 400,
   batch: { multicall: { wait: 8 } },
   transports: {
-    [monadMainnet.id]: http(monadMainnet.rpcUrls.default.http[0], { batch: { wait: 8 } }),
+    // viem aborts a request after 10 s by default and the read starts over. A slow public RPC (or a cold fork fetching
+    // state upstream) can need longer for the first batch, so it gets 30 s to finish once instead of never.
+    [monadMainnet.id]: http(monadMainnet.rpcUrls.default.http[0], { batch: { wait: 8 }, timeout: 30_000 }),
     [monadTestnet.id]: http(),
   },
   ssr: true,
