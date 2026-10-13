@@ -1,6 +1,6 @@
 # Shield test report
 
-Eight rounds, run on 5 and 13 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
+Nine rounds, run on 5 and 13 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
 
 ## Round 1: contracts, static analysis, keeper, workspace
 
@@ -183,4 +183,15 @@ Defects found and fixed:
 2. **The F3 just-in-time deposit test was stopped by the allowlist** before it reached the profit unlock; it now allows the attacker, so the unlock is still proven for when outside depositors are enabled, and a new fork test shows an outsider is refused.
 3. **The video-script test needed the indexer for one check**, the exit transaction in the vault's activity table; it now skips only that check when the stack runs without the indexer.
 4. **Aderyn noted two factory views that could be `external`**; changed.
+
+## Round 9: version 3, the cartoon redesign (13 Oct 2026)
+
+| Check | Command | Outcome |
+| --- | --- | --- |
+| Web lint, types, unit tests, build | `pnpm --filter web lint`, `pnpm --filter web test`, `pnpm --filter web build` | clean; 64 tests pass (the 18 tests of the removed risk maths went with it; new tests cover the line presets, fuel presets and block stamps) |
+| End to end, clean fork of block 113080054 | `STACK_INDEXER=0 bash scripts/e2e.sh` | pass in 26 s: connect, the Early card (a 1.06 line), one "Turn on Shield" button through the four wallet steps, arming, "Shield is on", premium ticking, the price move, the keeper's exit, "Shield stepped in" with the Exited event's saving, the vault's rescue count |
+| Design review captures | `REVIEW_DIR=... pnpm exec playwright test review` | pass: 31 captures in docs/screenshots/pass-6/; every 375 px capture exactly 375 px wide after the Stats fix |
+| Lighthouse 12, devtools throttling | production build on the fork stack | landing 97, Protect 92, Vault 99, Stats 99 for performance; 100 for accessibility and best practices on all four; CLS at most 0.008 |
+
+Defects found and fixed: a Stats pill wider than a phone; the browser tests' labels for the new flow (the Early card instead of a slider, one button instead of four, "Stats for nerds" for the health factor and premium, the vault's new labels); a hidden duplicate of the saving that the test matched before the visible one.
 

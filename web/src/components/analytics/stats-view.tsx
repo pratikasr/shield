@@ -78,7 +78,7 @@ const Ticker = memo(function Ticker() {
     <div>
       <BlockTicker blocks={blocks} marks={s.marks} label="Latest Monad blocks, newest first" />
       <div className="c-ticker-meta">
-        <span className="c-pill">
+        <span className="c-pill" data-wrap="true">
           <span className="c-dot animate-pulse [animation-duration:2.4s]" data-tone="on" aria-hidden />
           Shield reads every protected loan in every block
         </span>

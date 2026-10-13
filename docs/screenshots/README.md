@@ -86,3 +86,13 @@ Critique and fixes:
 2. **Lighthouse performance on the app pages fell under 90 in the default simulated mode.** RainbowKit's MetaMask entry loaded the MetaMask SDK (about 450 KB) on every page; MetaMask now connects through its extension with the same name and icon, and blocking time fell by about two thirds. The simulated score still varies (84 to 90) on a machine that was running other work; with devtools throttling every page scores 99, and in a browser at 4x CPU slowdown the largest paint lands within 0.1 s.
 3. Checked: every 375 px capture is exactly 375 px wide.
 
+## Pass 6 (13 Oct 2026), `pass-6/`: version 3, the cartoon redesign
+
+Captured from a fresh fork stack after the version 3 rebuild (DESIGN.md, Version 3): landing, every borrower state the flow reaches (disconnected, watching, setup, a line close to Aave, arming, Shield is on, stepped in), the vault before and after the exit, and Stats. One light theme, so no dark captures.
+
+Critique and fixes:
+
+1. **The Stats page was 11 px wider than a 375 px phone**: the "Shield reads every protected loan in every block" pill did not wrap. It wraps now; every 375 px capture is exactly 375 px wide.
+2. **The review test looked for "Monad block" in the header**, which reads "Local fork, block" on a fork; it now matches either.
+3. Kept as designed: the borrower's health factor sits in "Stats for nerds"; the page leads with the price sentence ("ETH can fall 6.5% before Aave liquidates you").
+

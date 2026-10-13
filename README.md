@@ -215,10 +215,10 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 | Static analysis | Slither 0.11.6, Aderyn 0.6.8 | every high and medium fixed or justified in [docs/SECURITY.md](docs/SECURITY.md) |
 | Keeper | `pnpm --filter keeper test` | 91 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
 | Indexer | `pnpm --filter shield-indexer test` | 8 tests pass |
-| Web: amounts, formatting, risk maths, analytics series, Aurora requests and statuses | `pnpm --filter web test` | 65 tests pass |
+| Web: amounts, formatting, line and fuel presets, block stamps, analytics, Aurora requests and statuses | `pnpm --filter web test` | 64 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
-| Lighthouse (mobile) | landing, borrower, LP, analytics | with devtools throttling, performance 99 on all four; with the default simulated throttling on a shared machine, 96 on the landing page and 84 to 90 on the app pages, which load the wallet libraries. Accessibility and best practices 100 and CLS 0 on all |
+| Lighthouse (mobile, devtools throttling) | landing, Protect, Vault, Stats | performance 97, 92, 99, 99; accessibility and best practices 100 on all; CLS 0.008 or less |
 
 Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md). The internal audit of 5 Oct 2026 (contracts, keeper, indexer, scripts, web, live QA and every claim in these docs), its findings and their fixes: [docs/AUDIT.md](docs/AUDIT.md). Shield has had no external audit.
 

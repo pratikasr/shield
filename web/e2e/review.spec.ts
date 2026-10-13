@@ -73,7 +73,7 @@ test.describe("design review captures", () => {
     test.setTimeout(900_000);
 
     await page.goto("/");
-    await expect(page.getByText(/Monad block [\d,]+/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/block [\d,]+/i).first()).toBeVisible({ timeout: 30_000 });
     await shoot(page, "landing", ["dark", "light"]);
 
     await page.goto("/app/borrow");
