@@ -10,7 +10,7 @@
 # Values compiled into the app (NEXT_PUBLIC_*, fixed at build time):
 #   contract addresses    contracts/deployments/143.json when it exists (PositionRegistry, Repricer, Executor,
 #                         ShieldVault, ShieldForwarderFactory); before the mainnet deployment they are empty: the
-#                         landing page and Stats work, Protect and Vault say Shield is not configured
+#                         landing page and Stats work, Protect and Vault say Shield is not live yet
 #   network               SHIELD_WEB_NETWORK=testnet builds the Monad testnet staging app instead (ADR-040):
 #                         contracts/deployments/10143.json and the Aave V3 market in aave-10143.json, chain 10143
 #   Aurora app key        NEXT_PUBLIC_AURORA_APP_KEY, else the file AURORA_APP_KEY_FILE [~/.shield/aurora-app-key]
@@ -126,7 +126,7 @@ if [ -f "$DEPLOYMENT" ]; then
   NEXT_PUBLIC_SHIELD_FORWARDERS="$(j ShieldForwarderFactory)"
   echo "contracts: $DEPLOYMENT (registry $NEXT_PUBLIC_SHIELD_REGISTRY)"
 else
-  echo "contracts: no $DEPLOYMENT yet; the Protect and Vault pages will say Shield is not configured"
+  echo "contracts: no $DEPLOYMENT yet; the Protect and Vault pages will say Shield is not live yet"
 fi
 export NEXT_PUBLIC_SHIELD_REGISTRY NEXT_PUBLIC_SHIELD_REPRICER NEXT_PUBLIC_SHIELD_EXECUTOR
 export NEXT_PUBLIC_SHIELD_VAULT NEXT_PUBLIC_SHIELD_FORWARDERS

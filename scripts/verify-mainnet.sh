@@ -15,7 +15,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOYMENT="$ROOT/contracts/deployments/143.json"
 SOURCIFY_URL=https://sourcify-api-monad.blockvision.org/
-ALL=(PositionRegistry ShieldVault Repricer Executor UniswapV3Swapper)
+ALL=(PositionRegistry ShieldVault Repricer Executor UniswapV3Swapper ShieldForwarderFactory)
 
 source_id() {
   case "$1" in

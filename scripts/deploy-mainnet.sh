@@ -32,7 +32,7 @@ FINAL="$DEPLOYMENTS/143.json"
 PENDING_NAME=143.pending
 PENDING="$DEPLOYMENTS/$PENDING_NAME.json"
 BROADCAST="$ROOT/contracts/broadcast/Deploy.s.sol/143/run-latest.json"
-CONTRACTS=(PositionRegistry ShieldVault Repricer Executor UniswapV3Swapper)
+CONTRACTS=(PositionRegistry ShieldVault Repricer Executor UniswapV3Swapper ShieldForwarderFactory)
 
 usage() { awk 'NR == 1 { next } /^#/ { print; next } { exit }' "$0" >&2; exit 1; }
 FORK=0 FORCE=0 RESUME=0

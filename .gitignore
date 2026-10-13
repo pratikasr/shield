@@ -40,3 +40,4 @@ contracts/broadcast/
 
 # agent worktrees
 .claude/worktrees/
+.mainnet/

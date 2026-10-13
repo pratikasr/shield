@@ -2,6 +2,14 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 13 Oct 2026 (14 Oct IST), Shield on Monad mainnet
+
+- **Deployed and verified.** The owner funded the deployer with 150 MON. `bash scripts/deploy-mainnet.sh` deployed the six contracts at block 113,117,335 for about 2.3 MON; all six are verified on MonadVision (Sourcify), ShieldForwarderFactory after adding it to the verify and code-check lists. Addresses in the README Deployments table and `contracts/deployments/143.json`.
+- **Keeper.** Funded with 110 MON (tx 0xe2d346fa82445d71b6f260d61acb5b22ede6fdbc01fad70cd7ca5aea54fa5a53) and running on mainnet through `scripts/demo-position.sh keeper` (log in `keeper.log`, which `scripts/proof.sh` reads).
+- **Vault.** Not seeded: the owner keeps the USDC for the demo position. Exits then take the flash-loan path, which sells the seized WETH on Uniswap's 0.3% WETH/USDC pool (checked live: 0.02 WETH quotes 49.81 USDC; the 0.05%, 0.01% and 1% pools have no liquidity).
+- **Web.** https://shieldexit.xyz serves the mainnet build with these addresses (Lightsail version 5); every page checked with no errors.
+- **Next.** The owner opens the Aave position on app.aave.com (0.05 WETH, borrow to a health factor near 1.20) and turns Shield on at shieldexit.xyz; after the 15-minute waiting period, a further borrow on Aave crosses the line and the keeper exits. Then `proof.sh`, the README Proof table, the video and the submission.
+
 ## 13 Oct 2026, staging on Monad testnet and hosting on AWS
 
 - **Owner's decision, 13 Oct night: the demo and everything a judge sees is on Monad mainnet only.** The README and the submission text no longer mention testnet, and https://shieldexit.xyz serves the mainnet build (until the contracts are deployed its Protect and Vault pages say Shield is not live yet). The testnet staging record stays in ADR-040, DEMO.md and TEST-REPORT.md; the testnet code paths are off in a mainnet build.

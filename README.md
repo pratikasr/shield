@@ -121,20 +121,21 @@ The exit is permissionless: anyone may call `Executor.exit` when the conditions 
 | M3 Keeper | done, on a mainnet fork; the live run on Monad mainnet is part of M6 |
 | M4 Web | done, rehearsed end to end on a mainnet fork |
 | M5 Envio indexer | done locally; the hosted deployment needs the owner's Envio login (`scripts/deploy-indexer.sh`) |
-| M6 Mainnet deployment and proof | scripted and rehearsed; waiting for mainnet funds and keys |
+| M6 Mainnet deployment and proof | contracts deployed and verified on Monad mainnet (Deployments below); the keeper runs; the demo exit and the Proof table come next |
 | M7 Submission | waiting for M6 and the video |
 
 ## Deployments (Monad mainnet, chain id 143)
 
-Not deployed yet. `bash scripts/deploy-mainnet.sh` deploys and writes `contracts/deployments/143.json` once every address holds code (it refuses to run again while that file exists, unless `--force`); `bash scripts/verify-mainnet.sh` verifies on MonadVision (and Monadscan with `ETHERSCAN_API_KEY`) and can be rerun on its own. The addresses go here.
+Deployed 13 Oct 2026 (UTC) by `bash scripts/deploy-mainnet.sh` from the owner `0x8044E41b5CB65A3c1c191C81eACe4DFa82c7e1c0`, at block 113,117,335; verified on MonadVision (Sourcify) by `bash scripts/verify-mainnet.sh`. The treasury is `0x1AF2Cc5e1D7700450542491FDA75418FBfCac890` with a 10% protocol share of premiums; the keeper is `0x47b18cc403CBa6c983e369dc583A5963632B78a2`; the waiting period before new cover can exit is 15 minutes. The live app: https://shieldexit.xyz.
 
 | Contract | Address |
 | --- | --- |
-| PositionRegistry | not deployed yet (M6) |
-| Repricer | not deployed yet (M6) |
-| Executor | not deployed yet (M6) |
-| ShieldVault | not deployed yet (M6) |
-| UniswapV3Swapper | not deployed yet (M6) |
+| PositionRegistry | [`0xd8C53Ef3Fd551a79d1cae98273Fd164b489B3970`](https://monadvision.com/address/0xd8C53Ef3Fd551a79d1cae98273Fd164b489B3970) |
+| Repricer | [`0x191009AACee0E88480bbe3657063383875b41689`](https://monadvision.com/address/0x191009AACee0E88480bbe3657063383875b41689) |
+| Executor | [`0x02088E09ae36D793F6d7f404C98A41cA6766Ae1D`](https://monadvision.com/address/0x02088E09ae36D793F6d7f404C98A41cA6766Ae1D) |
+| ShieldVault | [`0x6523E6d4CA232fe5c839438C9286cEB9b04C553A`](https://monadvision.com/address/0x6523E6d4CA232fe5c839438C9286cEB9b04C553A) |
+| ShieldForwarderFactory | [`0x190E10425E37c7dE1D0Df453103abE9d186E748D`](https://monadvision.com/address/0x190E10425E37c7dE1D0Df453103abE9d186E748D) |
+| UniswapV3Swapper | [`0xD6058cF99a507E975Fccc72Cc6c94b1c506dDAB5`](https://monadvision.com/address/0xD6058cF99a507E975Fccc72Cc6c94b1c506dDAB5) |
 
 ## Proof
 
