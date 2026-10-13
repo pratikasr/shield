@@ -42,12 +42,19 @@ Premium per block: `p = k * sigma * V / max(d, d_min) * dt`, where V is the borr
 
 ### Who earns what
 
-| Income | Liquidity providers (the vault) | Protocol treasury |
-| --- | --- | --- |
-| Premiums, charged every block | 90% | 10% at launch; the owner can set 0% to 20%, capped in the contract (ADR-037) |
-| Exit discount, 1% of the debt an exit repays | 100%: it pays for holding the seized collateral's price risk | none |
+At launch the vault is protocol-funded: the treasury is its only depositor, so all of Shield's income goes to the protocol (ADR-039).
 
-The borrower's cost is the same either way: the protocol's part comes out of the premium, never on top of it. The Repricer splits each charge when it bills it, so a change of share never reaches premium already charged. Earnings by hour, day and since deployment come from the Envio indexer and appear on the app's Analytics page.
+| Income | Where it goes |
+| --- | --- |
+| Premiums, charged every block | 10% straight to the treasury (`sweepProtocol`; the owner can set 0% to 20%, capped in the contract, ADR-037); 90% to the vault |
+| Exit discount, 1% of the debt an exit repays | 100% to the vault, which holds the seized collateral until it is sold |
+| The vault's income | To its only shareholder, the protocol treasury, through the share price |
+
+The borrower's cost is the same either way: the protocol's part comes out of the premium, never on top of it. Premium income accrues every block while covers are active; exit income depends on volatility and on when exits happen, and between an exit and the unwind the vault carries the seized collateral's price. Outside liquidity providers are on the roadmap: the vault stays ERC-4626 with a depositor allowlist, so they can be added without a redeploy, and then 90% of income would go to them and 10% to the protocol. Earnings by hour, day and since deployment come from the Envio indexer and appear on the app's Analytics page.
+
+### Premium from any chain
+
+Every borrower has a deposit address on Monad: `ShieldForwarderFactory.forwarderFor(borrower)`, a CREATE2 address known before anything is deployed there. USDC sent to it, from another chain through Aurora Intents or by a plain transfer on Monad, becomes that borrower's prepaid premium when anyone calls `sweepPremium(borrower)`; the keeper does it automatically. The treasury funds the vault the same way through `treasuryForwarder()` and `sweepVault()`. The borrower never needs MON or a network switch to keep cover funded. A refund from Aurora goes back to the sender on the origin chain.
 
 ### Pricing parameters
 
@@ -139,7 +146,7 @@ Filled during M6 with Monad mainnet transactions only, from `bash scripts/proof.
 | Three consecutive repricing txs | not yet (M6) |
 | Exit tx (`Exited` event) | not yet (M6) |
 | Protocol share paid to the treasury (`ProtocolPremiumPaid`) | not yet (M6) |
-| Gas (forge snapshot, Monad execution, cold state, with the protocol share) | `exit` funded by the vault 1,178,113; `exit` through the flash-loan fallback 1,852,786; `reprice` of one borrower 526,248; `repriceMany` of three 704,199; vault `unwind` 849,073. The protocol share added about 2,100 gas to a reprice (0.4%) and 2,400 to an exit. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
+| Gas (forge snapshot at block 113,031,739, Monad execution, cold state) | `exit` funded by the vault 1,178,122; `exit` through the flash-loan fallback 1,852,575; `reprice` of one borrower 526,248; `repriceMany` of three 704,199; vault `unwind` 831,017. The protocol share added about 2,100 gas to a reprice (0.4%) and 2,400 to an exit. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
 | Gas with the keeper's access list (mainnet fork, measured before the audit fixes with `pnpm --filter keeper measure`) | steady-state `repriceMany` for one borrower 192,094 (523,194 without); `exit` 682,349 (1,203,849 without) |
 | Envio indexer endpoint | not yet (needs the owner's Envio login) |
 | Demo video | not yet (M6) |
@@ -168,7 +175,7 @@ pnpm test
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init` first.
 
-The first fork-test run takes about 12 minutes, because every state read goes to the public RPC. Foundry caches that state per pinned block, so pin one with `FORK_BLOCK=<block>` (rpc.monad.xyz served state 500,000 blocks back on 5 Oct 2026, about 40 hours): a rerun at the same block took 4.4 minutes on 5 Oct 2026. Test runs do not rewrite the committed gas figures; `FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=110596951 forge snapshot` refreshes them at the block they were measured at, for as long as Foundry's cache or an archive RPC holds it.
+The first fork-test run takes about 12 minutes, because every state read goes to the public RPC. Foundry caches that state per pinned block, so pin one with `FORK_BLOCK=<block>` (rpc.monad.xyz served state 500,000 blocks back on 5 Oct 2026, about 40 hours): a rerun at the same block took 4.4 minutes on 5 Oct 2026. Test runs do not rewrite the committed gas figures; `FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=113031739 forge snapshot` refreshes them at the block they were measured at, for as long as Foundry's cache or an archive RPC holds it. A pinned block falls out of the public RPC's state window after about 500,000 blocks; then pin a recent one.
 
 ### Run the whole thing locally
 
@@ -204,11 +211,11 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 
 | What | Command | Result |
 | --- | --- | --- |
-| Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 130 tests pass: 89 unit, fuzz and invariant (mocks), 41 fork tests against real Aave on Monad |
+| Contracts: unit, fork, fuzz, invariant | `cd contracts && MONAD_RPC_URL=https://rpc.monad.xyz forge test` | 143 tests pass: 100 unit, fuzz and invariant (mocks), 43 fork tests against real Aave on Monad |
 | Static analysis | Slither 0.11.6, Aderyn 0.6.8 | every high and medium fixed or justified in [docs/SECURITY.md](docs/SECURITY.md) |
-| Keeper | `pnpm --filter keeper test` | 81 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
-| Indexer | `pnpm --filter shield-indexer test` | 6 tests pass |
-| Web: amounts, formatting, risk maths, analytics series | `pnpm --filter web test` | 49 tests pass |
+| Keeper | `pnpm --filter keeper test` | 91 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
+| Indexer | `pnpm --filter shield-indexer test` | 8 tests pass |
+| Web: amounts, formatting, risk maths, analytics series, Aurora requests and statuses | `pnpm --filter web test` | 65 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
 | Lighthouse (mobile) | landing, borrower, LP, analytics | with devtools throttling, performance 99 on all four; with the default simulated throttling on a shared machine, 96 on the landing page and 84 to 90 on the app pages, which load the wallet libraries. Accessibility and best practices 100 and CLS 0 on all |
@@ -216,6 +223,8 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 Dates, commands and outcomes for every round: [docs/TEST-REPORT.md](docs/TEST-REPORT.md). The internal audit of 5 Oct 2026 (contracts, keeper, indexer, scripts, web, live QA and every claim in these docs), its findings and their fixes: [docs/AUDIT.md](docs/AUDIT.md). Shield has had no external audit.
 
 ## Bounties
+
+Aurora Intents: borrowers top up their premium, and the treasury funds the vault, from any chain Aurora supports. Aurora delivers USDC to a per-account deposit address on Monad, and Shield's forwarder executes on arrival: `sweepPremium` turns it into the borrower's prepaid premium, `sweepVault` into vault shares for the treasury (ADR-039).
 
 Envio: every user-facing Shield event (opt-ins, triggers, each per-block reprice, exits, vault deposits, withdrawals, share transfers, premiums and collateral flows) is indexed with Envio HyperIndex (`indexer/`). The web app's exit history, repricing history, covered-positions table, vault activity and the LP premium rate read from its GraphQL endpoint. HyperSync serves Monad mainnet; the same indexer runs against the local fork over RPC.
 

@@ -145,7 +145,8 @@ Prices on 5 Oct 2026: gas 102 gwei on mainnet, WETH $2,726.39 on Aave's oracle, 
 | Deployer | keystore `shield-deployer` (`DEPLOYER_ACCOUNT`) | 5 MON | The deploy script estimates 17,602,721 gas for the five contracts and wiring; at 102 gwei with forge's 1.3x limit that is about 2.3 MON |
 | Keeper | key file `~/.shield/keeper.key` (`KEEPER_PRIVATE_KEY_FILE`) | 100 MON | About 0.025 MON per every-block reprice of one borrower (limit about 246,000 gas) and about 0.08 MON per exit. Three 600-block (3-minute) recording windows cost about 45 MON; idle repricing every 200 blocks costs about 36 MON a day, so stop the keeper between sessions. Below 0.2 MON (`MIN_BALANCE_FOR_EXIT_WEI`) the keeper stops repricing and keeps the rest for exits, so top it up before then |
 | Borrower | keystore `shield-borrower` (`DEMO_ACCOUNT`), and the browser wallet used on camera | 0.05 WETH (`0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242`) and 5 MON | Supplies the WETH to Aave and borrows about $107 USDC itself, which pays the 5 USDC prepay; MON covers about seven transactions |
-| LP | keystore `shield-lp` (`LP_ACCOUNT`) | 100 USDC (`0x754704Bc059F8C67012fEd69BC8A327a5aafb603`) and 1 MON | Seeds the vault, which funds the exit (about $27 at this size) |
+| LP, the protocol treasury | keystore `shield-lp` (`LP_ACCOUNT`) | 100 USDC (`0x754704Bc059F8C67012fEd69BC8A327a5aafb603`) and 1 MON | The treasury (ADR-039): the deploy script makes `LP_ADDRESS` the treasury and the vault's only depositor. Seeds the vault, which funds the exit (about $27 at this size), and receives the protocol share of premiums |
+| Borrower, on Base | the same browser wallet, on Base | 25 USDC on Base and a little ETH for gas | The cross-chain top-up on camera: Aurora Intents delivers it to the borrower's deposit address on Monad and the keeper sweeps it into premium (needs `NEXT_PUBLIC_AURORA_APP_KEY` in the web app's environment) |
 
 Create the accounts once:
 
@@ -206,7 +207,8 @@ bash scripts/verify-mainnet.sh                  # retry by name, for example: ba
 #    read without echo: read -rs ENVIO_API_TOKEN && export ENVIO_API_TOKEN
 ENVIO_ORG=<your Envio org> bash scripts/deploy-indexer.sh
 
-# 4. Web app against the mainnet deployment
+# 4. Web app against the mainnet deployment. For cross-chain top-ups, create an app key at Aurora Intents Studio
+#    (https://intents.aurora.dev/studio) and export it first: export NEXT_PUBLIC_AURORA_APP_KEY=<key>
 NEXT_PUBLIC_ENVIO_GRAPHQL_URL=<endpoint from step 3> bash scripts/web-env.sh
 pnpm --filter web build && pnpm --filter web start   # http://localhost:3000; NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID adds WalletConnect
 

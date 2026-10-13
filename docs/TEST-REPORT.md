@@ -1,6 +1,6 @@
 # Shield test report
 
-Seven rounds, all run on 5 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
+Eight rounds, run on 5 and 13 Oct 2026 on macOS (Apple silicon) with Foundry 1.8.4 (`network = "monad"`), Node 24.6, pnpm 11.3 and Docker 29.2. Fork tests and fork rehearsals use Monad mainnet through the public RPCs (rpc.monad.xyz, rpc1.monad.xyz); Aave V3 is not on Monad testnet (ADR-020). Nothing in this report is mainnet proof.
 
 ## Round 1: contracts, static analysis, keeper, workspace
 
@@ -157,4 +157,30 @@ Defects found in this round and fixed:
 5. **The MetaMask SDK loaded on every app page** (about 450 KB) through RainbowKit's MetaMask entry. MetaMask now connects through its extension; blocking time on the app pages fell by about two thirds.
 6. **A Vitest config committed before Vitest was installed broke a web build** in the stack. Vitest is now a web dev dependency.
 7. **Compact dollar figures read "$200.00K" on Node 22** (CI) and "$200K" on Node 24: some ICU versions pad compact currency to two decimals unless told not to, and browsers differ the same way. The formatter now sets the minimum explicitly, with a test, and the web suite was run on both Node versions.
+
+## Round 8: forwarders, Aurora top-ups and the protocol-funded vault (13 Oct 2026)
+
+Every check rerun after ADR-039: the depositor allowlist, `Repricer.topUpFor`, `ShieldForwarderFactory`, the keeper's sweep pass, the indexer's forwarder events, and the web app's cross-chain top-ups and protocol-funded vault.
+
+| Check | Command | Outcome |
+| --- | --- | --- |
+| Foundry, all suites | `cd contracts && FORGE_SNAPSHOT_EMIT=true MONAD_RPC_URL=https://rpc.monad.xyz FORK_BLOCK=113031739 forge snapshot` | 143 pass, 0 fail: 100 unit, fuzz and invariant tests (11 new: the factory's deposit addresses, sweeps, access control and two fuzz tests; the allowlist), 43 fork tests (2 new: real USDC through both forwarders, and an outsider refused by the vault); gas snapshot refreshed at the new block |
+| Static analysis | as in Round 1 | Slither 8 high and 19 medium and Aderyn 2 high, all the same as before and justified; nothing in the new code |
+| Keeper | `pnpm --filter keeper test` | 91 pass (10 new: sweeps with a measured limit, the minimum, never in a pass with an exit, a failing sweep isolated, the balance floor, one sweep before a newer block, config and startup) |
+| Indexer | `pnpm --filter shield-indexer test` | 8 pass (2 new: a cross-chain top-up labelled once, a vault funding not counted twice) |
+| Web unit tests | `pnpm --filter web test` | 65 pass (16 new: Aurora request building, status mapping, amounts) |
+| Workspace | `pnpm lint` and the web production build | clean |
+| Forwarders with the real keeper, local fork | 25 USDC to the borrower's deposit address, 10 USDC to the treasury's | the keeper swept both: `sweepPremium` `0x073ac3eb8d0c77e1becd678ea45a9e7e85a58cacaefa2e06f38e4103857c8ec2` (prepaid 0.999997 to 25.999992 USDC), `sweepVault` `0x29ab8c9aa35aa9ad78fbeaaae36b159d37a5be92f87e68a8966faf77113cb8b5` (vault 50.000008 to 60.000009 USDC, shares to the treasury) |
+| Cross-chain flow in the browser, local fork | Aurora's answers mocked in Playwright; the delivery a real USDC transfer on the fork | every step through to "in your premium"; refunded, failed, short and expired states checked |
+| End to end, clean fork of block 113044332 | `STACK_INDEXER=0 bash scripts/e2e.sh` (Docker was unavailable) | pass: opt-in in block 113044738; reprices in blocks 113044739, 113044740 and 113044741, keeper receipts 300 ms and 299 ms apart; exit in block 113044808, HF 1.0529 to 1.1200, 1.090129 USDC saved on 24.23 USDC repaid; the indexer-only check skipped |
+| Lighthouse 12, devtools throttling | production build | borrower 98 / 100 / 100, vault 98 / 100 / 96 (the 96 is console errors from the stopped indexer) |
+
+Not verified in this round: a real Aurora quote and transfer (they need the app key from Aurora Intents Studio), and the local indexer's rows for the new events (Docker would not start).
+
+Defects found and fixed:
+
+1. **Fork tests pinned to block 110,596,951 could no longer fetch state**: by 13 Oct it was outside the public RPC's 500,000-block window. The suite and the snapshot now pin block 113,031,739.
+2. **The F3 just-in-time deposit test was stopped by the allowlist** before it reached the profit unlock; it now allows the attacker, so the unlock is still proven for when outside depositors are enabled, and a new fork test shows an outsider is refused.
+3. **The video-script test needed the indexer for one check**, the exit transaction in the vault's activity table; it now skips only that check when the stack runs without the indexer.
+4. **Aderyn noted two factory views that could be `external`**; changed.
 

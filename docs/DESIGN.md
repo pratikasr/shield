@@ -120,7 +120,7 @@ Every number uses tabular figures (`.num`, `.reading`).
 | Component | Notes |
 | --- | --- |
 | Mark and wordmark | `ShieldMark`, `Wordmark`; `app/icon.svg` is the same mark on an ink tile |
-| App header | Sticky and blurred: mark, "Protect", "Earn" and "Analytics" with an underline on the current page, Monad network chip (logo, live dot, block), theme toggle, wallet button (avatar and address, or "Connect wallet"). Below 640 px the three links sit in their own row under the bar; between 768 and 1024 px the mark shows without the word so the chip fits |
+| App header | Sticky and blurred: mark, "Protect", "Vault" and "Analytics" with an underline on the current page, Monad network chip (logo, live dot, block), theme toggle, wallet button (avatar and address, or "Connect wallet"). Below 640 px the three links sit in their own row under the bar; between 768 and 1024 px the mark shows without the word so the chip fits |
 | Footers | Site: four columns (product; transparency, with contract addresses once deployed; built on), a disclaimer and the licence. App: the disclaimer and links to Security, Tests and GitHub |
 | Panel | The one surface style: hairline border, 14 px radius, optional title row. Panels never nest |
 | Stat | Label above a tabular value with an optional hint; `dt`/`dd` |
@@ -186,6 +186,7 @@ Layout:
 - **Header band:** market chip (Aave and Monad icons), page title, cover status (Not protected, Protected at x.xx, Unprotected, or Exited), and net worth, collateral, debt and health factor on the right.
 - **Left column:**
   - "Liquidation risk": the gauge; collateral price now, liquidation price and exit price; the estimated chance the collateral touches the exit price within 24 hours and 7 days (zero-drift lognormal at the cover's volatility, with its assumptions in an info note); the cost comparison; while protected, the cover rate, prepaid balance and premium paid; and "If WETH moves", a -30% to +30% simulator showing the health factor at that price, whether the exit would run or Aave could liquidate, and the cost of each.
+  - "From another chain" (ADR-039), in the Top up tab, the prepaid card and the prepay step: the borrower's deposit address on Monad with copy, the USDC waiting there and "Move into premium", then Aurora Intents: source chain and stablecoin, amount, Aurora's deposit address and the exact amount to send, and a five-step status strip (waiting for deposit, deposit seen, sending to Monad, delivered on Monad, in your premium). Refunded, failed, short and expired states each say what happened and what to do. Loaded only when opened.
   - "Health factor history": a line chart of the health factor from the indexer's reprices, with the trigger, Aave's 1.00 line and exit markers, and premium paid below it; ranges This cover, Last hour, 24 hours and All; hover and keyboard readout and a table alternative. Loaded after the page is interactive.
   - "Activity": Exits and Repricing tabs.
   - "Your assets on Aave".
@@ -219,16 +220,16 @@ Layout:
 | Exited | Green banner "Exited in block N: penalty avoided $X" with the hash; "Exit completed" card (penalty avoided, debt repaid, HF before and after) above the form to protect again | Protect again |
 | Indexer missing or failing | Activity says which variable or what failed | Configure |
 
-### LP `/app/vault`
+### Vault `/app/vault`
 
 Layout:
 
-- **Header band:** "Shield vault, USDC" chip, title "Earn by funding exits", a one-line explanation, and vault value, premium rate now and share price on the right.
+- **Header band:** "Shield vault, USDC" chip, title "The vault that funds exits", a one-line explanation that it is funded by the protocol, and vault value, premium rate now and share price on the right.
 - **Left column:**
   - "Vault overview": a composition bar (USDC, collateral from exits, premium to sweep), then premium earned, exits executed and average discount captured.
-  - "Income since launch": where liquidity providers' earnings come from (premiums to the vault, gross exit discounts) with the protocol's share of premiums shown apart, the split read from the registry, and a link to Analytics.
+  - "Income since launch": all of Shield's income goes to the protocol (10% of premiums to the treasury directly, the rest and the exit discounts through the vault the treasury owns), the two risk lines (exit income depends on volatility and timing; the vault carries seized collateral until the unwind, and a flash-assisted exit pays a flash-loan fee), and outside liquidity providers as a labelled roadmap line.
   - "Activity": Exits, Covered positions and Vault flows tabs.
-- **Right column (sticky):** deposit and withdraw.
+- **Right column (sticky):** for an allowlisted account (the treasury at launch), deposit and withdraw, with "Fund from another chain" (the treasury's deposit address and a sweep button); for anyone else, why deposits are closed, and withdraw for anyone holding shares (ADR-039).
 
 | State | Shows | Next action |
 | --- | --- | --- |

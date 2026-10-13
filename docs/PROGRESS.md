@@ -2,6 +2,18 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 13 Oct 2026, protocol-funded vault and premium from any chain (Aurora Intents)
+
+- **Why.** The owner's plan (Shield: Aurora Intents Routing and Vault Economics): a protocol-funded vault keeping all income, and top-ups from any chain for the Aurora Intents bounty, without touching the exit path.
+- **Done (uncommitted until commit signing is unlocked).**
+  - Contracts: the vault's depositor allowlist (the treasury only at launch), `Repricer.topUpFor` for the factory only, and `ShieldForwarderFactory` with per-account CREATE2 deposit addresses, `sweepPremium` and `sweepVault` (ADR-039). The deploy makes the LP account the treasury. 143 contract tests pass; gas snapshot refreshed at block 113,031,739.
+  - Keeper: a sweep pass for active borrowers' and the treasury's deposit addresses, after reprices and never ahead of an exit.
+  - Indexer: forwarder events; cross-chain top-ups labelled in the borrower's history.
+  - Web: "From another chain" on the borrower page (deposit address, Aurora quote, deposit address on the source chain, a five-step status strip, "Move into premium"); the Vault page protocol-funded; copy across the site.
+  - Docs: ADR-039, SECURITY, README ("Who earns what", "Premium from any chain", Aurora in Bounties), SPEC, DEMO, DESIGN, SUBMISSION; verified facts on Aurora's API.
+- **Checks.** Round 8 in [TEST-REPORT.md](TEST-REPORT.md).
+- **Blocked on the owner.** Commit signing (GPG passphrase); Docker Desktop (the local indexer); the Aurora app key (real quotes and the 25 USDC demo top-up from Base); mainnet funds and keystores; Envio and Vercel logins; making the repo public. Claim the Aurora bounty only if the real top-up reaches SUCCESS.
+
 ## 5 Oct 2026, protocol earnings and analytics
 
 - **Why.** The owner asked for protocol earnings, rich analytics in the style of THORChain's earnings dashboards, closer Monad alignment, and other lenders shown as coming soon; plan first, check it fits the hackathon, then build and test.

@@ -255,6 +255,21 @@ Why:
 - An aggregate "liquidation penalties paid on Monad" figure was dropped: Aave Monad has had one liquidation (Verified facts). One real, checkable example is more honest than a thin total.
 - Other lenders need their own exit path and fork tests, so they are listed, not built, before the deadline.
 
+## ADR-039 A protocol-funded vault; premium from any chain through Aurora Intents (13 Oct 2026; supersedes the liquidity-provider split in ADR-037 for launch)
+
+Decision:
+- **The vault is protocol-funded.** `ShieldVault` gets an owner-set depositor allowlist (`setDepositor`, `depositorAllowed`), applied through the ERC-4626 `maxDeposit` and `maxMint` hooks. At deploy only the treasury is on it (`SHIELD_TREASURY`, by default the LP account, which seeds the vault). All of Shield's income goes to the protocol: 10% of each premium is paid to the treasury directly (ADR-037, unchanged), and the rest of the premium and the whole exit discount accrue to the vault, whose only shareholder is the treasury.
+- **Outside liquidity providers are a roadmap item.** When they are enabled by adding addresses, with no redeploy, the ADR-037 split applies: 90% of income to them through the share price and 10% to the protocol. Withdrawals are never restricted.
+- **Premium from any chain.** `ShieldForwarderFactory` gives every borrower a deposit address on Monad: a `ShieldForwarder` at a CREATE2 address derived from the borrower, known before it is deployed. Aurora Intents delivers USDC from any of its chains to that address. `sweepPremium(borrower)`, callable by anyone and run by the keeper, deploys the forwarder if needed and turns its balance into the borrower's prepaid premium through `Repricer.topUpFor`, which only the factory may call (`topUpAgent`). The treasury funds the vault the same way through `treasuryForwarder()` and `sweepVault()`.
+- **Delivery is plain tokens.** Aurora delivers to a `recipient` address and has no calldata hook, so the execution on arrival is Shield's forwarder.
+- **Refunds stay on the origin chain.** A refund from Aurora goes to `refundTo` there, so nothing is stranded on Monad.
+
+Why:
+- The protocol keeps all income while the product proves itself, and the vault stays ERC-4626, so opening it later is a list change.
+- Borrowers whose stablecoins sit on another chain can keep cover funded without bridging, switching networks or holding MON.
+- A per-account forwarder works with any sender (Aurora, a bridge, a plain transfer), needs no trust in the sender, and moves funds only to the account they were sent for.
+- Neither change touches the exit path.
+
 ## Verified facts
 
 Append one line per fact, with the date checked and the source. Agents append here as M0 items are resolved.
@@ -326,3 +341,8 @@ Append one line per fact, with the date checked and the source. Agents append he
 - 5 Oct 2026: `monadNewHeads` on wss://rpc.monad.xyz accepts a subscription from a client that sends a browser Origin header, so the web app can subscribe directly; blocks arrived about every 300 ms as Proposed, then Voted, Finalized and Verified. Source: direct subscription with Origin set.
 - 5 Oct 2026: A `monadLogs` subscription with an address filter works on wss://rpc.monad.xyz and sends each log again at every commit state, so a consumer must count each log once (by block hash or number, transaction hash and log index). Source: direct subscription from the analytics page's check.
 - 5 Oct 2026: Measured from `monadNewHeads`: average block time 302 ms in a browser; median time after Proposed about 300 ms to Voted, 570 ms to Finalized and 1.5 s to Verified. Source: a browser session and a Node probe on wss://rpc.monad.xyz, consistent with the direct subscription above.
+- 13 Oct 2026: Aurora Intents' token list (GET https://intents-api.aurora.dev/api/tokens/{appKey}) includes USDC on Monad, assetId `nep245:v2_1.omni.hot.tg:143_2dmLwYWkCQKyTjeUPAsGJuiVLbFx`, contract 0x754704bc059f8c67012fed69bc8a327a5aafb603 (the USDC Shield and Aave use), 6 decimals; also MON and USDT0 on Monad; AUSD is not listed. Base USDC is `nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near`. Source: the API, which answered the token list for a placeholder key.
+- 13 Oct 2026: Aurora's quote endpoint (POST https://intents-api.aurora.dev/api/quote/{appKey}, with `dry`, `swapType`, `slippageTolerance`, `originAsset`, `depositType`, `destinationAsset`, `amount`, `recipient`, `recipientType` DESTINATION_CHAIN, `refundTo`, `refundType`, `deadline`) needs a real app key from Aurora Intents Studio: a placeholder key returns 404 "Application key not found". Source: https://docs.intents.aurora.dev/intents-deposits/quickstart/api-integration.md and a direct request.
+- 13 Oct 2026: The Aurora widget is the npm package `@aurora-is-near/intents-swap-widget-standalone`, version 7.26.0, peer dependencies react and react-dom, about 780 KB unpacked. Source: `npm view`.
+- 13 Oct 2026: The public RPC's 500,000-block state window means a pinned fork block goes stale: fork tests pinned to block 110,596,951 (5 Oct) could no longer fetch uncached storage on 13 Oct. Fork tests and the gas snapshot now pin block 113,031,739. Source: the fork test run's "failed to get storage" errors.
+
