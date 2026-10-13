@@ -76,6 +76,23 @@ library ShieldDeployment {
         c.protocolShareBps = 1000;
     }
 
+    /// @notice Monad testnet staging (ADR-040): the Aave V3 market Shield deployed there from Aave's code
+    /// (testnet/TestnetMarket.s.sol), its test WETH and USDC, and Pyth's testnet contract. No Uniswap V3 on testnet, so
+    /// the swapper has no router: exits there must be fully vault-funded (no flash-loan fallback) and the vault keeps
+    /// seized collateral instead of selling it.
+    function monadTestnet(address owner, address keeper, address addressesProvider, address usdc, address weth)
+        internal
+        pure
+        returns (Config memory c)
+    {
+        c = monadMainnet(owner, keeper);
+        c.addressesProvider = IPoolAddressesProvider(addressesProvider);
+        c.usdc = IERC20(usdc);
+        c.swapRouter = IV3SwapRouter(address(0));
+        c.weth = weth;
+        c.cbbtc = address(0);
+    }
+
     function deploy(Config memory c) internal returns (Deployed memory d) {
         IPool pool = IPool(c.addressesProvider.getPool());
         IAaveOracle oracle = IAaveOracle(c.addressesProvider.getPriceOracle());

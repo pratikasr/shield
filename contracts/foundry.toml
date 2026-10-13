@@ -38,6 +38,26 @@ fail_on_revert = false
 [profile.ci.fuzz]
 runs = 1024
 
+# Monad testnet staging only (ADR-040): a full Aave V3 market from aave-v3-origin under testnet/, which needs that
+# repository's nested submodules (`git submodule update --init --recursive contracts/lib/aave-v3-origin`). Kept out of
+# the default build and CI, with its own output directory so the main artifacts and ABIs are untouched.
+[profile.testnet]
+src = "testnet"
+test = "testnet"
+script = "testnet"
+out = "out-testnet"
+cache_path = "cache-testnet"
+optimizer_runs = 200
+remappings = [
+  "forge-std/=lib/forge-std/src/",
+  "@openzeppelin/contracts/=lib/aave-v3-origin/lib/solidity-utils/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
+  "@pythnetwork/pyth-sdk-solidity/=lib/pyth-sdk-solidity/",
+  "aave-v3-origin/=lib/aave-v3-origin/src/",
+  "solidity-utils/=lib/aave-v3-origin/lib/solidity-utils/src/",
+  "openzeppelin-contracts-upgradeable/=lib/aave-v3-origin/lib/solidity-utils/lib/openzeppelin-contracts-upgradeable/",
+  "openzeppelin-contracts/=lib/aave-v3-origin/lib/solidity-utils/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/",
+]
+
 [rpc_endpoints]
 monad = "${MONAD_RPC_URL}"
 monad_testnet = "${MONAD_TESTNET_RPC_URL}"

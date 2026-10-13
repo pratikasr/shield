@@ -8,6 +8,9 @@ keystore/
 # foundry
 contracts/out/
 contracts/cache/
+contracts/out-testnet/
+contracts/cache-testnet/
+.testnet/
 contracts/broadcast/**/dry-run/
 
 # node

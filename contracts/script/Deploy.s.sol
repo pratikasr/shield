@@ -14,6 +14,19 @@ contract Deploy is Script {
         vm.startBroadcast();
         (, address owner,) = vm.readCallers();
         ShieldDeployment.Config memory c = ShieldDeployment.monadMainnet(owner, keeper);
+        // Monad testnet staging (ADR-040): Shield on the Aave V3 market deployed there by testnet/TestnetMarket.s.sol.
+        if (block.chainid == 10_143) {
+            string memory aave = vm.readFile(
+                vm.envOr("AAVE_MARKET_FILE", string.concat(vm.projectRoot(), "/deployments/aave-10143.json"))
+            );
+            c = ShieldDeployment.monadTestnet(
+                owner,
+                keeper,
+                vm.parseJsonAddress(aave, ".PoolAddressesProvider"),
+                vm.parseJsonAddress(aave, ".USDC"),
+                vm.parseJsonAddress(aave, ".WETH")
+            );
+        }
         // Fork rehearsals shorten the waiting period so a scripted run does not sit idle for 15 minutes.
         c.minCoverSeconds = uint32(vm.envOr("SHIELD_MIN_COVER_SECONDS", uint256(c.minCoverSeconds)));
         c.treasury = vm.envOr("SHIELD_TREASURY", c.treasury);
