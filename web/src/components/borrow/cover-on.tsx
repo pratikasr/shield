@@ -42,6 +42,7 @@ import { livePrepaid, type ArmState } from "@/lib/cover-status";
 import { BLOCKS_PER_DAY, BLOCKS_PER_YEAR, runwayDays } from "@/lib/economics";
 import { collateralName, shield } from "@/lib/env";
 import { formatClock, formatCountdown, formatDuration, formatUsd } from "@/lib/format";
+import { aaveButtonText, aaveLink } from "@/lib/test-loan";
 
 type Kind = "loading" | "arming" | "protected" | "near" | "low" | "out" | "blocked" | "due";
 type Tray = "fuel" | "when" | "off" | undefined;
@@ -326,9 +327,7 @@ export function CoverOn({
       default:
         return (
           <CartoonButton asChild variant={r === "unknown" ? "white" : "primary"}>
-            <a href={AAVE_APP} target="_blank" rel="noreferrer">
-              {copy.button}
-            </a>
+            <a {...aaveLink(AAVE_APP)}>{aaveButtonText(copy.button)}</a>
           </CartoonButton>
         );
     }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { BorrowView } from "@/components/borrow/borrow-view";
+import { TestLoanCard } from "@/components/borrow/test-loan";
 import { WALLET_COOKIE } from "@/lib/wallet-cookie";
 
 export const metadata: Metadata = { title: "Protect a position" };
@@ -12,5 +13,11 @@ export const metadata: Metadata = { title: "Protect a position" };
 export default async function BorrowPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [params, jar] = await Promise.all([searchParams, cookies()]);
   const address = typeof params.address === "string" ? params.address : "";
-  return <BorrowView initialWatch={address} walletHint={jar.has(WALLET_COOKIE)} />;
+  return (
+    <>
+      <BorrowView key={address} initialWatch={address} walletHint={jar.has(WALLET_COOKIE)} />
+      {/* Testnet staging builds only (ADR-040): open and move a test loan; hidden while viewing another wallet. */}
+      <TestLoanCard hidden={Boolean(address)} />
+    </>
+  );
 }

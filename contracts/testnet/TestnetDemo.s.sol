@@ -85,6 +85,21 @@ contract TestnetDemo is Script {
         _report(pool, me);
     }
 
+    /// @notice From the borrower: supply all its test WETH and borrow USDC down to DEMO_HF_BPS, leaving the cover to
+    /// the web app (approvals, fuel and opt-in through the real UI).
+    function openLoan() external {
+        require(block.chainid == 10_143, "Monad testnet only");
+        (IPool pool, address weth, address usdc) = _aave();
+        vm.startBroadcast();
+        (, address me,) = vm.readCallers();
+        uint256 wethAmount = IERC20(weth).balanceOf(me);
+        IERC20(weth).approve(address(pool), wethAmount);
+        pool.supply(weth, wethAmount, me, 0);
+        _borrowTo(pool, usdc, me, vm.envUint("DEMO_HF_BPS"));
+        vm.stopBroadcast();
+        _report(pool, me);
+    }
+
     function borrowTo() external {
         (IPool pool,, address usdc) = _aave();
         vm.startBroadcast();

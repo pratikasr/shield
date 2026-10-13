@@ -19,6 +19,7 @@ import type { ShieldConfig } from "@/hooks/useShieldConfig";
 import type { Cover } from "@/hooks/useShieldPosition";
 import { collateralName } from "@/lib/env";
 import { formatUsd, truncateHex } from "@/lib/format";
+import { aaveButtonText, aaveLink, testLoanEnabled } from "@/lib/test-loan";
 
 /**
  * The `?address=` parameter. All-lowercase or all-uppercase hex is accepted and normalised; mixed case must carry a
@@ -189,15 +190,23 @@ export function NoLoan({ watching, loanLine, banner }: { watching: boolean; loan
       <Card>
         <h2 className="mb-3 font-display text-[22px] leading-[1.1]">To use Shield</h2>
         <ol className="mb-[18px] mt-0 grid list-decimal gap-1.5 pl-[22px] marker:font-bold">
-          <li>Deposit ETH on Aave V3 Monad.</li>
-          <li>Borrow USDC against it, outside eMode.</li>
-          <li>Come back here and pick your line.</li>
+          {testLoanEnabled ? (
+            <>
+              <li>Deposit test WETH with the Test loan card below.</li>
+              <li>Borrow test USDC there.</li>
+              <li>Pick your line here.</li>
+            </>
+          ) : (
+            <>
+              <li>Deposit ETH on Aave V3 Monad.</li>
+              <li>Borrow USDC against it, outside eMode.</li>
+              <li>Come back here and pick your line.</li>
+            </>
+          )}
         </ol>
         <div className="c-row">
           <CartoonButton asChild>
-            <a href={AAVE_APP} target="_blank" rel="noreferrer">
-              Open Aave
-            </a>
+            <a {...aaveLink(AAVE_APP)}>{aaveButtonText("Open Aave")}</a>
           </CartoonButton>
           <WatchForm label="Check another wallet" quiet />
         </div>
@@ -321,9 +330,7 @@ export function UnsupportedLoan({
       <Callout tone="heads" icon={<CartoonIcon name="warn" />} title={c.fixTitle}>
         <p className="mb-3.5">{c.fix}</p>
         <CartoonButton asChild>
-          <a href={AAVE_APP} target="_blank" rel="noreferrer">
-            {c.button}
-          </a>
+          <a {...aaveLink(AAVE_APP)}>{aaveButtonText(c.button)}</a>
         </CartoonButton>
       </Callout>
       {cover && cover.prepaidWad > 0n && <LeftoverFuel cover={cover} wrongNetwork={wrongNetwork} readOnly={readOnly} refetch={refetch} />}
