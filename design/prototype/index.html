@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shield prototype</title>
+  <meta name="description" content="Clickable design prototype for Shield, an opt-in early exit for Aave V3 borrowers on Monad. Sample numbers only.">
+  <meta name="theme-color" content="#cbe7ff">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="wrap">
+      <a class="logo" href="#/" aria-label="Shield home">
+        <svg viewBox="-4 -2 128 140" aria-hidden="true"><path d="M60 128 C34 116 18 94 18 64 L18 26 C18 19 23 15 30 14 C42 12 50 9 60 4 C70 9 78 12 90 14 C97 15 102 19 102 26 L102 64 C102 94 86 116 60 128 Z" fill="#6a4cf5" stroke="#1b1430" stroke-width="8" stroke-linejoin="round"/><rect x="31" y="33" width="58" height="46" rx="21" fill="#fff7ea" stroke="#1b1430" stroke-width="6"/><ellipse cx="48" cy="56" rx="6" ry="8" fill="#1b1430"/><ellipse cx="72" cy="56" rx="6" ry="8" fill="#1b1430"/></svg>
+        <span>Shield</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#/protect" data-nav="protect">Protect</a>
+        <a href="#/vault" data-nav="vault">Vault</a>
+        <a href="#/stats" data-nav="stats">Stats</a>
+      </nav>
+      <div class="topbar-end">
+        <span class="blockchip" title="Sample block stream"><i class="heart" aria-hidden="true"></i>Monad block <span class="digits" id="blocknum" aria-hidden="true"></span></span>
+        <span class="wallet" id="wallet"><i aria-hidden="true"></i>0x3C4a...93BC</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1"></main>
+
+  <footer class="ground">
+    <div class="wrap">
+      <div>
+        <a class="logo" href="#/">Shield</a>
+        <p>Shield is experimental, open-source software built for Monad Metropolis 2026. Its contracts have not been audited, and using them can lose money. Nothing here is financial advice. Shield is independent and not affiliated with Aave, Pyth or Monad.</p>
+      </div>
+      <nav aria-label="Footer">
+        <a href="https://github.com/pratikasr/shield">Source code</a>
+        <a href="#/stats">Stats</a>
+        <a href="#/vault">Vault</a>
+        <a href="#/protect">Protect</a>
+      </nav>
+    </div>
+  </footer>
+
+  <div id="confetti" aria-hidden="true"></div>
+  <script src="app.js"></script>
+</body>
+</html>
