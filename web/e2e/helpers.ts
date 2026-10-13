@@ -79,6 +79,12 @@ async function setWethPriceOnce(price8: bigint) {
 }
 
 
+/** Opens the "Stats for nerds" drawer if it is closed (it can re-render closed when the page's state changes). */
+export async function openNerds(page: Page) {
+  const drawer = page.locator("details", { hasText: "Stats for nerds" }).first();
+  if ((await drawer.getAttribute("open")) === null) await drawer.locator("summary").click();
+}
+
 /** Connects the fork test wallet from the header. */
 export async function connectTestWallet(page: Page) {
   await page.getByRole("button", { name: /^connect/i }).first().click();

@@ -2,6 +2,26 @@
 
 How the Shield web app looks and behaves, and why. Research behind it: [DESIGN-RESEARCH.md](DESIGN-RESEARCH.md). Part 1 covers position, risk and automation screens in Aave, Morpho, Euler, Summer.fi, DeFi Saver and Hyperliquid. Part 2 covers what makes a financial product look legitimate or like a scam, across 26 DeFi and fintech sites. Screenshots from each review pass are in [screenshots/](screenshots/).
 
+## Version 3 (13 Oct 2026): the cartoon "floor is lava" redesign
+
+**Why.** The owner rejected version 2: too calm and fintech-like, and the health factor, charts, sliders and drag and drop made no sense to the people who use Shield. They want to know at once whether they are safe, when Shield steps in and what it costs. Research Part 3 (DESIGN-RESEARCH.md) captured 42 live sites and recommended a game-like direction. A designer built a clickable prototype ([design/prototype/](../design/prototype/), with its token system and reasons in its README), a critic reviewed it ([design/prototype/CRITIC.md](../design/prototype/CRITIC.md): ship to build with 11 must-fix items), and three builders rebuilt the app on live data with those fixes in.
+
+**The idea.** A loan is a game level. ETH's price is the platform the mascot stands on, Aave's liquidation price is the lava below, and Shield's line sits in between. A purple shield mascot's face is the status.
+
+**What changed for users.**
+- **Plain answers first.** Every borrower state answers, in order: am I safe, when does Shield step in and what happens, what does it cost. A headline sentence ("ETH can fall 6.5% before Aave liquidates you") replaces the health factor, which moves to a closed "Stats for nerds" drawer.
+- **Choices, not sliders.** Three preset cards (Early, Balanced, Last call) with the ETH price, the drop from today and the cost a month; fuel presets in dollars; one "Turn on Shield" button that walks the four wallet steps on a progress track and says what each prompt is for, including that the ETH approval is unlimited and who the spender is.
+- **No charts with axes.** Big numbers with words: a scoreboard on Stats, three numbers on the Vault, a block ticker that stamps only blocks holding a real Shield transaction.
+- **Honest states.** Arming ("Not on yet: arms in 14:59"), protected, low and out of fuel, off by choice, blocked with the one fix, exit due, and Shield stepped in, each with one main action; savings worded as "$X less than an Aave liquidation".
+
+**Tokens.** Page sky #CBE7FF, panels #E2F2FF, cards white, ink #1B1430 for text, 2.5 px outlines and hard 4 px shadows, Grape #6A4CF5 for buttons, the mascot and Shield's line; status fills Chill #2FD47F, Heads-up #FFC93C, Lava #FF5A4E, always behind ink text. Lilita One for headlines, status words and preset names, never numbers; Rubik for body text and every number, with tabular figures. Buttons sit on a ledge and press down. One light theme. Full token and motion tables: [design/prototype/README.md](../design/prototype/README.md).
+
+**Motion.** One orchestrated landing story of about 5 s (ETH falls, the mascot sweats, Shield steps in before the lava, then the picture settles back), mascot idle and mood changes, the line gliding to a picked preset, pressable buttons, the turn-on track, the arming ring, confetti when Shield steps in, and the block ticker. prefers-reduced-motion shows the settled frames.
+
+**Code.** The shared kit is in web/src/components/cartoon/ (Mascot, Level, Sticker, ChoiceCards, ProgressTrack, CountdownRing, Confetti, BlockTicker, ComicStrip, Disclosure and others; see its READY.md). Routes: `/`, `/app/borrow` (Protect), `/app/vault` (Vault), `/app/stats` (Stats; `/app/analytics` redirects).
+
+The sections below describe version 2 and are kept for the record.
+
 ## Version 2 (5 Oct 2026): why the design changed
 
 The owner reviewed the first version and said it read as "a little sus". The legitimacy research in Part 2 agreed and found specific causes:

@@ -2,6 +2,27 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 13 Oct 2026, version 3: the cartoon "floor is lava" redesign
+
+- **Why.** The owner rejected the calm fintech design: charts, sliders and the health factor made no sense to degens, who want to know at once whether they are safe, when Shield steps in and what it costs. They asked for a cartoon, game-like site with motion, built by a team with a researcher, a designer and a critic, and a prototype first.
+- **How.**
+  - Research Part 3: 42 live sites captured (docs/DESIGN-RESEARCH.md, `c952010`).
+  - A clickable prototype of every screen and state, with a token system and motion table (design/prototype/, `ae2c893`).
+  - A critic's review: ship to build with 11 must-fix items (design/prototype/CRITIC.md, `3a9db33`).
+  - Three builders rebuilt the app on live data with those fixes in: foundation and landing (`fd4994a`), Vault and Stats (`bf683cb`), Protect (`2eab407`).
+- **Done.**
+  - A sky level where ETH stands above Aave's lava, with Shield's line in between and a mascot whose face is the status.
+  - A plain sentence instead of the health factor, which moves to "Stats for nerds".
+  - Three line cards and fuel presets instead of sliders, and one "Turn on Shield" button for the four wallet steps.
+  - Honest states (arming, off by choice, blocked with its fix, stepped in).
+  - A vault with three numbers and a Stats scoreboard.
+  - A block ticker that stamps only real Shield transactions.
+  - DESIGN.md has a version 3 section.
+- **Checks.**
+  - Lint clean; 82 web unit tests pass; the production build passes.
+  - Lighthouse with devtools throttling: landing 97, borrower 98, vault 98, stats 98.
+  - The browser tests are updated for the new flow.
+
 ## 13 Oct 2026, protocol-funded vault and premium from any chain (Aurora Intents)
 
 - **Why.** The owner's plan (Shield: Aurora Intents Routing and Vault Economics): a protocol-funded vault keeping all income, and top-ups from any chain for the Aurora Intents bounty, without touching the exit path.

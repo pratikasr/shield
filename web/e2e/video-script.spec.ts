@@ -4,61 +4,39 @@ import { decodeEventLog, type Address } from "viem";
 import { executorAbi } from "../src/lib/abi/Executor";
 import { positionRegistryAbi } from "../src/lib/abi/PositionRegistry";
 import { repricerAbi } from "../src/lib/abi/Repricer";
-import { AAVE_ORACLE, WETH, borrower, client, deployment, oracleAbi, setWethPrice, statValue, usd } from "./helpers";
+import { AAVE_ORACLE, WETH, borrower, client, deployment, openNerds, oracleAbi, setWethPrice, statValue, usd } from "./helpers";
 
 /**
- * The SPEC.md video script, walked through the real app on a fork: connect, opt in, premium ticks, the price
- * moves, the keeper exits, the Exited event lands, the borrower sees the penalty avoided, the LP page updates.
+ * The SPEC.md video script, walked through the real app on a fork: connect, turn on Shield, premium ticks, the
+ * price moves, the keeper exits, the Exited event lands, the borrower sees the penalty avoided, the vault updates.
  * Every on-screen claim is checked against receipts and logs from the fork.
  */
 const result: Record<string, unknown> = { borrower, deployment };
 
+
 test("the video script, end to end on a Monad mainnet fork", async ({ page }) => {
-  // 1. Position page, connect.
+  // 1. Position page, connect. Version 3 leads with a sentence, not the health factor, which sits in the closed
+  // "Stats for nerds" drawer.
   await page.goto("/app/borrow");
   await page.getByRole("button", { name: /^connect/i }).first().click();
   await page.getByText("Fork test wallet", { exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Protect this position" })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("heading", { level: 1, name: /^ETH can fall/ })).toBeVisible({ timeout: 90_000 });
+  await openNerds(page);
   const hfText = await statValue(page, "Health factor");
   result.hfAtStart = hfText;
   expect(Number(hfText)).toBeGreaterThan(1.06);
 
-  // 2. Opt in through the UI: trigger 1.06, prepay 5 USDC, the four steps.
-  const slider = page.getByRole("slider", { name: "Trigger health factor" });
-  await slider.focus();
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await expect(page.getByText("1.06", { exact: true }).first()).toBeVisible();
-  await page.getByLabel("Prepay, USDC").fill("5");
-  await expect(page.getByText(/Aave penalty if liquidated/).first()).toBeVisible();
-
-  const panel = page.locator("aside");
-  const armed = panel.getByRole("heading", { name: "Protected", exact: true });
-  for (let i = 0; i < 4; i++) {
-    if (await armed.isVisible().catch(() => false)) break;
-    const action = panel.getByRole("button", { name: /^(Approve WETH|Approve USDC|Prepay|Opt in at)/ });
-    await expect(action).toBeEnabled({ timeout: 60_000 });
-    const label = await action.innerText();
-    const status = label.startsWith("Approve WETH")
-      ? /^Approval finalised in block/
-      : label.startsWith("Approve USDC")
-        ? /^USDC approval finalised in block/
-        : label.startsWith("Prepay")
-          ? /^Prepayment finalised in block/
-          : /^Opt-in finalised in block/;
-    await action.click();
-    if (!status.source.startsWith("^Opt-in")) {
-      await expect(panel.getByText(status)).toBeVisible({ timeout: 60_000 });
-      const hash = await panel.locator('[role="status"] a[title^="0x"]').first().getAttribute("title");
-      result[`step${i + 1}`] = { label, tx: hash };
-    } else {
-      result[`step${i + 1}`] = { label };
-    }
-  }
-  // New cover waits out the Executor's waiting period (20 s on the fork stack) before an exit can run, and the panel
-  // counts it down; "Protected" means armed, so it appears only after that.
-  await expect(panel.getByRole("heading", { name: /^Cover arms in|^Protected$/ })).toBeVisible({ timeout: 60_000 });
-  await expect(armed).toBeVisible({ timeout: 90_000 });
+  // 2. Turn on Shield through the UI: the Early card (a 1.06 line at the fork's health factor of 1.07), the
+  // preselected fuel, and one button that runs the four wallet steps.
+  const early = page.getByRole("radio", { name: /^Early/ });
+  await early.click();
+  await expect(early).toBeChecked();
+  await expect(page.getByText(/Aave.s liquidators would take/).first()).toBeVisible();
+  await page.getByRole("button", { name: "Turn on Shield" }).first().click();
+  // New cover waits out the Executor's waiting period (20 s on the fork stack) before an exit can run; the page
+  // counts it down, then says Shield is on.
+  await expect(page.getByRole("heading", { level: 1, name: /^Shield is arming|^Shield is on/ })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("heading", { level: 1, name: /^Shield is on/ })).toBeVisible({ timeout: 90_000 });
 
   const optIns = await client.getContractEvents({
     address: deployment.PositionRegistry as Address,
@@ -74,10 +52,14 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
 
   // 3. The premium ticks every block.
   // The keeper's first reprice sets the stored rate; from then on the amount paid rises every block.
-  await expect.poll(async () => usd(await statValue(page, "Premium paid so far")), { timeout: 90_000 }).toBeGreaterThan(0);
-  const paid0 = usd(await statValue(page, "Premium paid so far"));
-  await expect.poll(async () => usd(await statValue(page, "Premium paid so far")), { timeout: 30_000 }).toBeGreaterThan(paid0);
-  result.premiumPerBlockShown = (await page.locator("p", { hasText: "Cover this block" }).first().innerText()).replace(/^Cover this block:\s*/, "");
+  const paid = async () => {
+    await openNerds(page);
+    return usd(await statValue(page, "Premium paid so far"));
+  };
+  await expect.poll(paid, { timeout: 90_000 }).toBeGreaterThan(0);
+  const paid0 = await paid();
+  await expect.poll(paid, { timeout: 30_000 }).toBeGreaterThan(paid0);
+  result.premiumPerBlockShown = await statValue(page, "Cover this block");
   const reprices = await client.getContractEvents({
     address: deployment.Repricer as Address,
     abi: repricerAbi,
@@ -119,7 +101,7 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
   expect(args.healthFactorAfter).toBeGreaterThan(10n ** 18n);
   expect(args.healthFactorAfter).toBeGreaterThan(args.healthFactorBefore);
   const saved = Number(args.savedVsAave) / 1e6;
-  await expect(page.getByText(`$${saved.toFixed(2)}`).first()).toBeVisible();
+  await expect(page.getByText(`$${saved.toFixed(2)}`).filter({ visible: true }).first()).toBeVisible();
   result.exitTx = exit.transactionHash;
   result.exitBlock = exit.blockNumber.toString();
   result.repaidUsdc = (Number(args.repaid) / 1e6).toFixed(6);
@@ -131,13 +113,14 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
   // 6. The vault page updates: one exit executed, premium earned, and the exit transaction listed by the indexer
   // (skipped when the stack runs without it, STACK_INDEXER=0).
   await page.goto("/app/vault");
-  await expect(page.locator("dt", { hasText: "Exits executed" }).first()).toBeVisible();
-  await expect.poll(async () => statValue(page, "Exits executed"), { timeout: 60_000 }).toBe("1");
+  await expect(page.locator("dt", { hasText: "Rescues paid for" }).first()).toBeVisible();
+  await expect.poll(async () => statValue(page, "Rescues paid for"), { timeout: 60_000 }).toBe("1");
   if (process.env.E2E_INDEXER !== "0") await expect(page.getByTitle(exit.transactionHash).first()).toBeVisible({ timeout: 60_000 });
-  expect(usd(await statValue(page, "Premium earned"))).toBeGreaterThan(0);
+  expect(usd(await statValue(page, "Earned so far"))).toBeGreaterThan(0);
+  await page.getByText("Stats for nerds").first().click();
   result.vault = {
-    exitsExecuted: await statValue(page, "Exits executed"),
-    premiumEarned: await statValue(page, "Premium earned"),
+    exitsExecuted: await statValue(page, "Rescues paid for"),
+    premiumEarned: await statValue(page, "Earned so far"),
     averageDiscount: await statValue(page, "Average discount captured"),
   };
   await page.screenshot({ path: "e2e-results/lp-after-exit.png", fullPage: true });
