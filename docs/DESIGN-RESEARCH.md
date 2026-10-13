@@ -1,6 +1,6 @@
 # Shield web UI: design research
 
-Part 1 (below) studies DeFi position, risk and automation screens. Part 2 (at the end) studies what makes a financial product look legitimate or like a scam, and drove version 2 of the design (docs/DESIGN.md).
+Part 1 (below) studies DeFi position, risk and automation screens. Part 2 studies what makes a financial product look legitimate or like a scam, and drove version 2 of the design (docs/DESIGN.md). Part 3 (at the end) studies cartoon and game-like products and is the brief for the cartoon redesign.
 
 # Part 1: DeFi position, risk and automation screens
 
@@ -883,3 +883,419 @@ What it found:
 - CFTC and SEC investor alert on fraudulent crypto trading websites: https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/watch_out_for_digital_fraud.html
 - Jakobs, Haase, Gräf and Muntermann, "Hook, Line and Rug Pull: Untangling the Web of Crypto Scam Sites", HICSS 2026: https://d-nb.info/1395967555/34
 - Zellic, "Choosing a DeFi Protocol": https://www.zellic.io/blog/choosing-a-defi-protocol/
+
+# Part 3: cartoon redesign (13 Oct 2026)
+
+The owner rejected version 2 (calm, fintech, charts and sliders). His brief: make it cartoonified, like a game. The users are crypto degens with lots of tokens and money. They do not want to learn what a health factor is, read charts or drag sliders. They want to understand instantly: am I safe, what does it cost, what happens. Add motion. This part is the research behind that redesign and a brief for the designer.
+
+## How this was researched
+
+- **Live captures, 13 Oct 2026.** 48 pages were requested in Playwright (Chromium) at 1440 x 900 and 390 x 844. 42 rendered and were captured above the fold and full page. Every desktop capture and the mobile captures of the key references were looked at. The captures (121 JPEGs plus one JSON per page with fonts, button styles and page text) are in the research folder handed to the lead, `research-v3/`; they are not committed.
+- **Measured, not guessed.** Fonts are the families each page actually loaded (`document.fonts`). Button outlines, shadows, radii, transitions and animation durations were read from computed styles. Where a value is quoted below, it was measured on that page.
+- **Read where a capture was not enough:** Monad's brand kit page, Duolingo's engineering blog on character animation, Benji Taylor's write-up of Family's design, and search for Monad's community mascots.
+- **Could not capture:** Polymarket (load timed out twice), PancakeSwap Prediction, Lemonade and Magic Eden (HTTP 403 to a headless browser), Fantasy.top (renders a blank WebGL canvas headless), Robinhood's onboarding (needs an account). Nothing below relies on them.
+
+## The short version
+
+- **Recommended direction: "Sticker arcade".** A light, cream page with thick ink outlines, hard offset shadows, chunky buttons that press down, one purple, and a shield-shaped mascot whose face shows how safe the loan is. Safety is a "floor is lava" meter in ETH prices, not a health factor.
+- **Three patterns matter most:**
+  1. **A mascot with moods** is the status display. Chill, heads-up, shield up, saved, out of fuel. (Duolingo, Pudgy Penguins, Family.)
+  2. **The drop meter.** ETH now, Shield's line, Aave's line, each as a price and a "% drop from now". No health factor on the main surface. (Credit Karma's coloured score bar, Liquity's risk words, PancakeSwap's one giant number.)
+  3. **Preset cards and one big button.** Three named lines and three fuel sizes as cards, each with its yearly cost, then one button that walks four steps with a progress track. (Duolingo's daily goal picker, Liquity's coloured amount chips, Duolingo's 3D button.)
+- **Biggest risk:** looking childish or like a memecoin. The fix is a rule: cartoon carries the state, plain big numbers carry the facts, and the not-audited line never leaves the page.
+
+## What we found
+
+- **Monad's DeFi apps are all dark and serious.** Kuru, Monorail, Magma, Kintsu, Curvance, aPriori (now Capricorn) and nad.fun are dark; Neverland (a Monad lender) is a night sky. A light, outlined, cartoon Shield would be the most recognisable screen in a judge's queue.
+- **Monad's cartoon culture lives in its memes, not its apps.** The community calls itself "Nads" and has made purple its colour. Its mascot is Chog, a purple hedgehog-cat (chog.xyz titles itself "Mascot of Monad"; nad.fun lists CHOG as "Monad's first meme and community token"). Moe, another purple monster, trends next to it on nad.fun. Their style: purple bodies, big eyes, pink cheeks and hands, painterly or flat cartoon.
+- **Monad's own sites are not cartoon.** monad.xyz is light and institutional (Britti Sans, Inter, Roboto Mono capitals, primary purple #6E54FF). The Metropolis page is dark, with iridescent 3D city blocks, a custom pixel face ("Metropolis Pixel") and sections that animate in as they scroll into view.
+- **The two most gamified chains are winding down.** Blast's site now opens with "Blast is winding down. Bridge to Ethereum." Abstract's opens with "Abstract Chain is shutting down." Both built their brand on points, XP and anime or neon. Lesson: gamify the explanation and the feedback, never the incentives.
+- **Quest platforms dropped the cartoon.** Layer3 and Galxe now look like sober dark fintech; only Layer3's hexagon badges survive.
+- **Cartoon brands that still read as trustworthy share four habits:**
+  - Tinted ink instead of black: PancakeSwap #280D5F, Pudgy #00142D.
+  - Big, plain, legible numbers in a rounded sans.
+  - One primary action per screen.
+  - Characters around the product, never on top of the numbers.
+
+## References
+
+All checked 13 Oct 2026. File names are in `research-v3/`.
+
+| Name | URL | Capture | What to take |
+| --- | --- | --- | --- |
+| Duolingo | https://www.duolingo.com/ | `duolingo-*` | The 3D button: face #58CC02, ledge `box-shadow: 0 4px 0 #58A700`, radius 12 px, bold capitals (duolingo-sans). Characters animated in Rive state machines with idle blinks and reactions. The daily goal picker (Casual, Regular, Serious, Intense) as the model for preset cards |
+| Pudgy Penguins | https://www.pudgypenguins.com/ | `pudgy-*` | The outline recipe: 2 px solid #00142D border, hard shadow `2.6px 3px 0 rgba(9,50,78,.23)` plus an inset `-5px -5px 0 rgba(0,0,0,.15)`. Outlined display face (Fat Frank) with Menco body. Starburst "NEW" stickers. A mascot peeking from the screen corner. Marquee at 30 s linear. Egg idle 4 s ease-in-out, nudge every 12 s |
+| PancakeSwap | https://pancakeswap.finance/ | `pancakeswap-*` | Tinted ink (#280D5F) instead of black. Teal buttons (#1FC7D4) with an inset bottom edge. Pastel stat pills. A 3D bunny scene above "Used by millions". Kanit throughout. Mobile tab bar with a raised centre button |
+| PancakeSwap Lottery | https://pancakeswap.finance/lottery | `pcs-lottery-*` | One giant yellow number ("$35,972 in Prizes!"), one ticket-shaped button, a big real countdown ("10h 55m until the draw"). Floating stars at 3, 3.5, 4 and 6 s ease-in-out loops. Press transition on `transform` and `border-bottom-width`, 0.1 s |
+| nad.fun | https://nad.fun/ | `nadfun-*`, `nadfun-chog-*` | Monad's meme culture: Chog and Moe in purple. A live trade ticker of outlined chips (green for buys, red for sells). Quick-buy preset chips ($10, $25, $100, $250). A bonding-curve progress bar used as a game meter |
+| Chog | https://www.chog.xyz/ | `chog-*` | "Mascot of Monad": painterly purple hedgehog-cat, pink pill buttons, Koulen capitals. The community's mascot language (purple body, pink accents). Do not use Chog itself (see What to avoid) |
+| Family | https://family.co/ | `family-*` | Flat blob characters with faces, coins, stars and hearts around a calm headline. 0.2 s ease-out on most interactive elements. Lottie on the page. Benji Taylor's principles: trays, "fly instead of teleport", text that morphs between steps, confetti when a backup completes |
+| Liquity V2 app | https://liquity.app/borrow/eth | `liquity-app-borrow-1440.jpg` | Risk in words with a dot: "Medium liquidation risk". Loan presets as chips coloured by risk ($6.8K green, $14K yellow, $18K red). An Aggressive, Balanced, Conservative picker. Yearly cost in plain units ("364.00 BOLD / year"). "Redemptions in a nutshell" as three icon tiles |
+| Credit Karma | https://www.creditkarma.com/ | `creditkarma-*` | One big score number on a red-to-green bar with a marker, plus a word. The non-crypto proof that one number on a coloured bar beats a chart |
+| Gumroad | https://gumroad.com/ | `gumroad-*` | Neo-brutalist: black outlines on flat pink (#FF90E8) coins, black and one loud colour, 0.2 s colour transitions. Shows outlines can look grown-up |
+| Headspace | https://www.headspace.com/ | `headspace-*` | An orange circle with a face is a whole mascot. Warm off-white cards, rounded type (Headspace Apercu). Proof that a geometric character needs no illustrator |
+| Phantom | https://phantom.com/ | `phantom-*` | The ghost is the logo, favicon and mascot in one. Lilac pill buttons (#E2DFFE, 96 px radius). Custom "Phantom" face |
+| Rainbow | https://rainbow.me/ | `rainbow-*` | SF Rounded for every number makes balances feel friendly. Big circular action buttons (Buy, Swap, Send) |
+| pump.fun | https://pump.fun/ | `pumpfun-*` | First visit: a crowd of cartoon characters and one honest sentence, "Prices can move quickly, so trade carefully." A leaderboard ticker of real profits |
+| Berachain | https://www.berachain.com/ | `berachain-*` | A lineup of cartoon bears under a grown-up serif italic headline (Spectral, with Instrument Sans). Mascots can sit under serious type |
+| Sanctum | https://www.sanctum.so/ | `sanctum-*` | A logo with a smiling face. Stat pills with a coloured dot ("5.58% APY"). Soft 3D tiles |
+| Coinbase borrow | https://www.coinbase.com/borrow | `coinbase-borrow-*` | A numbered three-step "How borrowing works" in plain words, including the liquidation rule in one sentence |
+| Jupiter | https://jup.ag/ | `jupiter-*` | "Gacha" and a "Pokemon Lucky Pack" promo next to a serious swap: gamified surfaces now sit inside top trading apps. Lime CTA on near-black |
+| Monad | https://monad.xyz/ and https://www.monad.xyz/brand-and-media-kit | `monad-*` | Brand palette: #6E54FF, #DDD7FE, #0E091C, with #85E6FF, #B9E3F9, #FF8EE4, #FFAE45. Britti Sans, Inter, Roboto Mono. Use the family of colours, never the system (see What to avoid) |
+| Monad Metropolis | https://www.monad.xyz/metropolis | `metropolis-*` | Dark iridescent city, pixel display face, scroll reveals. A pixel accent is a fair nod to the hackathon |
+| Neverland | https://neverland.money/ | `neverland-*` | A Monad lender with a fairy-tale theme ("Magic and pixie dust on Monad", Cinzel, a rainbow): a story theme is accepted in Monad lending |
+| Blast | https://blast.io/ | `blast-*` | A HUD frame with notched corners and neon yellow. Now "winding down": a warning about points-led gamification |
+| Abstract | https://www.abs.xyz/ | `abstract-*` | Anime game art under a clean headline. Now "shutting down": the same warning |
+| Kuru, Monorail, Magma, Kintsu, Curvance, aPriori | https://www.kuru.io/, https://monorail.xyz/, https://www.magmastaking.xyz/, https://www.kintsu.xyz/, https://www.curvance.com/, https://www.apr.io/ (redirects to capricorn.tech) | `kuru-*`, `monorail-*`, `magma-*`, `kintsu-*`, `curvance-*`, `apriori-*` | The Monad DeFi baseline: dark, Inter, Geist or Manrope, one bright CTA. What Shield should not look like if it wants to stand out |
+
+Also captured, not useful for this brief: Layer3 and Galxe (no longer cartoon), Hyperliquid (sober serif), Kamino and Felix (dense dark tables; Kamino labels vaults "Balanced"), Nerite (a Liquity fork whose site now tells users to close all positions), Doodles (a 3D video), Whoop (its recovery colours are not on the landing page), Robinhood (serif display Martina Plantijn with Capsule Sans and a lime #CCFF00 accent, nothing cartoon), Bonk (a newsletter modal on load).
+
+## Patterns
+
+### 1. A mascot whose face is the status
+
+- **What:** one character that changes mood with the loan's state. Its face answers "am I safe" before any number is read.
+- **References:** Duolingo's characters blink, nod and react to each answer, driven by Rive state machines. Pudgy's penguin peeks from the corner holding a gift to signal "something for you". Family's blobs have two dot eyes and a line mouth. Headspace's mascot is an orange circle with a face.
+- **For Shield:**
+  - Moods: chill, heads-up (one sweat drop), shield up (arms raised, determined brows), saved (happy closed eyes, sparkles), arming (strapping on a helmet, with a countdown ring), out of fuel (grey, slumped, "zzz").
+  - Build it as one inline SVG with swappable parts (eyes, brows, mouth, arms, sweat, accessories), switched by a CSS class per state. No illustrator, no Rive needed for the hackathon.
+  - Placement: on the meter (as the player), in the hero, in empty states, and peeking from the bottom corner for alerts. Never over a number or the main button.
+
+### 2. Safety without charts: the drop meter
+
+- **What:** a vertical meter (horizontal on wide screens), drawn like a game level. The mascot stands on a platform at "ETH now". Below it, a dashed purple net: "Shield steps in". At the bottom, animated lava: "Aave liquidates".
+- **Labels are prices and drops:** "ETH $2,719 now", "Shield steps in at $2,643 (-2.8%)", "Aave liquidates at $2,541 (-6.5%)". Example values from the version 2 app on a fork.
+- **Headline above it, in words:** "Chill. ETH can drop 6.5% before Aave touches you. Shield steps in at -2.8%."
+- **References:** Credit Karma's one number on a red-to-green bar. Liquity's "Medium liquidation risk" with a yellow dot. nad.fun's bonding-curve bar as a game meter.
+- **Maths for the builder:** with WETH collateral and USDC debt, health factor scales with the ETH price. So the ETH price at a given health factor h is `P_now x h / HF_now`, and the drop is `1 - h / HF_now`. Aave's line is h = 1.00; Shield's line is h = the trigger.
+- **The health factor itself** goes in a "Stats for nerds" drawer, with the oracle, Pyth price, contracts and per-block figures.
+
+### 3. Plain numbers
+
+- Dollars and ETH prices only. One decimal on percentages. Yearly cost, not per-block cost (per-block stays in the nerd drawer).
+- One giant number per card, like PancakeSwap Lottery's "$35,972". For Shield: the price where Shield steps in, the yearly cost, or the amount an exit kept.
+- Compare with money, not ratios: "On $10,000 of loan paid down: Aave's liquidators take $550. Shield takes $100." (5.5% and 1%.)
+- Liquity shows cost in plain units ("364.00 BOLD / year"). Shield: "about $3.56 a year right now".
+
+### 4. Preset cards instead of sliders
+
+- **Shield's line, three cards:**
+  - "Early": steps in sooner, costs more.
+  - "Balanced": the default.
+  - "Last call": cheapest, closest to Aave's line.
+  - Each card shows the ETH price where Shield steps in, the drop from now, and the cost a year. The premium rises as the line gets closer to today's health factor, so "Early" really is the dearer card.
+  - A "Custom" link opens the exact number for people who want it.
+- **Fuel (prepaid balance), three cards:** 1 month, 3 months, 1 year, each with its dollar amount and "lasts about ... at today's rate".
+- **References:** Duolingo's daily goal cards (Casual, Regular, Serious, Intense). Liquity's coloured amount chips and its Aggressive, Balanced, Conservative picker. nad.fun's quick-buy chips.
+- **Selected state:** the card lifts 2 px, its outline turns purple, a check sticker pops in at the corner.
+- **Disabled state:** a preset the contract would reject (the trigger must be 1.01 to 2.00), or one at or above today's health factor (it would fire as soon as cover arms), is greyed with one line saying why.
+
+### 5. One button, with progress
+
+- Opt-in takes four transactions (approve aWETH, approve USDC, prepay, opt in). Show them as a short "level map" of four dots under one big button. The button label changes per step: "1 of 4: Let Shield move your aWETH, only in an exit".
+- Each finished step: the dot fills, a check bounces in, the label morphs to the next step (Family's text morphing).
+- After step 4: the mascot straps on its helmet and a 15:00 ring counts down to "Shield on".
+- **References:** Duolingo's lesson progress bar and full-width 3D button. Family's step-by-step trays.
+
+### 6. Celebration and danger
+
+- **Celebrate:** cover armed, and an exit that fired.
+  - The exit screen is a tray: confetti in the palette colours, the mascot jumps, and a count-up from $0 to "You kept $X that Aave's liquidators would have taken".
+  - Then three plain lines on what happened, the transaction link, and a share card (mascot, amount kept, Monad block number). Degens post PnL cards; this is the brag-worthy moment, and it spreads the product.
+- **Warn, without scaring:**
+  - Heads-up when ETH is within 1% of Shield's line: sweat drop, meter glows amber three times, then holds.
+  - Fuel low (under 7 days): the battery icon blinks once.
+  - Out of fuel: one short shake, the mascot greys out, a big "Add fuel" button.
+  - Never flash red continuously. Part 2 already found that alarm styling reads as antivirus scareware.
+- **Do not celebrate risk:** no confetti for borrowing more or for setting a later line.
+
+### 7. Motion
+
+| Moment | What moves | Duration | Easing | Reference |
+| --- | --- | --- | --- | --- |
+| Button press | Face drops 4 px, ledge shadow 4 px to 0 | 80 to 100 ms | ease-out | Duolingo ledge; PancakeSwap 0.1 s press |
+| Hover | Lift 2 px, shadow grows 2 px | 150 ms | ease-out | Family 0.2 s ease-out |
+| Mascot idle | Bob up and down 4 px | 3 to 4 s loop | ease-in-out | PancakeSwap stars 3 to 6 s; Pudgy egg 4 s |
+| Blink | Eyes squash to 10% height and back | 120 ms, every 4 to 6 s, randomised | linear | Duolingo idle blinks |
+| Mood change | Squash 0.92 / 1.08, settle | 400 ms | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Duolingo reactions |
+| New block | Only the changed digits roll up 6 px; a small dot pulses | 150 ms digits, 300 ms dot | ease-out | Monad's 300 ms blocks; nad.fun live ticker |
+| Meter update | Mascot platform slides to the new price | 300 ms | ease-out | |
+| Heads-up | Amber glow on the meter | 1.2 s, three times, then steady | ease-in-out | |
+| Out of fuel | One shake, 6 px, three swings | 300 ms, once | ease-in-out | |
+| Exit fired | Mascot jump, shield flash, confetti, count-up | 500 ms jump, 1.2 s confetti, 900 ms count-up | spring, then ease-out | PancakeSwap Lottery; Family confetti |
+| Live ticker | Marquee of real events | 30 s loop, pauses on hover | linear | Pudgy 30 s; nad.fun ticker |
+| Section reveal | Rise 16 px and fade in | 300 ms, 60 ms stagger | `cubic-bezier(0.22, 1, 0.36, 1)` | Metropolis scroll reveals |
+| Tray open | Slide up from the bottom | 250 ms | `cubic-bezier(0, 0, 0.2, 1)` | Pudgy dialogs 0.3 s on the same curve; Family trays |
+
+- Nothing animates the whole card every 300 ms. Monad's speed shows as a calm heartbeat dot and rolling digits, not a flickering page.
+- Under `prefers-reduced-motion`, loops stop and states change instantly.
+- The web app already has Tailwind 4 and `tw-animate-css`. Every row above is plain CSS keyframes and transitions on SVG and HTML; no motion library is required.
+
+### 8. Type
+
+**Measured on the live pages:**
+
+| Site | Display | Body |
+| --- | --- | --- |
+| Pudgy Penguins | Fat Frank | Menco (fallback Bricolage Grotesque) |
+| Duolingo | feather | duolingo-sans |
+| PancakeSwap | Kanit | Kanit |
+| Rainbow | SF Rounded | SF Rounded |
+| Chog | Koulen | Koulen |
+| Monad | Britti Sans | Inter; Roboto Mono for labels |
+| Metropolis | Metropolis Pixel | Britti Sans |
+| Berachain | Spectral | Instrument Sans |
+| Family | Family | LFE Sans, Inter |
+| Gumroad | ABC Favorit | ABC Favorit |
+| Phantom | Phantom | Phantom |
+| Liquity app | GeistSans | GeistSans |
+| Headspace | Headspace Apercu | Headspace Apercu |
+| Robinhood | Martina Plantijn | Capsule Sans, Phonic |
+
+**Google Fonts that match** (all confirmed served by the Google Fonts CSS API on 13 Oct 2026):
+
+- Fat Frank: Lilita One, Titan One.
+- Menco: Bricolage Grotesque, Rubik.
+- feather and duolingo-sans: Nunito 800 to 900, Baloo 2.
+- SF Rounded: Nunito, Fredoka.
+- Metropolis Pixel: Pixelify Sans, Silkscreen.
+- Kanit and Koulen are on Google Fonts as they are.
+
+**Tabular figures matter**, because Shield's numbers change every block and proportional digits jitter.
+
+- In the static files Google Fonts served on 13 Oct 2026, the `tnum` feature was present in Rubik, Outfit, Bricolage Grotesque and Baloo 2.
+- It was absent in Nunito, Fredoka, Lilita One, Pixelify Sans and Koulen.
+- Use the second group for words only, never for live numbers.
+
+### 9. Colour
+
+- **Tinted ink, not black:** PancakeSwap #280D5F, Pudgy #00142D and #3B007A.
+- **One loud primary** per brand: Duolingo green #58CC02, PancakeSwap teal #1FC7D4, Gumroad pink #FF90E8, Robinhood lime #CCFF00, Kuru and Jupiter lime.
+- **Status colours as fills with ink text** (Liquity's dots, Credit Karma's bar), not as coloured text on white.
+- **Purple is the community's colour.** Using a purple ties Shield to Monad; using Monad's exact system does not (see What to avoid).
+
+### 10. Outlines, shadows and shapes
+
+- **Outlines:** 2 to 2.5 px in tinted ink on cards, buttons, chips and the mascot (Pudgy 2 px; Gumroad 1 px). No outline on text.
+- **Hard shadows:** `4px 4px 0` in ink for cards; a `0 4px 0` ledge in a darker shade of the button colour for buttons (Duolingo).
+- **Radii:** 16 px cards, 12 to 14 px buttons (Duolingo 12 px; PancakeSwap 16 px), full pills for chips.
+- **Stickers:** small labels rotated -3 to 4 degrees, starbursts for "Saved" and "New" (Pudgy).
+- **Ticket and tray shapes for moments:** PancakeSwap's ticket button, Family's trays.
+
+### 11. Sound and haptics
+
+- Family uses sound in its app (a delete sound, per Benji Taylor's write-up). Sound was not tested on the captures, and browsers block sound until the user has interacted, so any sound can only follow a click.
+- **Sound:** off by default, a speaker toggle in the header. Two sounds only: a "clank" when an exit fires and a soft "ding" when cover arms.
+- **Haptics:** `navigator.vibrate` works in Android Chrome, not in iOS Safari.
+  - 15 ms on a main button press.
+  - A short pattern (30, 50, 30 ms) when an exit fires.
+
+## Three directions
+
+### A. Sticker arcade (recommended)
+
+- **Idea:** a sticker book come to life. Cream paper, fat ink outlines, buttons you can press, and a shield buddy who sweats when ETH falls.
+- **Palette:**
+
+| Name | Hex | Use |
+| --- | --- | --- |
+| Paper | #FFF8EC | Page |
+| Ink | #1B1430 | Text, outlines, hard shadows (16.7:1 on Paper) |
+| Grape | #6A4CF5 | Primary buttons, the mascot, links (white text on it 5.3:1; on Paper 5.0:1) |
+| Chill | #2FD47F | Safe states, "kept" amounts as fills (Ink on it 9.1:1) |
+| Heads-up | #FFC93C | Shield's line, warnings, the battery (Ink on it 11.5:1) |
+| Lava | #FF5A4E | Aave's line, the lava, "out of fuel" (Ink on it 5.7:1) |
+
+  - Muted text: #5E5675 (6.5:1 on Paper).
+  - Dark variant for night owls: page #160F2B, cards #221A3D, outlines and shadows #000000, the same accents (Paper on #160F2B is 17.5:1).
+- **Fonts:** Lilita One for headlines and status words. Rubik 400 to 800 for body and every number, with `font-variant-numeric: tabular-nums`. JetBrains Mono for addresses and hashes.
+- **Mascot:** a chunky Grape shield with a cream face plate, two dot eyes, a small mouth and stubby arms. Working name "Shieldy". Six moods from Pattern 1, one SVG, CSS classes per mood.
+- **Safety:** the drop meter (Pattern 2), the mascot's mood and one status word in Lilita One (CHILL, HEADS UP, SHIELD UP, SAVED, ARMING, OUT OF FUEL) in a sticker coloured by state.
+- **Signature motion:**
+  - Buttons that physically press.
+  - The mascot bobbing and blinking.
+  - Lava with a slow wave.
+  - Digits rolling each block.
+  - The exit tray with confetti and the count-up.
+- **Draws from:** Duolingo, Pudgy Penguins, PancakeSwap and its Lottery, Gumroad, Family, Liquity's risk words, Credit Karma's bar.
+
+### B. Night arcade
+
+- **Idea:** a retro game HUD on Monad's night sky. Your loan is a player with an HP bar, and Shield is the power-up that fires before game over.
+- **Palette:**
+
+| Name | Hex | Use |
+| --- | --- | --- |
+| Night | #0E091C | Page |
+| Panel | #1F1738 | Cards and HUD frames |
+| Neon grape | #8B6CFF | Primary, with Night text on it (5.3:1) |
+| HP green | #3CF08F | Health blocks, kept amounts (11.4:1 on Panel) |
+| Coin amber | #FFAE45 | Shield's line, warnings (9.2:1 on Panel) |
+| Lava pink | #FF4D6D | Aave's line, damage (5.3:1 on Panel) |
+
+- **Fonts:** Pixelify Sans for headlines, status words and big static numbers; Outfit for body and live numbers (it has tabular figures).
+- **Mascot:** a 32 x 32 pixel shield knight sprite with a 4-frame idle loop and one sprite per mood.
+- **Safety:** a segmented HP bar (ten blocks, each about one percent of ETH drop), draining as ETH falls. Shield's line is a glowing checkpoint block, Aave's line is "game over".
+- **Signature motion:**
+  - `steps()` sprite animation at 8 fps.
+  - A 200 ms screen shake on damage.
+  - Floating "+$2,520 KEPT" text rising and fading over 800 ms.
+  - A scanline glow on the HUD frame.
+- **Draws from:** Monad Metropolis (pixel face, night), Blast (HUD frame), PancakeSwap Lottery (giant numbers, countdown), Duolingo hearts.
+- **Watch out:**
+  - Pixel faces are hard to read for amounts.
+  - Dark plus neon is what Part 2 found reads as a token site.
+  - It sits too close to Monad's own Metropolis look.
+
+### C. Squishy friends
+
+- **Idea:** soft-toy 3D. A purple armadillo that curls into a ball (Shield's exit: take a small hit, avoid the big one).
+- **Palette:**
+
+| Name | Hex | Use |
+| --- | --- | --- |
+| Lilac mist | #F3F0FF | Page |
+| Plum ink | #2A2140 | Text (13.5:1 on Lilac mist) |
+| Soft grape | #7B61FF | Primary; white text on it only at 18 px bold or larger (4.2:1) |
+| Mint | #5CE0A0 | Safe |
+| Butter | #FFD84D | Shield's line, warnings |
+| Peach coral | #FF7A6B | Aave's line |
+
+- **Fonts:** Fredoka 600 to 700 for headlines and status words; Outfit for body and numbers.
+- **Mascot:** "Dill" the armadillo, in soft clay 3D. Rolls into a ball at the exit and unrolls when saved.
+- **Safety:** a bubble shield around Dill that is thick when far from the line, thins and wobbles as ETH falls, and pops into the curl when Shield fires.
+- **Signature motion:** squash-and-stretch springs, jelly wobble on the bubble, the curl-and-unroll at exit.
+- **Draws from:** Family, PancakeSwap's 3D bunny, Pudgy plush, Phantom's ghost, Rainbow's rounded type, Sanctum's soft tiles.
+- **Watch out:**
+  - It needs 3D or clay renders for each mood, which a hackathon cannot make well.
+  - Soft pastel 3D is now a common crypto look and will not stand out.
+
+### Why A
+
+- **It stands out on Monad.** Every Monad DeFi app captured is dark. A light, outlined page in a purple the community owns is instantly recognisable, and still clearly part of the Monad family.
+- **It reads as fun without reading as a toy.** The cartoon carries the state (mascot, stickers, lava); big tabular Rubik numbers carry the facts. That split is what keeps Duolingo, PancakeSwap and Pudgy from looking childish.
+- **It explains the product in one picture.** The lava meter shows "Aave's line, my line, where I am" in the first seconds of the video, with no health factor and no chart. That is the product quality judges look for.
+- **It keeps Part 2's trust work.** It stays light, has one accent, and keeps the visible disclosures, named builder, contracts and evidence; only the skin changes.
+- **It is buildable now.** Outlines, offset shadows and press buttons are CSS. The mascot is one SVG. The fonts are on Google Fonts. Nothing waits on 3D renders or an illustrator.
+
+## Signature screens for direction A
+
+- **Landing hero:**
+  - Left: the headline "Leave before Aave liquidates you." in Lilita One. Then "Pick a line. If ETH falls to it, Shield pays down part of your loan for a slice of your ETH. It charges 1%, not Aave's 5.5%."
+  - Then a Grape press button, "Turn on Shield", and the sticker "Hackathon build. Not audited."
+  - Right: the drop meter with today's ETH price read live from mainnet (on the demo position, or an example loan when no wallet is connected), the mascot on it, the block heartbeat beneath.
+- **Your loan (borrower page, top card):**
+  - Status sticker and mascot.
+  - One sentence ("Chill. ETH can drop 6.5% before Aave touches you.").
+  - The meter with three price rows.
+  - A fuel battery ("Fuel: about 11 months").
+  - Two buttons: "Add fuel" and "Change my line". Everything else sits below the fold or in "Stats for nerds".
+- **Set up:** the three line cards, the three fuel cards, a "From another chain" link on the fuel step, then the one button with the four-dot level map.
+- **Exit fired:** the tray from Pattern 6.
+- **Out of fuel:** grey mascot, "Out of fuel. Shield is off. Add fuel to switch it back on; it re-arms 15 minutes later.", one button.
+- **Vault and Analytics:** same stickers and outlines, calmer. Vault numbers in tabular Rubik; a small coin-stack illustration instead of a chart where a single number will do; charts stay on Analytics.
+
+## Copy guidelines
+
+**Voice:** a friend who trades. Second person, present tense, short sentences. Dollars and ETH prices, not ratios. Slang only in celebrations and empty states ("gm", "nice save"), never in a risk line.
+
+| Fact | Say | Do not say |
+| --- | --- | --- |
+| Liquidation price | "Aave liquidates at ETH $2,541 (6.5% below now)." | "Liquidation threshold", "HF 1.00", "LTV" |
+| Shield's trigger | "Shield steps in at ETH $2,643 (2.8% below now)." / "Your line" | "Trigger HF 1.04" on the main surface |
+| What an exit does | "Shield pays down part of your loan and takes a slice of your ETH worth that amount plus 1%. You keep the rest." | "Repay onBehalfOf", "seize aTokens", "sells your ETH" (the exit moves collateral to the vault; it does not market-sell) |
+| The saving | "Aave's liquidators take 5.5% of what they repay. Shield takes 1%. On $10,000 paid down: $550 vs $100." | "Save 82%", "no liquidation fees" |
+| Yearly cost | "About $3.56 a year right now. Costs more when ETH gets wild or you sit close to your line." | "Premium of $0.0000000034 per block" as a headline, "APY" |
+| Prepaid balance | "Fuel: about 11 months at today's rate. Withdraw what you don't use, any time." | "Prepaid premium balance" |
+| Cover lapses | "Out of fuel. Shield is off until you add more, then it re-arms in 15 minutes." | "Unprotected" in red with no next step |
+| Waiting period | "Shield arms in 15:00. Until then it can't fire, even at your line." | "Cover activates after the waiting period" |
+| Funding from another chain | "Fill up from Base, Arbitrum or Ethereum with USDC or USDT. It lands as fuel on Monad. No MON, no network switch." | "Bridge", "Aurora Intents forwarder sweep" (name Aurora in small type only) |
+| Who runs the exit | "Shield's bot checks your loan every block, 200 times a minute. If it's late, anyone can fire the exit, including you, from this page." | "Keeper", "permissionless executor" |
+| Monad speed | "Monad makes a block every 0.3 seconds, so your price and your check update that often." | "MIP-8", "eth_sendRawTransactionSync" outside the nerd drawer |
+| Limits | "Shield can't beat a crash that jumps past your line in one move. It acts on the way down, before Aave's line." | "Never get liquidated" |
+| If nothing fires | "If no one fires the exit, you're exactly where you'd be without Shield." | (silence) |
+| Vault short | "If the vault can't cover a big exit, nothing happens and your loan stays as it was." | "Always executes" |
+| Audit status | "Hackathon build. Not audited. Use money you can afford to lose." | Hiding it, or "battle-tested" |
+
+**Words to avoid:**
+
+- **Promises Shield cannot keep:** guaranteed, guarantee, risk-free, safe (as a promise), 100%, never, liquidation-proof, insured, insurance, protected forever, set and forget (fuel runs out).
+- **Jargon on the main surface:** health factor, HF, LTV, aToken, aWETH, premium, repricer, keeper, executor, oracle, sigma, d_min, ERC-4626, flash loan, MIP-8, per block (except "every block").
+- **Hype:** moon, 100x, ape, LFG, airdrop, points, XP, "don't miss out", "only X spots left".
+- **Gloating:** nothing that mocks people who got liquidated.
+
+## What to avoid
+
+**Looks scammy:**
+
+- **Popups on arrival.** Bonk's newsletter modal, Pudgy's "Crack the egg" popup, and the terms walls on nad.fun, pump.fun and Jupiter Lend all block the first view. Shield should show the meter first and ask for nothing until a button is pressed.
+- **Unsourced counters, fake leaderboards and "trusted by" walls.** Every number and ticker item must be a real on-chain event with a link (Part 2).
+- **Marketing countdowns and "live now" urgency.** Countdowns are allowed only for real on-chain timers, such as the 15-minute arming.
+- **Neon gradients, raining 3D coins and glitter.** Part 2's findings still hold.
+- **Copying someone else's character or system:**
+  - Chog is a token with its own team, so using it reads as a token promotion or a false affiliation.
+  - Purple Pepe, Pudgy's penguins and Duolingo's owl belong to others.
+  - Monad's system (Roboto Mono capitals, the grid lines, Britti Sans, the logo diamond) would read as impersonating the chain (Part 2).
+- **Rewards for exposure:** points, streaks or XP tied to borrowing or to how long cover runs. Blast and Abstract show where that ends.
+
+**Looks childish:**
+
+- Cartoon fonts on numbers, legal text or addresses. Lilita One is for words; numbers are Rubik.
+- Pixel fonts for amounts.
+- More than one mascot, or the mascot in every corner. One character, at most two places per screen.
+- Baby talk or a mascot that speaks in the first person about money.
+- Outlines on everything: text, icons and dividers stay clean, and only containers and the mascot get outlines.
+- Continuous shaking, flashing or bouncing. Each loop has a reason, and alerts settle after three pulses.
+- Hiding the disclosures inside the cartoon: the not-audited sticker, the footer disclaimer and "Stats for nerds" stay as visible as in version 2.
+
+## Sources (Part 3)
+
+**Live captures, 13 Oct 2026:**
+
+- Duolingo: https://www.duolingo.com/
+- Pudgy Penguins: https://www.pudgypenguins.com/
+- PancakeSwap: https://pancakeswap.finance/ and https://pancakeswap.finance/lottery
+- nad.fun: https://nad.fun/ and https://nad.fun/tokens/0x350035555E10d9AfAF1566AaebfCeD5BA6C27777
+- Chog: https://www.chog.xyz/
+- Family: https://family.co/
+- Liquity V2: https://liquity.app/borrow/eth
+- Credit Karma: https://www.creditkarma.com/
+- Gumroad: https://gumroad.com/
+- Headspace: https://www.headspace.com/
+- Phantom: https://phantom.com/
+- Rainbow: https://rainbow.me/
+- pump.fun: https://pump.fun/
+- Berachain: https://www.berachain.com/
+- Sanctum: https://www.sanctum.so/
+- Coinbase: https://www.coinbase.com/borrow
+- Jupiter: https://jup.ag/ and https://jup.ag/lend/borrow
+- Monad: https://monad.xyz/
+- Metropolis: https://www.monad.xyz/metropolis
+- Neverland: https://neverland.money/
+- Blast: https://blast.io/
+- Abstract: https://www.abs.xyz/
+- Kuru: https://www.kuru.io/
+- Monorail: https://monorail.xyz/
+- Magma: https://www.magmastaking.xyz/
+- Kintsu: https://www.kintsu.xyz/
+- Curvance: https://www.curvance.com/
+- aPriori (redirects to Capricorn): https://www.apr.io/
+- Nerite: https://www.nerite.org/
+- Layer3: https://layer3.xyz/
+- Galxe: https://www.galxe.com/
+- Hyperliquid: https://hyperliquid.xyz/
+- Kamino: https://app.kamino.finance/
+- Felix: https://www.usefelix.xyz/borrow
+- Robinhood: https://robinhood.com/us/en/
+- Bonk: https://bonkcoin.com/
+- Doodles: https://doodles.app/
+- Whoop: https://www.whoop.com/
+
+**Read, 13 Oct 2026:**
+
+- Monad brand and media kit (palette and typefaces): https://www.monad.xyz/brand-and-media-kit
+- Duolingo, "world character visemes" (Rive state machines, idle blinks and reactions): https://blog.duolingo.com/world-character-visemes
+- Benji Taylor, "Family Values" (trays, motion principles, confetti and sound moments): https://benji.org/family-values
+- Backpack Learn, "What is Chog?": https://learn.backpack.exchange/articles/what-is-chog-the-first-meme-coin-on-monad
+- Duolingo daily goal options (Casual, Regular, Serious, Intense): https://duolingoguides.com/how-to-change-daily-goals-on-duolingo/
+- Google Fonts CSS API (fonts available and the `tnum` check): https://fonts.googleapis.com/css2
