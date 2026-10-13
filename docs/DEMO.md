@@ -207,8 +207,9 @@ bash scripts/verify-mainnet.sh                  # retry by name, for example: ba
 #    read without echo: read -rs ENVIO_API_TOKEN && export ENVIO_API_TOKEN
 ENVIO_ORG=<your Envio org> bash scripts/deploy-indexer.sh
 
-# 4. Web app against the mainnet deployment. For cross-chain top-ups, create an app key at Aurora Intents Studio
-#    (https://intents.aurora.dev/studio) and export it first: export NEXT_PUBLIC_AURORA_APP_KEY=<key>
+# 4. Web app against the mainnet deployment. Cross-chain top-ups need Shield's Aurora Intents Studio app key
+#    (https://intents.aurora.dev/studio), kept in ~/.shield/aurora-app-key; the hosted app needs the same variable.
+export NEXT_PUBLIC_AURORA_APP_KEY=$(cat ~/.shield/aurora-app-key)
 NEXT_PUBLIC_ENVIO_GRAPHQL_URL=<endpoint from step 3> bash scripts/web-env.sh
 pnpm --filter web build && pnpm --filter web start   # http://localhost:3000; NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID adds WalletConnect
 

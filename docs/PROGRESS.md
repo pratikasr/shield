@@ -2,6 +2,16 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 13 Oct 2026, Aurora app key and the keeper on testnet
+
+- **Done.**
+  - The owner created Shield's app key in Aurora Intents Studio. It is kept outside the repo in `~/.shield/aurora-app-key` and in the ignored `web/.env.local`.
+  - A dry quote of 25 USDC from Base gives 24.989266 USDC on Monad, in about 37 s. In the app on the fork stack, "Add fuel" with "From another chain" got a real quote and a deposit address on Base, and the status checks started.
+  - The keeper's live check passed on Monad testnet: `monadNewHeads` heads, and a receipt from `eth_sendRawTransactionSync` 542 ms after sending (tx 0xc2ccc7b2443186c955a1d5083e889138b903951d40a1222849edec7ee845e773). Testnet wallet 0x39DaBE2ACE84F86C758af45bDf58BE41f88FD791, funded by the owner from the faucet.
+  - The indexer records cross-chain top-ups end to end on the local stack (TEST-REPORT, round 9).
+- **Next.** M6 on mainnet: the deploy, the hosted indexer, the hosted web app with `NEXT_PUBLIC_AURORA_APP_KEY` set, the demo (including the 25 USDC Base top-up), `proof.sh`, then the video, the repo going public, and the submission.
+- **Blocked on the owner.** Mainnet funds and keystores (docs/DEMO.md, Funding); Envio and Vercel logins; 25 USDC and a little ETH on Base for the Aurora top-up; making the repo public. Claim the Aurora bounty only if the real top-up reaches SUCCESS.
+
 ## 13 Oct 2026, version 3: the cartoon "floor is lava" redesign
 
 - **Why.** The owner rejected the calm fintech design: charts, sliders and the health factor made no sense to degens, who want to know at once whether they are safe, when Shield steps in and what it costs. They asked for a cartoon, game-like site with motion, built by a team with a researcher, a designer and a critic, and a prototype first.
