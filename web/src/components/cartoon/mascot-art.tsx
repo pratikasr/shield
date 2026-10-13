@@ -71,7 +71,7 @@ const MOODS: Record<MascotMood, MoodSpec> = {
   guard: { eyes: "dot", brows: "determined", mouth: "grin", arms: "flex", cheeks: true, emblem: "lit" },
   arming: { eyes: "dot", brows: "determined", mouth: "flat", arms: "down", cheeks: true, emblem: "arming", clock: true },
   saved: { eyes: "happy", mouth: "open", arms: "up", cheeks: true, emblem: "lit", sparkles: true },
-  tired: { eyes: "half", brows: "worried", mouth: "tired", arms: "down", cheeks: true, sweat: 1, emblem: "lit" },
+  tired: { eyes: "half", brows: "worried", mouth: "tired", arms: "down", cheeks: true, emblem: "lit" },
   sleepy: { eyes: "closed", mouth: "flat", arms: "slump", grey: true, zzz: true },
   confused: { eyes: "dot", brows: "raised", mouth: "squiggle", arms: "scratch", cheeks: true, question: true, emblem: "lit" },
   curious: { eyes: "side", mouth: "smallo", arms: "down", cheeks: true },

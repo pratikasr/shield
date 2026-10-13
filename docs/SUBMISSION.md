@@ -43,7 +43,7 @@ What is built
 - Five contracts (PositionRegistry, Repricer, Executor, ShieldVault, ShieldForwarderFactory) on Aave V3 Monad and Pyth, with a Uniswap V3 adapter to sell seized collateral.
 - A TypeScript keeper (viem) that reprices covers, runs exits and sweeps cross-chain deposits.
 - An Envio HyperIndex indexer: positions, every reprice and exit, vault flows, and platform earnings by hour, day and since launch.
-- A Next.js app: protect a position (live health-factor gauge, price simulator, chance of reaching the exit price, history, top-ups from any chain), the protocol's vault, and public analytics of what the platform earns.
+- A Next.js app in a cartoon, game-like design: your loan is a level where ETH stands above Aave's lava and Shield's line sits in between, and a mascot's face shows the status. Protect a position in plain words ("ETH can fall 6.5% before Aave liquidates you"), pick Early, Balanced or Last call with its price and cost, and turn Shield on with one button; top up from any chain; see the protocol's vault and a Stats scoreboard with a live Monad block ticker. The health factor and details sit in a "Stats for nerds" drawer.
 
 How it is checked
 143 contract tests (100 unit, fuzz and invariant; 43 against real Aave on a Monad mainnet fork), 91 keeper, 8 indexer and 65 web tests, and a Playwright run of the whole demo flow on a mainnet fork. An internal review before mainnet found 1 critical, 15 high and 36 medium issues; all are fixed, with regression tests for the contracts and keeper. The contracts have not had an external audit. Contract addresses, transaction hashes and gas figures are in the README.

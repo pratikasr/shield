@@ -1,43 +1,18 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { encodeEventTopics, type Address, type ContractFunctionParameters, type Hex } from "viem";
-import { usePublicClient, useReadContract, useReadContracts } from "wagmi";
+import type { Address, ContractFunctionParameters } from "viem";
+import { useReadContract, useReadContracts } from "wagmi";
 import { useOnBlock } from "@/hooks/useLiveBlock";
 import { aavePoolAbi, erc20Abi, positionRegistryAbi, repricerAbi } from "@/lib/abis";
-import { type RepriceReceipt, repriceCost } from "@/lib/analytics";
 import { monadMainnet } from "@/lib/chains";
-import { aave, multicall3, pythAddress, shield } from "@/lib/env";
+import { aave, multicall3, shield } from "@/lib/env";
 import { toNumber } from "@/lib/format";
 
 const chainId = monadMainnet.id;
 /** Covers read per page load; the table says so if there are more. */
 export const ACTIVE_READ_LIMIT = 200;
 const FLAG_LAPSED = 2;
-/** Pyth MON/USD on Monad, verified 5 Oct 2026 (docs/TECH-DECISIONS.md, Verified facts). */
-const MON_USD_FEED: Hex = "0x31491744e2dbf6df7fcf4ac0820d18a609b49076d45066d3568424e62f686cd1";
-
-const pythAbi = [
-  {
-    type: "function",
-    name: "getPriceUnsafe",
-    stateMutability: "view",
-    inputs: [{ name: "id", type: "bytes32" }],
-    outputs: [
-      {
-        type: "tuple",
-        components: [
-          { name: "price", type: "int64" },
-          { name: "conf", type: "uint64" },
-          { name: "expo", type: "int32" },
-          { name: "publishTime", type: "uint256" },
-        ],
-      },
-    ],
-  },
-] as const;
-
 const multicallAbi = [{ type: "function", name: "getCurrentBlockTimestamp", stateMutability: "view", inputs: [], outputs: [{ name: "timestamp", type: "uint256" }] }] as const;
 
 export interface LiveCover {
@@ -160,41 +135,4 @@ export function useLiveCovers(): LiveCovers {
 export function useChainTime(): number {
   const q = useReadContract({ address: multicall3, abi: multicallAbi, functionName: "getCurrentBlockTimestamp", chainId, query: { refetchInterval: 15_000 } });
   return q.data !== undefined ? Number(q.data) : Math.floor(Date.now() / 1000);
-}
-
-/** Pyth's MON/USD price on Monad, for showing a MON cost in dollars. */
-export function useMonPrice(): number | undefined {
-  const q = useReadContract({ address: pythAddress, abi: pythAbi, functionName: "getPriceUnsafe", args: [MON_USD_FEED], chainId, query: { refetchInterval: 60_000 } });
-  if (!q.data) return undefined;
-  const p = q.data as { price: bigint; expo: number };
-  const v = Number(p.price) * 10 ** Number(p.expo);
-  return v > 0 ? v : undefined;
-}
-
-const REPRICED_TOPIC = encodeEventTopics({ abi: repricerAbi, eventName: "Repriced" })[0] as Hex;
-
-/**
- * Gas and MON per reprice from the receipts of the latest keeper reprice transactions (sent to the Repricer; reprices
- * inside an exit or an opt-out are left out). Receipts never change, so each is fetched once.
- */
-export function useRepriceCost(txHashes: string[], sample: number) {
-  const client = usePublicClient({ chainId });
-  const key = txHashes.join(",");
-  const q = useQuery({
-    queryKey: ["reprice-receipts", key, sample],
-    enabled: Boolean(client && shield.repricer && txHashes.length),
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: async () => {
-      const receipts = await Promise.all(txHashes.map((hash) => client!.getTransactionReceipt({ hash: hash as Hex }).catch(() => null)));
-      const repricer = shield.repricer!.toLowerCase();
-      const rows: RepriceReceipt[] = [];
-      for (const r of receipts) {
-        if (!r || r.status !== "success" || r.to?.toLowerCase() !== repricer) continue;
-        const reprices = r.logs.filter((l) => l.address.toLowerCase() === repricer && l.topics[0] === REPRICED_TOPIC).length;
-        rows.push({ gasUsed: r.gasUsed, effectiveGasPrice: r.effectiveGasPrice, reprices });
-      }
-      return rows.slice(0, sample);
-    },
-  });
-  return { cost: q.data ? repriceCost(q.data) : undefined, isLoading: q.isPending && Boolean(txHashes.length), error: q.error };
 }
