@@ -118,6 +118,16 @@ async function optInTx() {
     const [a, b, c] = reprices.slice(i - 2, i + 1).map((t) => BigInt(t.block));
     if (b === a + 1n && c === b + 1n) run = reprices.slice(i - 2, i + 1);
   }
+  // Without three in consecutive blocks (a keeper far from the RPC waits longer than a block for each receipt), the
+  // three closest successive reprices, with their real block gaps.
+  let closest = null;
+  if (!run) {
+    for (let i = 2; i < reprices.length; i++) {
+      const trio = reprices.slice(i - 2, i + 1);
+      const span = BigInt(trio[2].block) - BigInt(trio[0].block);
+      if (!closest || span < closest.span) closest = { trio, span };
+    }
+  }
   const exit = included.find((t) => t.label === "exit" && same(t.to, d.Executor));
 
   console.log("\nProof");
@@ -135,7 +145,16 @@ async function optInTx() {
     }
     const gaps = run.slice(1).map((t, i) => Date.parse(t.ts) - Date.parse(run[i].ts));
     console.log(`| Three repricing txs in consecutive blocks | ${parts.join("<br>")}<br>receipts ${gaps.join(" ms and ")} ms apart |`);
-  } else console.log("| Three repricing txs in consecutive blocks | none in the keeper log yet (the keeper reprices every block for REPRICE_WINDOW_BLOCKS blocks after it starts) |");
+  } else if (closest) {
+    const parts = [];
+    for (const t of closest.trio) {
+      const b = await minedBlock(t.hash);
+      parts.push(b ? `${txLink(t.hash)} (block ${b}, receipt ${t.ts})` : `${t.hash}: no successful receipt`);
+    }
+    const blocks = closest.trio.map((t) => BigInt(t.block));
+    const gaps = closest.trio.slice(1).map((t, i) => Date.parse(t.ts) - Date.parse(closest.trio[i].ts));
+    console.log(`| Three successive repricing txs (${blocks[1] - blocks[0]} and ${blocks[2] - blocks[1]} blocks apart) | ${parts.join("<br>")}<br>receipts ${gaps.join(" ms and ")} ms apart |`);
+  } else console.log("| Three successive repricing txs | none in the keeper log yet (the keeper reprices every block for REPRICE_WINDOW_BLOCKS blocks after it starts) |");
 
   if (exit) {
     const b = await minedBlock(exit.hash);

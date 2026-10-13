@@ -144,7 +144,7 @@ Filled during M6 with Monad mainnet transactions only, from `bash scripts/proof.
 | Item | Value |
 | --- | --- |
 | Opt-in tx | not yet (M6) |
-| Three consecutive repricing txs | not yet (M6) |
+| Three successive repricing txs | not yet (M6) |
 | Exit tx (`Exited` event) | not yet (M6) |
 | Protocol share paid to the treasury (`ProtocolPremiumPaid`) | not yet (M6) |
 | Gas (forge snapshot at block 113,031,739, Monad execution, cold state) | `exit` funded by the vault 1,178,122; `exit` through the flash-loan fallback 1,852,575; `reprice` of one borrower 526,248; `repriceMany` of three 704,199; vault `unwind` 831,017. The protocol share added about 2,100 gas to a reprice (0.4%) and 2,400 to an exit. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |

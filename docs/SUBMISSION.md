@@ -35,7 +35,7 @@ Every borrower has a deposit address on Monad, a CREATE2 forwarder known before 
 
 Why Monad
 - 300 ms blocks. The keeper subscribes to monadNewHeads, reads health factors on the proposed block, and sends exits with eth_sendRawTransactionSync, which returns the receipt in the same call. On a mainnet fork the exit's receipt came back about 290 ms after sending.
-- Cheap execution makes risk-based repricing affordable: the premium accrues every block, and the keeper reprices every block for its first 600 blocks (about 3 minutes), then every 200 blocks to save gas. Its EIP-2930 access list cut a steady reprice from 523k to 192k gas and an exit from 1.2M to 682k on a mainnet fork, mostly by warming Aave's and the tokens' storage; Shield's own records are packed one per MIP-8 storage page.
+- Cheap execution makes risk-based repricing affordable: the premium accrues every block, and the keeper reprices every block it can for its first 600 blocks (about 3 minutes), then every 200 blocks to save gas. It sends one transaction at a time and waits for the receipt: on a mainnet fork its reprices landed in consecutive blocks; on mainnet, from our keeper in India (0.5 to 0.75 s per round trip to the RPC), they landed every 3 to 4 blocks, about 1 s apart. Its EIP-2930 access list cut a steady reprice from 523k to 192k gas and an exit from 1.2M to 682k on a mainnet fork, mostly by warming Aave's and the tokens' storage; Shield's own records are packed one per MIP-8 storage page.
 - Gas is billed on the limit on Monad, so every keeper transaction carries a measured limit.
 - The public Analytics page streams Monad's commit states (Proposed, Voted, Finalized, Verified) with Shield's reprices landing in them.
 
