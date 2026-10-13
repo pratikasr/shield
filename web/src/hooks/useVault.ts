@@ -4,12 +4,12 @@ import { useMemo } from "react";
 import type { Address, ContractFunctionParameters } from "viem";
 import { useReadContracts } from "wagmi";
 import { erc20Abi, shieldVaultAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { aave, shield } from "@/lib/env";
 import { toNumber } from "@/lib/format";
 import { useOnBlock } from "./useLiveBlock";
 
-const chainId = monadMainnet.id;
+const chainId = appChain.id;
 /** Reads about the vault itself; the connected account's reads come after them. */
 const BASE_READS = 13;
 

@@ -4,12 +4,12 @@ import { useMemo } from "react";
 import type { Address, ContractFunctionParameters } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { aaveDataProviderAbi, aaveOracleAbi, aavePoolAbi, erc20Abi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { aave } from "@/lib/env";
 import { toNumber } from "@/lib/format";
 import { useOnBlock } from "./useLiveBlock";
 
-const chainId = monadMainnet.id;
+const chainId = appChain.id;
 
 export interface ReserveLine {
   asset: Address;

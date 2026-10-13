@@ -5,12 +5,12 @@ import type { Abi, Address, EstimateContractGasParameters, Hash, SimulateContrac
 import { useAccount, useConfig, usePublicClient } from "wagmi";
 import { writeContract, type WriteContractParameters } from "wagmi/actions";
 import { externalErrorsAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { explainError, type ErrorContext } from "@/lib/errors";
 
 export { explainError } from "@/lib/errors";
 
-const chainId = monadMainnet.id;
+const chainId = appChain.id;
 
 export type TxPhase = "idle" | "checking" | "signing" | "pending" | "proposed" | "finalized" | "error";
 

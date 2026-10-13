@@ -4,10 +4,10 @@ import { useMemo } from "react";
 import type { Address, ContractFunctionParameters, Hex } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { executorAbi, positionRegistryAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { shield } from "@/lib/env";
 
-const chainId = monadMainnet.id;
+const chainId = appChain.id;
 
 export interface AssetConfig {
   asset: Address;

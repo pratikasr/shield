@@ -7,11 +7,11 @@ import { Label } from "@/components/ui/label";
 import { useOnBlock } from "@/hooks/useLiveBlock";
 import { assetConfigOf, type ShieldConfig } from "@/hooks/useShieldConfig";
 import { pythAbi, repricerAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { pythAddress, shield } from "@/lib/env";
 import { toNumber } from "@/lib/format";
 
-export const chainId = monadMainnet.id;
+export const chainId = appChain.id;
 export const AAVE_APP = "https://app.aave.com/?marketName=proto_monad_v3";
 /** Blocks an exit may stay due before the page offers to run it from this wallet. */
 export const KEEPER_IDLE_BLOCKS = 10;

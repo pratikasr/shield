@@ -6,7 +6,10 @@ import { isLocalRpc, isStale, useChainBlocks, type BlockMark } from "./chain-blo
 import { CartoonIcon } from "./icons";
 import { prefersReducedMotion } from "./motion";
 
-const EXPLORER = (process.env.NEXT_PUBLIC_EXPLORER_URL || "https://monadvision.com").replace(/\/$/, "");
+const EXPLORER = (
+  process.env.NEXT_PUBLIC_EXPLORER_URL || (process.env.NEXT_PUBLIC_CHAIN_ID === "10143" ? "https://testnet.monadvision.com" : "https://monadvision.com")
+).replace(/\/$/, "");
+const IS_TESTNET = process.env.NEXT_PUBLIC_CHAIN_ID === "10143";
 
 export interface TickerBlock {
   number: number;
@@ -169,9 +172,9 @@ export function LiveBlockChip({ className }: { className?: string }) {
       className={className}
       block={b.failed ? undefined : b.latest}
       tone={b.latest === undefined ? "off" : stale || isLocalRpc ? "warn" : "live"}
-      name={isLocalRpc ? "Local fork, block" : stale ? "Reconnecting, block" : "Monad block"}
-      short={isLocalRpc ? "Fork" : stale ? "Reconnecting" : "Block"}
-      title={isLocalRpc ? "Reading a local fork of Monad mainnet (test rehearsal)" : stale ? "No new block for over two seconds" : "Latest proposed block on Monad"}
+      name={isLocalRpc ? "Local fork, block" : stale ? "Reconnecting, block" : IS_TESTNET ? "Monad testnet block" : "Monad block"}
+      short={isLocalRpc ? "Fork" : stale ? "Reconnecting" : IS_TESTNET ? "Test" : "Block"}
+      title={isLocalRpc ? "Reading a local fork of Monad mainnet (test rehearsal)" : stale ? "No new block for over two seconds" : IS_TESTNET ? "Latest proposed block on Monad testnet" : "Latest proposed block on Monad"}
     />
   );
 }

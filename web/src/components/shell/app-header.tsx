@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { BlockChip } from "@/components/cartoon/block-ticker";
 import { AddressAvatar } from "@/components/data/avatar";
 import { useChainFreshness } from "@/hooks/useLiveBlock";
+import { isTestnet } from "@/lib/chains";
 import { isFork } from "@/lib/env";
 import { truncateHex } from "@/lib/format";
 import { HeaderBar, navFor } from "./header-bar";
@@ -16,14 +17,16 @@ function NetworkChip() {
     <BlockChip
       block={block}
       tone={block === undefined ? "off" : stale || isFork ? "warn" : "live"}
-      name={isFork ? "Local fork, block" : stale ? "Reconnecting, block" : "Monad block"}
-      short={isFork ? "Fork" : stale ? "Reconnecting" : "Block"}
+      name={isFork ? "Local fork, block" : stale ? "Reconnecting, block" : isTestnet ? "Monad testnet block" : "Monad block"}
+      short={isFork ? "Fork" : stale ? "Reconnecting" : isTestnet ? "Test" : "Block"}
       title={
         stale
           ? "No new block for over two seconds: reconnecting to the Monad RPC"
           : isFork
             ? "Reading a local fork of Monad mainnet (test rehearsal)"
-            : "Latest proposed block on Monad mainnet"
+            : isTestnet
+              ? "Latest proposed block on Monad testnet"
+              : "Latest proposed block on Monad mainnet"
       }
     />
   );

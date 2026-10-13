@@ -5,10 +5,10 @@ import { useReadContract } from "wagmi";
 import { usePageVisible } from "@/hooks/useLiveBlock";
 import { erc20Abi, repricerAbi, shieldForwarderFactoryAbi, shieldVaultAbi } from "@/lib/abis";
 import type { FundingKind } from "@/lib/aurora";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { aave, shield } from "@/lib/env";
 
-const chainId = monadMainnet.id;
+const chainId = appChain.id;
 /** How often the USDC waiting at a deposit address is read: often enough to see a delivery land, without a read per block. */
 const BALANCE_POLL_MS = 1_500;
 

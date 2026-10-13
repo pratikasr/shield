@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import type { Address, ContractFunctionParameters } from "viem";
 import { useReadContracts } from "wagmi";
 import { erc20Abi, executorAbi, multicall3Abi, positionRegistryAbi, repricerAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { aave, multicall3, shield } from "@/lib/env";
 import { EXIT_STATUS, type ExitStatus } from "@/lib/exit-status";
 import { toNumber } from "@/lib/format";
@@ -12,7 +12,7 @@ import { useOnBlock } from "./useLiveBlock";
 
 export { EXIT_STATUS, type ExitStatus } from "@/lib/exit-status";
 
-const chainId = monadMainnet.id;
+const chainId = appChain.id;
 
 export interface Cover {
   /** The wallet has opted in at some point, so the record's collateral and times mean something. */

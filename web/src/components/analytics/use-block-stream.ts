@@ -7,11 +7,11 @@ import { usePublicClient } from "wagmi";
 import { useLiveBlock, usePageVisible } from "@/hooks/useLiveBlock";
 import { applyHead, applyPolledBlock, parseHead, pushWindow, type HeadMessage, type StreamBlock } from "@/lib/analytics";
 import { executorAbi, repricerAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain, isTestnet } from "@/lib/chains";
 import { isFork } from "@/lib/env";
 
 /** Monad's public WebSocket; NEXT_PUBLIC_MONAD_WS_URL overrides it. */
-export const MONAD_WS_URL = process.env.NEXT_PUBLIC_MONAD_WS_URL || "wss://rpc.monad.xyz";
+export const MONAD_WS_URL = process.env.NEXT_PUBLIC_MONAD_WS_URL || (isTestnet ? "wss://testnet-rpc.monad.xyz" : "wss://rpc.monad.xyz");
 
 const REPRICED_TOPIC = encodeEventTopics({ abi: repricerAbi, eventName: "Repriced" })[0] as Hex;
 const EXITED_TOPIC = encodeEventTopics({ abi: executorAbi, eventName: "Exited" })[0] as Hex;
@@ -262,7 +262,7 @@ export function useBlockStream(repricer?: Address, executor?: Address): StreamSt
 
   // ---------------------------------------------------------------- Local fork: polling
   const { data: block } = useLiveBlock();
-  const client = usePublicClient({ chainId: monadMainnet.id });
+  const client = usePublicClient({ chainId: appChain.id });
   const lastLogBlock = useRef<bigint | undefined>(undefined);
   const logsInFlight = useRef(false);
   useEffect(() => {

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { usePublicClient } from "wagmi";
 import { executorAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { shield } from "@/lib/env";
 import type { Cover } from "./useShieldPosition";
 
@@ -26,7 +26,7 @@ export interface ChainExit {
  * one-block log query.
  */
 export function useChainExit(borrower: Address | undefined, cover: Cover | undefined) {
-  const client = usePublicClient({ chainId: monadMainnet.id });
+  const client = usePublicClient({ chainId: appChain.id });
   const block = cover?.exited && !cover.active ? cover.lastRepricedBlock : undefined;
   return useQuery({
     queryKey: ["chain-exit", borrower, block?.toString()],

@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 // Optional peer imports of wallet SDKs (Base Account's x402 payments, WalletConnect logging)
@@ -30,6 +31,12 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // A second server (a dev build for screenshots) can use its own directory next to a production build.
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  // The Docker image for hosting (web/Dockerfile) sets NEXT_OUTPUT=standalone to ship only the traced server files.
+  // Unset everywhere else, so `next dev`, `next start` and the tests are unchanged. The tracing root is the pnpm
+  // workspace root, where the dependency store lives.
+  ...(process.env.NEXT_OUTPUT === "standalone"
+    ? { output: "standalone" as const, outputFileTracingRoot: path.resolve(process.cwd(), "..") }
+    : {}),
   devIndicators: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];

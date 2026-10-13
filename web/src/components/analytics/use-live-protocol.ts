@@ -5,11 +5,11 @@ import type { Address, ContractFunctionParameters } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { useOnBlock } from "@/hooks/useLiveBlock";
 import { aavePoolAbi, erc20Abi, positionRegistryAbi, repricerAbi } from "@/lib/abis";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 import { aave, multicall3, shield } from "@/lib/env";
 import { toNumber } from "@/lib/format";
 
-const chainId = monadMainnet.id;
+const chainId = appChain.id;
 /** Covers read per page load; the table says so if there are more. */
 export const ACTIVE_READ_LIMIT = 200;
 const FLAG_LAPSED = 2;

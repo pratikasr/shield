@@ -1,0 +1,32 @@
+# Docker build context for web/Dockerfile, which builds from the repo root (scripts/deploy-web-aws.sh).
+# An allowlist: only the workspace manifests and the web app's sources go in. Keys, env files, the local fork's state,
+# the contracts and every build or test output stay out.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!keeper/package.json
+!indexer/package.json
+!web/
+
+# Never sent, even inside an allowed directory.
+**/.env*
+**/node_modules
+**/*.key
+**/*.pem
+**/keystore
+**/*.log
+**/*.tsbuildinfo
+**/.DS_Store
+web/.next
+web/.next-*
+web/out
+web/test-results
+web/e2e-results
+web/playwright-report
+web/coverage
+.fork
+contracts/out
+contracts/cache
+contracts/broadcast
+contracts/deployments

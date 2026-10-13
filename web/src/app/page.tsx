@@ -9,6 +9,7 @@ import { HeroScene } from "@/components/landing/hero-scene";
 import { LandingTicker } from "@/components/landing/landing-ticker";
 import { REPO, SiteFooter } from "@/components/shell/footer";
 import { SiteHeader } from "@/components/shell/site-header";
+import { TestnetStrip } from "@/components/shell/testnet-strip";
 import { Button } from "@/components/ui/button";
 
 const STEPS: { title: string; body: ReactNode; pills: ReactNode; node: string }[] = [
@@ -130,6 +131,7 @@ export default function Home() {
   return (
     <>
       <SiteHeader />
+      <TestnetStrip />
       <main id="main" tabIndex={-1}>
         {/* Hero: on phones the promise and the button come before the scene. */}
         <section className="pb-18 pt-7 md:pt-12" aria-labelledby="hero-title">

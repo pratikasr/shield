@@ -1,4 +1,5 @@
 import { getAddress, type Address } from "viem";
+import { isTestnet } from "./chains";
 
 /**
  * Deployment addresses and endpoints. Set at build time from NEXT_PUBLIC_* variables; `scripts/web-env.sh`
@@ -27,21 +28,26 @@ export const auroraAppKey = (process.env.NEXT_PUBLIC_AURORA_APP_KEY ?? "").trim(
 
 export const envioUrl = process.env.NEXT_PUBLIC_ENVIO_GRAPHQL_URL || undefined;
 
-/** Explorer for links; MonadVision by default. */
-export const explorerUrl = (process.env.NEXT_PUBLIC_EXPLORER_URL || "https://monadvision.com").replace(/\/$/, "");
+/** Explorer for links; MonadVision (its testnet site on Monad testnet) by default. */
+export const explorerUrl = (process.env.NEXT_PUBLIC_EXPLORER_URL || (isTestnet ? "https://testnet.monadvision.com" : "https://monadvision.com")).replace(/\/$/, "");
 
 const rpcUrl = process.env.NEXT_PUBLIC_MONAD_RPC_URL || "";
 
 /** True when the app reads a local fork (test rehearsals only); the UI says so in the header. */
 export const isFork = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(rpcUrl);
 
-/** Aave V3 Monad, verified 5 Oct 2026 (docs/TECH-DECISIONS.md). */
+/**
+ * Aave V3 Monad, verified 5 Oct 2026 (docs/TECH-DECISIONS.md). A testnet build (NEXT_PUBLIC_CHAIN_ID=10143) takes the
+ * market Shield deployed on Monad testnet from Aave's code instead, from NEXT_PUBLIC_AAVE_* (scripts/web-env.sh
+ * --testnet writes them from contracts/deployments/aave-10143.json; ADR-040). That market has no cbBTC.
+ */
+const aaveAddr = (testnetValue: string | undefined, mainnet: string): Address => (isTestnet ? addr(testnetValue) : undefined) ?? getAddress(mainnet);
 export const aave = {
-  pool: getAddress("0x69a5F9AD4f96ebf0a0C792dD42a01cC5C0102fef"),
-  oracle: getAddress("0x0c02b2c2038066C10Eab8fe1D5Cdb73d5a78A1Bf"),
-  dataProvider: getAddress("0xB65A68B98274ef7D9a60E0C0747dD1BEc3D32fad"),
-  usdc: getAddress("0x754704Bc059F8C67012fEd69BC8A327a5aafb603"),
-  weth: getAddress("0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242"),
+  pool: aaveAddr(process.env.NEXT_PUBLIC_AAVE_POOL, "0x69a5F9AD4f96ebf0a0C792dD42a01cC5C0102fef"),
+  oracle: aaveAddr(process.env.NEXT_PUBLIC_AAVE_ORACLE, "0x0c02b2c2038066C10Eab8fe1D5Cdb73d5a78A1Bf"),
+  dataProvider: aaveAddr(process.env.NEXT_PUBLIC_AAVE_DATA_PROVIDER, "0xB65A68B98274ef7D9a60E0C0747dD1BEc3D32fad"),
+  usdc: aaveAddr(process.env.NEXT_PUBLIC_AAVE_USDC, "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"),
+  weth: aaveAddr(process.env.NEXT_PUBLIC_AAVE_WETH, "0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242"),
   cbbtc: getAddress("0xd18B7EC58Cdf4876f6AFebd3Ed1730e4Ce10414b"),
 };
 

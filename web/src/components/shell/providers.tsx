@@ -7,10 +7,9 @@ import { injectedWallet, metaMaskWallet, rabbyWallet, walletConnectWallet } from
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { monadTestnet } from "viem/chains";
 import { createConfig, createConnector, http, useAccount, WagmiProvider } from "wagmi";
 import { injected, mock } from "wagmi/connectors";
-import { monadMainnet, supportedChains } from "@/lib/chains";
+import { appChain, otherChain, supportedChains } from "@/lib/chains";
 import { isFork } from "@/lib/env";
 import { setWalletCookie } from "@/lib/wallet-cookie";
 
@@ -22,7 +21,7 @@ const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
  * the RPC is also local (127.0.0.1 or localhost), so a stray variable in a production build cannot add it.
  */
 const e2eAccount = isFork && /^0x[0-9a-fA-F]{40}$/.test(process.env.NEXT_PUBLIC_E2E_ACCOUNT ?? "") ? (process.env.NEXT_PUBLIC_E2E_ACCOUNT as `0x${string}`) : undefined;
-/** Fork test builds only: start the test wallet on Monad testnet to exercise the wrong-network guard. */
+/** Fork test builds only: start the test wallet on the other Monad network to exercise the wrong-network guard. */
 const e2eWrongChain = process.env.NEXT_PUBLIC_E2E_WRONG_CHAIN === "1";
 const forkTestWallet = (): Wallet => ({
   id: "fork-test-wallet",
@@ -80,8 +79,8 @@ export const wagmiConfig = createConfig({
   transports: {
     // viem aborts a request after 10 s by default and the read starts over. A slow public RPC (or a cold fork fetching
     // state upstream) can need longer for the first batch, so it gets 30 s to finish once instead of never.
-    [monadMainnet.id]: http(monadMainnet.rpcUrls.default.http[0], { batch: { wait: 8 }, timeout: 30_000 }),
-    [monadTestnet.id]: http(),
+    [appChain.id]: http(appChain.rpcUrls.default.http[0], { batch: { wait: 8 }, timeout: 30_000 }),
+    [otherChain.id]: http(),
   },
   ssr: true,
 });
@@ -123,7 +122,7 @@ const CARTOON_THEME = cartoonTheme();
 
 function Rainbow({ children }: { children: ReactNode }) {
   return (
-    <RainbowKitProvider theme={CARTOON_THEME} initialChain={e2eWrongChain ? monadTestnet : monadMainnet} modalSize="compact">
+    <RainbowKitProvider theme={CARTOON_THEME} initialChain={e2eWrongChain ? otherChain : appChain} modalSize="compact">
       {children}
     </RainbowKitProvider>
   );

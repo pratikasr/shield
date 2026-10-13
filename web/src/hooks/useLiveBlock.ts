@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useBlockNumber } from "wagmi";
-import { monadMainnet } from "@/lib/chains";
+import { appChain } from "@/lib/chains";
 
 function subscribeVisibility(onChange: () => void) {
   document.addEventListener("visibilitychange", onChange);
@@ -24,7 +24,7 @@ export function usePageVisible() {
  */
 export function useLiveBlock() {
   const visible = usePageVisible();
-  return useBlockNumber({ chainId: monadMainnet.id, watch: { enabled: visible, pollingInterval: 300 }, query: { refetchInterval: false } });
+  return useBlockNumber({ chainId: appChain.id, watch: { enabled: visible, pollingInterval: 300 }, query: { refetchInterval: false } });
 }
 
 /** Runs `onBlock` once per new block. */

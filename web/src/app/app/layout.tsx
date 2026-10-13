@@ -4,6 +4,7 @@ import { AppFooter } from "@/components/shell/footer";
 import { NetworkGuard } from "@/components/shell/network-guard";
 import { Providers } from "@/components/shell/providers";
 import { StaleBanner } from "@/components/shell/stale-banner";
+import { TestnetStrip } from "@/components/shell/testnet-strip";
 
 export const metadata: Metadata = { title: "App" };
 
@@ -12,6 +13,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <Providers>
       <div className="flex min-h-dvh flex-col">
         <AppHeader />
+        <TestnetStrip />
         <NetworkGuard />
         <StaleBanner />
         <main id="main" tabIndex={-1} className="c-wrap w-full flex-1 pb-18 pt-6">

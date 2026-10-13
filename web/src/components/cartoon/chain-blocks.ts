@@ -7,7 +7,8 @@ import { useSyncExternalStore } from "react";
  * `Exited`), so a block is marked only when it really carries one. Plain fetch, no viem or wagmi.
  */
 
-const RPC_URL = process.env.NEXT_PUBLIC_MONAD_RPC_URL || "https://rpc.monad.xyz";
+const RPC_URL =
+  process.env.NEXT_PUBLIC_MONAD_RPC_URL || (process.env.NEXT_PUBLIC_CHAIN_ID === "10143" ? "https://testnet-rpc.monad.xyz" : "https://rpc.monad.xyz");
 /** True when the build reads a local fork (test rehearsals only). */
 export const isLocalRpc = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(RPC_URL);
 const REPRICER = (process.env.NEXT_PUBLIC_SHIELD_REPRICER ?? "").trim();
