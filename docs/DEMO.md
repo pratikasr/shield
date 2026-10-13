@@ -307,9 +307,9 @@ To run the opt-in from the command line instead of the browser, replace step 6 w
 
 ### Hosting the web app
 
-The app is hosted on an AWS Lightsail container service, `shield-web` in ap-south-1 (power micro, USD 10 a month): https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com. `bash scripts/deploy-web-aws.sh` builds the image in Docker, scans it for a local RPC, pushes it, waits for the new version and checks every page; it reads `contracts/deployments/143.json` once it exists. Until then the hosted app is the testnet staging build (`SHIELD_WEB_NETWORK=testnet bash scripts/deploy-web-aws.sh`). Set `NEXT_PUBLIC_ENVIO_GRAPHQL_URL` (and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` if used) in the environment before the mainnet build.
+The app is hosted on an AWS Lightsail container service, `shield-web` in ap-south-1 (power micro, USD 10 a month), at https://shieldexit.xyz and https://www.shieldexit.xyz (domain on Cloudflare, DNS only; certificate `shield-web-cert`, issued 13 Oct 2026, valid to 28 Apr 2027), and at https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com. `bash scripts/deploy-web-aws.sh` builds the image in Docker, scans it for a local RPC, pushes it, waits for the new version and checks every page; it reads `contracts/deployments/143.json` once it exists. Until then the hosted app is the testnet staging build (`SHIELD_WEB_NETWORK=testnet bash scripts/deploy-web-aws.sh`). Set `NEXT_PUBLIC_ENVIO_GRAPHQL_URL` (and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` if used) in the environment before the mainnet build.
 
-A custom domain, once bought (D=shieldexit.xyz for example; Lightsail's own DNS zone is free and can point the bare domain at the service; its domain commands run in us-east-1):
+shieldexit.xyz is registered and served by Cloudflare DNS: its two certificate-validation CNAMEs and CNAMEs for `@` and `www` to `shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com`, all DNS only (a proxied record breaks validation). With Lightsail's own DNS zone instead, the steps are below (D=shieldexit.xyz; Lightsail's own DNS zone is free and can point the bare domain at the service; its domain commands run in us-east-1):
 
 ```bash
 D=shieldexit.xyz

@@ -169,9 +169,11 @@ Aave V3 is not deployed on Monad testnet, so for this run we deployed a full Aav
 | The borrower borrows more, health factor 1.05 | [`0x9f185df2...5f94`](https://testnet.monadvision.com/tx/0x9f185df2114834cba740a136a04054cdc14f1696e0f21af9e590ee6a17c85f94) (block 70,734,821) |
 | Exit (`Exited`: repaid 518.22 USDC, took 0.2082 WETH, health factor 1.05 to 1.12, $23.32 less than Aave's bonus, no flash loan) | [`0xb420db74...42ee`](https://testnet.monadvision.com/tx/0xb420db749132b14f55562070971fedbabdbcd3d6b7bdb53e5a18767d465242ee) (block 70,734,827, 761,236 gas) |
 
+The same flow through the web app, signed by a test wallet in the browser: Shield turned on with the Early line (health factor 1.08) in four wallet transactions, armed after 60 s, the borrower borrowed down to 1.05 with the testnet Test loan card, and the keeper stepped in 3 s later ([`0xf7eb9429...090e`](https://testnet.monadvision.com/tx/0xf7eb94292f221dcbaf150a4055be42e4f5fb10bc6480bbf12f22e9511c03090e), block 70,747,526); the page showed $27.82 avoided.
+
 From this machine the keeper's `eth_sendRawTransactionSync` receipts took 0.49 to 0.79 s (median 0.65 s), longer than a 300 ms block, so its reprices landed every three to five blocks rather than every block. The commands are in [docs/DEMO.md](docs/DEMO.md), Staging on Monad testnet.
 
-The hosted app, https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com, runs on this testnet market until the mainnet deployment and says so on every page; the read-only view of the rescued borrower is [/app/borrow?address=0x2F50...962d](https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com/app/borrow?address=0x2F5068762ee626Ae91f3745cED7F021e2710962d).
+The hosted app, https://shieldexit.xyz, runs on this testnet market until the mainnet deployment and says so on every page; the read-only view of the rescued borrower is [/app/borrow?address=0x2F50...962d](https://shieldexit.xyz/app/borrow?address=0x2F5068762ee626Ae91f3745cED7F021e2710962d).
 
 ## Quick start
 

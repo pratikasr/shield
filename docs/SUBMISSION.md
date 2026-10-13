@@ -79,6 +79,6 @@ Open source under MIT, with test reports, an internal audit and every owner powe
 | --- | --- |
 | GitHub repository | https://github.com/pratikasr/shield (public, or shared with metropolis@hackathon.monad.xyz) |
 | Project logo | docs/brand/shield-logo-512.png (1024 px: docs/brand/shield-logo-1024.png) |
-| Live product | https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com (or the custom domain once bought); the testnet staging build until the M6 deployment, then rebuilt for mainnet |
+| Live product | https://shieldexit.xyz (AWS Lightsail); the testnet staging build until the M6 deployment, then rebuilt for mainnet |
 | Technical demo video | Up to 3 minutes of the working product on mainnet, after M6 (script in docs/SPEC.md) |
 | Primary track | Track 01, Onchain Finance and Trading; bounties: Envio, and Aurora Intents only if the real cross-chain top-up in the demo succeeds |
