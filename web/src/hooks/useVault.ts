@@ -10,6 +10,8 @@ import { toNumber } from "@/lib/format";
 import { useOnBlock } from "./useLiveBlock";
 
 const chainId = monadMainnet.id;
+/** Reads about the vault itself; the connected account's reads come after them. */
+const BASE_READS = 13;
 
 export interface VaultState {
   /** totalAssets: what the shares are worth now (gross assets less exit gains still unlocking). */
@@ -24,6 +26,11 @@ export interface VaultState {
   collateralHeld: number;
   /** The vault's share of every premium charged so far (ADR-037), swept in or not, in whole USDC units. */
   premiumEarned: number;
+  /**
+   * What exits earned the vault: the collateral value it received (at Aave's oracle when each exit ran) above the USDC
+   * it paid into them. Gross: a later sale of the collateral can fetch more or less.
+   */
+  exitGains: number;
   /** The vault's share charged and still waiting at the Repricer for a sweep. */
   premiumPending: number;
   usdcOnHand: number;
@@ -64,6 +71,8 @@ export function useVault(user?: Address) {
         { address: v, abi: shieldVaultAbi, functionName: "lockedProfit", chainId },
         { address: v, abi: shieldVaultAbi, functionName: "PROFIT_UNLOCK_SECONDS", chainId },
         { address: v, abi: shieldVaultAbi, functionName: "maxSwapSlippageBps", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "totalExitFunding", chainId },
+        { address: v, abi: shieldVaultAbi, functionName: "totalCollateralValueReceived", chainId },
         ...(user
           ? [
               { address: v, abi: shieldVaultAbi, functionName: "balanceOf", args: [user], chainId },
@@ -90,7 +99,8 @@ export function useVault(user?: Address) {
     const grossRead = d[7]?.status === "success";
     const gross = grossRead ? toNumber(n(7), 6) : nav;
     const lockedProfit = toNumber(n(8), 6);
-    const shares = n(11);
+    // The user's reads follow the vault's own BASE_READS.
+    const shares = n(BASE_READS);
     const premiumEarned = toNumber(n(2), 6);
     const premiumPending = Math.max(premiumEarned - toNumber(n(6), 6), 0);
     return {
@@ -101,6 +111,7 @@ export function useVault(user?: Address) {
       // Collateral is what gross assets hold beyond the USDC the vault can pay out (which includes pending premium).
       collateralHeld: Math.max(gross - idle, 0),
       premiumEarned,
+      exitGains: Math.max(toNumber(n(12), 6) - toNumber(n(11), 6), 0),
       premiumPending,
       usdcOnHand: Math.max(idle - premiumPending, 0),
       exitsExecuted: Number(n(3)),
@@ -112,11 +123,11 @@ export function useVault(user?: Address) {
         ? {
             shares,
             assets: toNumber(shares, 12) * toNumber(n(5), 6),
-            maxWithdraw: n(12),
-            maxRedeem: n(13),
-            usdcBalance: n(14),
-            usdcAllowance: n(15),
-            depositAllowed: d[16]?.status === "success" ? Boolean(d[16]!.result) : undefined,
+            maxWithdraw: n(BASE_READS + 1),
+            maxRedeem: n(BASE_READS + 2),
+            usdcBalance: n(BASE_READS + 3),
+            usdcAllowance: n(BASE_READS + 4),
+            depositAllowed: d[BASE_READS + 5]?.status === "success" ? Boolean(d[BASE_READS + 5]!.result) : undefined,
           }
         : undefined,
     };

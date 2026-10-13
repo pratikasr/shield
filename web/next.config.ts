@@ -34,6 +34,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // The analytics page became Stats; old links keep working.
+  async redirects() {
+    return [{ source: "/app/analytics", destination: "/app/stats", permanent: true }];
+  },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,

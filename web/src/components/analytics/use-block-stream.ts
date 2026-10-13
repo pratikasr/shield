@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { decodeEventLog, encodeEventTopics, type Address, type Hex } from "viem";
+import type { BlockMark } from "@/components/cartoon/chain-blocks";
 import { usePublicClient } from "wagmi";
 import { useLiveBlock, usePageVisible } from "@/hooks/useLiveBlock";
 import { applyHead, applyPolledBlock, parseHead, pushWindow, type HeadMessage, type StreamBlock } from "@/lib/analytics";
-import { repricerAbi } from "@/lib/abis";
+import { executorAbi, repricerAbi } from "@/lib/abis";
 import { monadMainnet } from "@/lib/chains";
 import { isFork } from "@/lib/env";
 
@@ -13,6 +14,7 @@ import { isFork } from "@/lib/env";
 export const MONAD_WS_URL = process.env.NEXT_PUBLIC_MONAD_WS_URL || "wss://rpc.monad.xyz";
 
 const REPRICED_TOPIC = encodeEventTopics({ abi: repricerAbi, eventName: "Repriced" })[0] as Hex;
+const EXITED_TOPIC = encodeEventTopics({ abi: executorAbi, eventName: "Exited" })[0] as Hex;
 /** React sees the stream at most this often; messages arrive about 13 times a second. */
 const FLUSH_MS = 120;
 const BACKOFF_MAX_MS = 15_000;
@@ -29,6 +31,10 @@ export interface StreamState {
   /** Shield reprices seen per block number since the page opened. */
   repricesByBlock: Record<number, number>;
   repricesSeen: number;
+  /** Rescues (Executor Exited events) seen since the page opened. */
+  exitsSeen: number;
+  /** Blocks that carry a real Shield transaction, for the ticker's stamps, with the first such transaction. */
+  marks: Record<number, BlockMark>;
   /** Sum of `charged` over the reprices seen, 18-decimal USDC units. */
   chargedSeen: bigint;
   /** False when the RPC refused the log subscription, so reprices cannot be marked. */
@@ -46,6 +52,8 @@ function initial(mode: StreamMode): StreamState {
     blocks: [],
     repricesByBlock: {},
     repricesSeen: 0,
+    exitsSeen: 0,
+    marks: {},
     chargedSeen: 0n,
     logsAvailable: true,
     proposals: [],
@@ -75,11 +83,26 @@ interface RawLog {
   removed?: boolean;
 }
 
-/** Adds one Repriced log to the state, once per transaction and log index. */
-function addReprice(s: StreamState, seen: Set<string>, log: RawLog): StreamState {
+/** A block's stamp after one more Shield event: a rescue outranks reprices, and the first transaction is kept. */
+function withMark(marks: Record<number, BlockMark>, block: number, kind: BlockMark["kind"], txHash: string): Record<number, BlockMark> {
+  const m = marks[block];
+  return {
+    ...marks,
+    [block]: { count: (m?.count ?? 0) + 1, txHash: kind === "exited" || !m?.txHash ? txHash : m.txHash, kind: m?.kind === "exited" ? "exited" : kind },
+  };
+}
+
+/** Adds one Shield log (Repriced from the Repricer, Exited from the Executor) to the state, once per transaction and log index. */
+function addLog(s: StreamState, seen: Set<string>, log: RawLog): StreamState {
   if (log.removed || !log.transactionHash || log.logIndex === undefined || log.logIndex === null || !log.data || !log.topics?.length) return s;
   const key = `${log.transactionHash.toLowerCase()}:${String(log.logIndex)}`;
   if (seen.has(key)) return s;
+  const block = typeof log.blockNumber === "bigint" ? Number(log.blockNumber) : Number.parseInt(String(log.blockNumber ?? "0"), 16);
+  if (log.topics[0] === EXITED_TOPIC) {
+    seen.add(key);
+    return { ...s, exitsSeen: s.exitsSeen + 1, marks: withMark(s.marks, block, "exited", log.transactionHash) };
+  }
+  if (log.topics[0] !== REPRICED_TOPIC) return s;
   let charged = 0n;
   try {
     const decoded = decodeEventLog({ abi: repricerAbi, eventName: "Repriced", data: log.data, topics: log.topics as [Hex, ...Hex[]] });
@@ -88,12 +111,12 @@ function addReprice(s: StreamState, seen: Set<string>, log: RawLog): StreamState
     return s;
   }
   seen.add(key);
-  const block = typeof log.blockNumber === "bigint" ? Number(log.blockNumber) : Number.parseInt(String(log.blockNumber ?? "0"), 16);
   return {
     ...s,
     repricesByBlock: { ...s.repricesByBlock, [block]: (s.repricesByBlock[block] ?? 0) + 1 },
     repricesSeen: s.repricesSeen + 1,
     chargedSeen: s.chargedSeen + charged,
+    marks: withMark(s.marks, block, "repriced", log.transactionHash),
   };
 }
 
@@ -103,8 +126,10 @@ function addReprice(s: StreamState, seen: Set<string>, log: RawLog): StreamState
  * block. Closed while the tab is hidden and on unmount; reconnects with backoff. On a local fork, which has no
  * `monadNewHeads`, it polls the block number and the Repricer's logs instead. Nothing here can throw into React.
  */
-export function useBlockStream(repricer?: Address): StreamState {
+export function useBlockStream(repricer?: Address, executor?: Address): StreamState {
   const mode: StreamMode = isFork ? "poll" : "socket";
+  const watched = [repricer, executor].filter((a): a is Address => Boolean(a));
+  const watchKey = watched.join(",");
   const [state, setState] = useState<StreamState>(() => initial(mode));
   const visible = usePageVisible();
   const store = useRef<StreamState>(initial(mode));
@@ -156,8 +181,10 @@ export function useBlockStream(repricer?: Address): StreamState {
       ws.onopen = () => {
         try {
           ws!.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_subscribe", params: ["monadNewHeads"] }));
-          if (repricer) {
-            ws!.send(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "eth_subscribe", params: ["monadLogs", { address: repricer, topics: [REPRICED_TOPIC] }] }));
+          if (watched.length) {
+            ws!.send(
+              JSON.stringify({ jsonrpc: "2.0", id: 2, method: "eth_subscribe", params: ["monadLogs", { address: watched, topics: [[REPRICED_TOPIC, EXITED_TOPIC]] }] }),
+            );
           }
         } catch {
           // onclose follows and reconnects.
@@ -191,7 +218,7 @@ export function useBlockStream(repricer?: Address): StreamState {
         }
         const sub = m.params?.subscription;
         if (sub && sub === logsSub) {
-          update((s) => addReprice(s, seen.current, m.params!.result as RawLog));
+          update((s) => addLog(s, seen.current, m.params!.result as RawLog));
           return;
         }
         if (sub && sub === headsSub) {
@@ -230,8 +257,8 @@ export function useBlockStream(repricer?: Address): StreamState {
         // Already closed.
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the socket depends only on visibility and the Repricer address
-  }, [mode, visible, repricer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the socket depends only on visibility and the watched addresses
+  }, [mode, visible, watchKey]);
 
   // ---------------------------------------------------------------- Local fork: polling
   const { data: block } = useLiveBlock();
@@ -247,16 +274,16 @@ export function useBlockStream(repricer?: Address): StreamState {
         ? s
         : { ...s, status: "live", blocks: applyPolledBlock(s.blocks, n, at), proposals: pushWindow(s.proposals, { n, t: at }) },
     );
-    if (!repricer || !client || logsInFlight.current) return;
+    if (!watched.length || !client || logsInFlight.current) return;
     // Count reprices from the block the page opened at onward.
     const from = lastLogBlock.current === undefined ? block : lastLogBlock.current + 1n;
     if (from > block) return;
     logsInFlight.current = true;
     client
-      .getLogs({ address: repricer, fromBlock: from, toBlock: block })
+      .getLogs({ address: watched, fromBlock: from, toBlock: block })
       .then((logs) => {
         lastLogBlock.current = block;
-        update((s) => logs.filter((l) => l.topics[0] === REPRICED_TOPIC).reduce((acc, l) => addReprice(acc, seen.current, l as RawLog), s));
+        update((s) => logs.reduce((acc, l) => addLog(acc, seen.current, l as RawLog), s));
       })
       .catch(() => {
         // The next block retries the same range.
@@ -265,7 +292,7 @@ export function useBlockStream(repricer?: Address): StreamState {
         logsInFlight.current = false;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per polled block
-  }, [mode, block, repricer, client]);
+  }, [mode, block, watchKey, client]);
 
   useEffect(() => () => clearTimeout(flushTimer.current), []);
 

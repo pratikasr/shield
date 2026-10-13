@@ -3,19 +3,15 @@ import {
   AAVE_MONAD_LIQUIDATION,
   DAY,
   HOUR,
-  MIN_ALL_TIME_DAYS,
   applyHead,
   applyPolledBlock,
   averageBlockMs,
   pushWindow,
-  axisUsd,
-  earningsSeries,
   exitLanding,
   formatTvl,
   hourFrom,
   latestTxHashes,
   median,
-  niceTicks,
   parseHead,
   periodTotals,
   protocolCut,
@@ -26,6 +22,17 @@ import {
   usdHeadline,
   type BucketRow,
   type StreamBlock,
+  agoInWords,
+  collateralWords,
+  historyStatus,
+  incomeProgression,
+  rescueItems,
+  shareInWords,
+  sinceLaunch,
+  statsScoreboard,
+  vaultScoreboard,
+  type AnalyticsExitRow,
+  type AnalyticsPositionRow,
 } from "./analytics";
 
 /** 5 Oct 2026 11:47:00 UTC, the fork's chain time when these fixtures were read. */
@@ -104,57 +111,7 @@ describe("earnings totals", () => {
   });
 });
 
-describe("chart series", () => {
-  const data = {
-    hours: [bucket("hour", THIS_HOUR - 2 * HOUR, { premiumToVault: "2000000000000000000" }), bucket("hour", THIS_HOUR, forkHour)],
-    days: [bucket("day", TODAY, forkHour)],
-  };
-
-  it("gives one bar per hour for 24 hours and 7 days, oldest first, with empty hours as zero", () => {
-    const day = earningsSeries(data, "24h", NOW);
-    expect(day.unit).toBe("hour");
-    expect(day.bars).toHaveLength(24);
-    expect(day.bars[23]!.start).toBe(THIS_HOUR);
-    expect(day.bars[23]!.values[2]).toBeCloseTo(0.263655, 9);
-    expect(day.bars[21]!.values[0]).toBe(2);
-    expect(day.bars[22]!.values).toEqual([0, 0, 0]);
-    expect(earningsSeries(data, "7d", NOW).bars).toHaveLength(168);
-  });
-
-  it("gives daily bars for 30 days, and at least a week of days for all time", () => {
-    const month = earningsSeries(data, "30d", NOW);
-    expect(month.unit).toBe("day");
-    expect(month.bars).toHaveLength(30);
-    expect(month.bars[29]!.start).toBe(TODAY);
-    const all = earningsSeries(data, "all", NOW);
-    expect(all.bars).toHaveLength(MIN_ALL_TIME_DAYS);
-    expect(all.bars[MIN_ALL_TIME_DAYS - 1]!.values[1]).toBeCloseTo(7.61182598265e-7, 18);
-    const longer = earningsSeries({ hours: [], days: [bucket("day", TODAY - 20 * DAY), bucket("day", TODAY)] }, "all", NOW);
-    expect(longer.bars).toHaveLength(21);
-    expect(longer.bars[0]!.start).toBe(TODAY - 20 * DAY);
-  });
-});
-
-describe("axis and figures", () => {
-  it("picks a 1, 2 or 5 step for any size, sub-cent included", () => {
-    expect(niceTicks(0.263655)).toEqual({ ticks: [0, 0.1, 0.2, 0.3], top: 0.3, step: 0.1 });
-    const tiny = niceTicks(6.9e-6);
-    expect(tiny.step).toBeCloseTo(2e-6, 15);
-    expect(tiny.top).toBeCloseTo(8e-6, 15);
-    expect(niceTicks(1234).ticks).toEqual([0, 500, 1000, 1500]);
-    expect(niceTicks(4).ticks).toEqual([0, 1, 2, 3, 4]);
-    expect(niceTicks(0)).toEqual({ ticks: [0, 1], top: 1, step: 1 });
-  });
-
-  it("labels axis ticks with the decimals the step needs", () => {
-    expect(axisUsd(0, 0.1)).toBe("$0");
-    expect(axisUsd(0.2, 0.1)).toBe("$0.20");
-    expect(axisUsd(0.000004, 0.000002)).toBe("$0.000004");
-    expect(axisUsd(0.05, 0.05)).toBe("$0.05");
-    expect(axisUsd(1000, 500)).toBe("$1,000");
-    expect(axisUsd(200_000, 100_000)).toBe("$200K");
-  });
-
+describe("figures", () => {
   it("never puts a sub-cent figure in a headline", () => {
     expect(usdHeadline(7.6e-7)).toEqual({ text: "<$0.01", exact: "$0.00000076" });
     expect(usdHeadline(0)).toEqual({ text: "$0.00" });
@@ -296,5 +253,114 @@ describe("live block stream", () => {
       [51, null],
       [50, null],
     ]);
+  });
+});
+
+describe("page shaping", () => {
+  const exit: AnalyticsExitRow = {
+    borrower: "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+    collateral: "0xee8c0e9f1bffb4eb878d8f15f368a02a35481242",
+    repaid: "26365511",
+    seized: "0",
+    savedVsAave: "1186447",
+    healthFactorBefore: "1059000000000000000",
+    healthFactorAfter: "1120000000000000000",
+    flashLoanAmount: "0",
+    blockNumber: "113044400",
+    timestamp: String(NOW - 2 * HOUR - 5),
+    txHash: "0xabc",
+    trigger: 10600,
+    discountBps: 100,
+  };
+  const position = (status: AnalyticsPositionRow["status"], optedInAt: number): AnalyticsPositionRow => ({
+    borrower: "0x1",
+    collateral: "0x2",
+    status,
+    trigger: 10600,
+    healthFactor: "0",
+    premiumPerBlock: "0",
+    premiumPaid: "0",
+    repriceCount: 0,
+    optedInAt: String(optedInAt),
+  });
+  const data = {
+    all: [bucket("all", 0, forkHour)],
+    hours: [bucket("hour", THIS_HOUR, forkHour)],
+    days: [bucket("day", TODAY, forkHour)],
+    Exit: [exit],
+    Position: [position("Unprotected", NOW - 30), position("Protected", NOW - 40 * 60)],
+    launch: [{ timestamp: String(NOW - 6 * DAY - 100) }],
+  };
+
+  it("says times in plain words", () => {
+    expect(agoInWords(NOW - 5, NOW)).toBe("just now");
+    expect(agoInWords(NOW + 30, NOW)).toBe("just now");
+    expect(agoInWords(NOW - 61, NOW)).toBe("1 minute ago");
+    expect(agoInWords(NOW - 40 * 60, NOW)).toBe("40 minutes ago");
+    expect(agoInWords(NOW - 2 * HOUR, NOW)).toBe("2 hours ago");
+    expect(agoInWords(NOW - DAY, NOW)).toBe("1 day ago");
+    expect(agoInWords(NOW - 90 * DAY, NOW)).toBe("3 months ago");
+    expect(agoInWords(0, NOW)).toBeUndefined();
+    expect(sinceLaunch(NOW - 6 * DAY, NOW)).toBe("Since launch, 6 days ago");
+    expect(sinceLaunch(undefined, NOW)).toBe("Since launch");
+  });
+
+  it("puts shares and collateral into words", () => {
+    expect(shareInWords(1000)).toBe("a tenth");
+    expect(shareInWords(1500)).toBe("15%");
+    expect(collateralWords(["ETH"])).toBe("ETH");
+    expect(collateralWords(["ETH", "BTC", "ETH"])).toBe("ETH and BTC");
+    expect(collateralWords([])).toBe("ETH");
+  });
+
+  it("tells an unconfigured, loading, down and answering indexer apart", () => {
+    expect(historyStatus(false, false, false)).toBe("off");
+    expect(historyStatus(true, false, false)).toBe("loading");
+    expect(historyStatus(true, false, true)).toBe("down");
+    expect(historyStatus(true, true, true)).toBe("ok");
+  });
+
+  it("fills the Stats scoreboard from the indexer and the chain", () => {
+    const s = statsScoreboard({ history: "ok", data, exitsOnChain: 1, protectedNow: 1, outOfFuel: 1, now: NOW });
+    expect(s.rescues).toMatchObject({ state: "value", text: "1", when: "The last one 2 hours ago" });
+    expect(s.saved).toMatchObject({ state: "value", text: "$1.19", when: "Less than Aave's liquidators would have taken" });
+    expect(s.protectedNow).toMatchObject({ state: "value", text: "1", when: "The newest one 40 minutes ago" });
+    // Premium to the vault and the treasury, plus the exit discount: 6.85e-6 + 7.6e-7 + 0.263655.
+    expect(s.income).toMatchObject({ state: "value", text: "$0.26", when: "Vault $0.26, treasury $0.00000076. Since launch, 6 days ago" });
+  });
+
+  it("never shows a zero as a fact when the indexer is down: on-chain figures stay, the rest is unknown", () => {
+    const s = statsScoreboard({ history: "down", exitsOnChain: 2, protectedNow: 0, outOfFuel: 1, now: NOW });
+    expect(s.rescues).toMatchObject({ state: "value", text: "2", when: "Counted live on Monad" });
+    expect(s.saved.state).toBe("unknown");
+    expect(s.income.state).toBe("unknown");
+    expect(s.protectedNow).toMatchObject({ state: "value", text: "0", when: "1 more out of fuel" });
+    expect(statsScoreboard({ history: "loading", now: NOW }).saved.state).toBe("loading");
+    const behind = statsScoreboard({ history: "ok", data: { ...data, all: [bucket("all", 0)], Exit: [] }, exitsOnChain: 2, now: NOW });
+    expect(behind.saved).toMatchObject({ text: "$0.00", when: "Less than Aave's liquidators would have taken. History is still counting the newest rescue" });
+    expect(statsScoreboard({ history: "off", now: NOW }).rescues.state).toBe("unknown");
+  });
+
+  it("fills the vault's three numbers from the contract, with times from the indexer", () => {
+    const v = { gross: 5011.87, idle: 4985.24, collateralHeld: 26.63, exitsExecuted: 1, premiumEarned: 0.0000069, exitGains: 0.263655 };
+    const s = vaultScoreboard({ vault: v, lastExitSec: NOW - 2 * HOUR, launchSec: NOW - 6 * DAY, collateral: "ETH", now: NOW });
+    expect(s.balance).toMatchObject({ text: "$5,011.87", when: "$4,985.24 in USDC and $26.63 in ETH from rescues" });
+    expect(s.rescues).toMatchObject({ text: "1", when: "The last one 2 hours ago" });
+    expect(s.earned).toMatchObject({ text: "$0.26", when: "Since launch, 6 days ago" });
+    const fresh = vaultScoreboard({ vault: { ...v, collateralHeld: 0, exitsExecuted: 0, exitGains: 0 }, collateral: "ETH", now: NOW });
+    expect(fresh.balance).toMatchObject({ when: "All of it in USDC right now" });
+    expect(fresh.rescues).toMatchObject({ text: "0", when: "None yet" });
+    expect(fresh.earned).toMatchObject({ text: "<$0.01", exact: "$0.0000069", when: "Since launch" });
+    expect(vaultScoreboard({ unreachable: true, collateral: "ETH", now: NOW }).balance.state).toBe("unknown");
+    expect(vaultScoreboard({ collateral: "ETH", now: NOW }).earned.state).toBe("loading");
+  });
+
+  it("gives income as a progression over four windows and exits as plain numbers", () => {
+    const p = incomeProgression(data, NOW);
+    expect(p.map((x) => x.label)).toEqual(["Last 24 hours", "Last 7 days", "Last 30 days", "Since launch"]);
+    expect(p.every((x) => Math.abs(x.value - 0.2636626) < 1e-6)).toBe(true);
+    const [r] = rescueItems([exit], NOW);
+    expect(r).toMatchObject({ repaidUsd: 26.365511, savedUsd: 1.186447, when: "2 hours ago", block: 113044400 });
+    expect(r!.tookUsd).toBeCloseTo(26.62916611, 6);
   });
 });

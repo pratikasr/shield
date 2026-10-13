@@ -1,11 +1,11 @@
 /**
- * Analytics data: the Envio queries the public analytics page runs, and the pure shaping it needs (period totals from
- * earnings buckets, chart series, axis scales, the live block stream). No React and no network here, so every rule is
- * unit tested (analytics.test.ts) and the landing page can import the constants on the server.
+ * Stats and vault data: the Envio queries the Stats and vault pages run, and the pure shaping they need (period totals
+ * from earnings buckets, the scoreboards, plain-words times, the live block stream). No React and no network here, so
+ * every rule is unit tested (analytics.test.ts) and the landing page can import the constants on the server.
  */
 import type { ExitRow } from "./envio";
 import { BLOCKS_PER_YEAR } from "./economics";
-import { formatUsd, toNumber } from "./format";
+import { formatBps, formatUsd, toNumber } from "./format";
 
 // ------------------------------------------------------------------------------------------------ periods
 
@@ -26,8 +26,6 @@ export const HOUR = 3600;
 export const DAY = 86_400;
 /** Hour buckets the page fetches: enough for the 7-day view. */
 export const HOURS_FETCHED = 7 * 24;
-/** "All time" shows at least this many days, so one day of history reads as a bar on a timeline, not a block. */
-export const MIN_ALL_TIME_DAYS = 7;
 
 // ------------------------------------------------------------------------------------------------ queries
 
@@ -50,7 +48,37 @@ export const ANALYTICS_QUERY = `
     }
     Exit(order_by: { blockNumber: desc }, limit: 20) { ${EXIT_FIELDS} }
     recentReprices: Reprice(order_by: { blockNumber: desc }, limit: 40) { txHash blockNumber }
+    launch: VaultFlow(order_by: { blockNumber: asc }, limit: 1) { timestamp }
   }`;
+
+/**
+ * What the vault page asks the indexer: the latest rescues the vault paid for, the latest money in and out, and its
+ * first flow (the protocol's seed deposit), which dates the launch. Every count and dollar figure on the page itself is
+ * read live from the vault contract; only times and the lists come from here.
+ */
+export const VAULT_PAGE_QUERY = `
+  query VaultPage {
+    Exit(order_by: { blockNumber: desc }, limit: 10) { ${EXIT_FIELDS} }
+    VaultFlow(order_by: { blockNumber: desc }, limit: 8) { kind account assets collateral collateralAmount blockNumber timestamp txHash }
+    launch: VaultFlow(order_by: { blockNumber: asc }, limit: 1) { timestamp }
+  }`;
+
+export interface VaultFlowItem {
+  kind: "Deposit" | "Withdraw" | "Premium" | "ExitFunded" | "CollateralReceived" | "Unwound";
+  account: string | null;
+  assets: string;
+  collateral: string | null;
+  collateralAmount: string;
+  blockNumber: string;
+  timestamp: string;
+  txHash: string;
+}
+
+export interface VaultPageData {
+  Exit: AnalyticsExitRow[];
+  VaultFlow: VaultFlowItem[];
+  launch: { timestamp: string }[];
+}
 
 /** The indexer's progress, asked separately so an indexer without `_meta` still serves the page. */
 export const INDEXER_META_QUERY = `query Meta { _meta { progressBlock isReady } }`;
@@ -97,6 +125,8 @@ export interface AnalyticsData {
   Position: AnalyticsPositionRow[];
   Exit: AnalyticsExitRow[];
   recentReprices: { txHash: string; blockNumber: string }[];
+  /** The vault's first flow, the protocol's seed deposit: when Shield launched. Empty before it. */
+  launch?: { timestamp: string }[];
 }
 
 export interface IndexerMeta {
@@ -224,89 +254,7 @@ export function periodTotals(data: Pick<AnalyticsData, "all" | "hours" | "days">
   return sumBuckets(rows.filter((r) => Number(r.start) >= from));
 }
 
-// ------------------------------------------------------------------------------------------------ chart series
-
-export const SERIES = [
-  { key: "vaultPremium", label: "Premiums to the vault" },
-  { key: "protocolPremium", label: "Premiums to the treasury" },
-  { key: "exitDiscount", label: "Exit discounts to the vault" },
-] as const;
-
-export interface Bar {
-  /** Bucket start, unix seconds (UTC). */
-  start: number;
-  /** One value per SERIES entry, in dollars. */
-  values: [number, number, number];
-}
-
-export interface EarningsSeries {
-  unit: "hour" | "day";
-  bars: Bar[];
-}
-
-function barOf(start: number, row?: BucketRow): Bar {
-  return {
-    start,
-    values: row
-      ? [toNumber(big(row.premiumToVault), 18), toNumber(big(row.premiumToProtocol), 18), toNumber(big(row.exitDiscount), 6)]
-      : [0, 0, 0],
-  };
-}
-
-/**
- * One bar per hour or day of the period, oldest first, with empty slots for hours or days without earnings so the
- * time axis is continuous. "All time" runs from the first day bucket to today, and spans at least MIN_ALL_TIME_DAYS.
- */
-export function earningsSeries(data: Pick<AnalyticsData, "hours" | "days">, period: Period, nowSec: number): EarningsSeries {
-  const unit = periodInfo(period).unit;
-  const step = unit === "hour" ? HOUR : DAY;
-  const rows = unit === "hour" ? data.hours : data.days;
-  const byStart = new Map(rows.map((r) => [Number(r.start), r]));
-  const last = Math.floor(nowSec / step) * step;
-  let first: number;
-  if (period === "all") {
-    const starts = rows.map((r) => Number(r.start)).filter((s) => Number.isFinite(s) && s <= last);
-    const earliest = starts.length ? Math.min(...starts) : last;
-    first = Math.min(earliest, last - (MIN_ALL_TIME_DAYS - 1) * DAY);
-  } else {
-    first = periodFrom(period, nowSec);
-  }
-  const bars: Bar[] = [];
-  for (let s = first; s <= last; s += step) bars.push(barOf(s, byStart.get(s)));
-  return { unit, bars };
-}
-
-export function barTotal(b: Bar): number {
-  return b.values[0] + b.values[1] + b.values[2];
-}
-
-// ------------------------------------------------------------------------------------------------ axis and numbers
-
-/**
- * A y-axis for values from 0 to `max`: a "nice" step (1, 2 or 5 times a power of ten) and the ticks up to the first
- * multiple of the step at or above `max`. Works the same for sub-cent maxima as for thousands.
- */
-export function niceTicks(max: number, count = 4): { ticks: number[]; top: number; step: number } {
-  if (!(max > 0) || !Number.isFinite(max)) return { ticks: [0, 1], top: 1, step: 1 };
-  const raw = max / count;
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const norm = raw / mag;
-  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
-  const n = Math.max(1, Math.ceil(max / step - 1e-9));
-  const ticks = Array.from({ length: n + 1 }, (_, i) => Number((i * step).toPrecision(12)));
-  return { ticks, top: ticks[ticks.length - 1]!, step };
-}
-
-/** An axis label: as many decimals as the step needs (at least two below a dollar), none for whole-dollar steps. */
-export function axisUsd(value: number, step: number): string {
-  if (value === 0) return "$0";
-  if (step >= 1) {
-    if (Math.abs(value) >= 100_000) return formatUsd(value);
-    return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-  }
-  const decimals = Math.min(Math.max(2, Math.ceil(-Math.log10(step) - 1e-9)), 10);
-  return `$${value.toFixed(decimals)}`;
-}
+// ------------------------------------------------------------------------------------------------ numbers
 
 /** A headline dollar figure. Below one cent the headline says "<$0.01" and `exact` carries the figure for a hint. */
 export function usdHeadline(value: number): { text: string; exact?: string } {
@@ -515,18 +463,30 @@ export const AAVE_MONAD_LIQUIDATION = {
   shieldDiscountPct: 1,
 } as const;
 
-export type LenderStatus = "Live" | "Coming soon";
+/** Live: Shield works with it today. Planned: an idea on the roadmap, with nothing built yet. */
+export type LenderStatus = "Live" | "Planned";
+
+/** How a lender's status reads on a page. */
+export const LENDER_STATUS_TEXT: Record<LenderStatus, string> = { Live: "Working now", Planned: "Planned, not built yet" };
 
 /**
  * Lending protocols on Monad mainnet by DefiLlama's Monad TVL. Source: docs/TECH-DECISIONS.md, Verified facts
- * (5 Oct 2026), https://api.llama.fi/protocols filtered to chain Monad, category Lending.
+ * (5 Oct 2026), https://api.llama.fi/protocols filtered to chain Monad, category Lending. Only Aave V3 is built; the
+ * others would each need their own exit path and fork tests, and nothing for them exists yet.
  */
 export const MONAD_LENDERS: { name: string; initials: string; status: LenderStatus; tvlUsd: number }[] = [
   { name: "Aave V3", initials: "AV", status: "Live", tvlUsd: 324.0e6 },
-  { name: "Euler V2", initials: "EU", status: "Coming soon", tvlUsd: 258.6e6 },
-  { name: "Morpho Blue", initials: "MB", status: "Coming soon", tvlUsd: 192.7e6 },
-  { name: "Curvance", initials: "CU", status: "Coming soon", tvlUsd: 128.7e6 },
-  { name: "Neverland", initials: "NE", status: "Coming soon", tvlUsd: 8.5e6 },
+  { name: "Euler V2", initials: "EU", status: "Planned", tvlUsd: 258.6e6 },
+  { name: "Morpho Blue", initials: "MB", status: "Planned", tvlUsd: 192.7e6 },
+  { name: "Curvance", initials: "CU", status: "Planned", tvlUsd: 128.7e6 },
+  { name: "Neverland", initials: "NE", status: "Planned", tvlUsd: 8.5e6 },
+];
+
+/** Shield's own next steps on Aave, from the decision records. None is built yet. */
+export const SHIELD_NEXT_STEPS: { name: string; why: string; adr: string }[] = [
+  { name: "cbBTC collateral", why: "Listed but switched off until Monad has a swap route from cbBTC to USDC.", adr: "ADR-034" },
+  { name: "eMode loans", why: "Shield covers loans outside Aave's eMode only, for now.", adr: "ADR-016" },
+  { name: "Outside vault deposits", why: "Only the treasury adds money today. Opening the vault is a list change, not a new contract.", adr: "ADR-039" },
 ];
 
 /** The API the figures were read from (the site's pages sit behind a bot check, so the API is the checkable source). */
@@ -536,4 +496,218 @@ export const LENDERS_SOURCE = { name: "DefiLlama", date: "5 Oct 2026", url: "htt
 export function formatTvl(usd: number): string {
   if (usd >= 1e9) return `$${(usd / 1e9).toFixed(1)}B`;
   return `$${(usd / 1e6).toFixed(1)}M`;
+}
+
+// ------------------------------------------------------------------------------------------------ page shaping
+
+/** A time in plain words: "just now", "1 minute ago", "40 minutes ago", "2 hours ago", "6 days ago", "3 months ago". */
+export function agoInWords(unixSeconds: number, nowSec: number): string | undefined {
+  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0 || !Number.isFinite(nowSec)) return undefined;
+  const s = Math.max(0, nowSec - unixSeconds);
+  const ago = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"} ago`;
+  if (s < 60) return "just now";
+  if (s < HOUR) return ago(Math.floor(s / 60), "minute");
+  if (s < DAY) return ago(Math.floor(s / HOUR), "hour");
+  if (s < 60 * DAY) return ago(Math.floor(s / DAY), "day");
+  return ago(Math.floor(s / (30 * DAY)), "month");
+}
+
+/** "Since launch, 6 days ago", or "Since launch" while the launch time is unknown. */
+export function sinceLaunch(launchSec: number | undefined, nowSec: number): string {
+  const ago = launchSec ? agoInWords(launchSec, nowSec) : undefined;
+  return ago ? `Since launch, ${ago}` : "Since launch";
+}
+
+/** A share for a sentence: 1000 bps is "a tenth"; a share without a common word is a percent. */
+export function shareInWords(bps: number): string {
+  const words: Record<number, string> = { 500: "a twentieth", 1000: "a tenth", 2000: "a fifth", 2500: "a quarter", 5000: "half" };
+  return words[bps] ?? formatBps(bps);
+}
+
+/** Collateral names for a sentence, from the registry's enabled assets: "ETH", or "ETH and BTC". */
+export function collateralWords(names: readonly string[]): string {
+  const unique = [...new Set(names.filter(Boolean))];
+  if (!unique.length) return "ETH";
+  return unique.length === 1 ? unique[0]! : `${unique.slice(0, -1).join(", ")} and ${unique.at(-1)}`;
+}
+
+/**
+ * Where the indexer's history stands: not configured in this build, loading its first answer, down with nothing to
+ * show, or answering (a last good answer still counts while a refetch fails; the page says so separately).
+ */
+export type HistoryStatus = "off" | "loading" | "down" | "ok";
+
+export function historyStatus(configured: boolean, hasData: boolean, failing: boolean): HistoryStatus {
+  if (!configured) return "off";
+  if (hasData) return "ok";
+  return failing ? "down" : "loading";
+}
+
+/** The line under a figure that needs the indexer while it has nothing to give. */
+export function offlineWhen(status: HistoryStatus): string {
+  return status === "off" ? "This build has no history service, so this can't be counted." : "The history service isn't answering. This fills in when it's back.";
+}
+
+/**
+ * One big number on a scoreboard. "unknown" is a figure the page cannot know right now (the indexer is down): it
+ * shows a question mark and why, never a zero that reads as a fact.
+ */
+export type Figure =
+  | { state: "value"; value: number; text: string; exact?: string; when: string; money: boolean }
+  | { state: "loading" }
+  | { state: "unknown"; when: string };
+
+const LOADING: Figure = { state: "loading" };
+
+function moneyFigure(value: number, when: string): Figure {
+  const h = usdHeadline(value);
+  return { state: "value", value, text: h.text, exact: h.exact, when, money: true };
+}
+
+function countFigure(value: number, when: string): Figure {
+  return { state: "value", value, text: value.toLocaleString("en-US"), when, money: false };
+}
+
+export interface StatsInput {
+  history: HistoryStatus;
+  data?: Pick<AnalyticsData, "all" | "Exit" | "Position"> & { launch?: { timestamp: string }[] };
+  /** Exits the vault has taken part in, read live from the vault contract: every rescue goes through it. */
+  exitsOnChain?: number;
+  /** Paid-up covers, read live from the registry and Aave. */
+  protectedNow?: number;
+  /** Active covers whose prepaid balance ran out. */
+  outOfFuel?: number;
+  now: number;
+}
+
+export interface StatsScoreboard {
+  rescues: Figure;
+  saved: Figure;
+  protectedNow: Figure;
+  income: Figure;
+}
+
+/** The Stats page's four numbers: rescues, money saved for borrowers, loans protected now and protocol income. */
+export function statsScoreboard(i: StatsInput): StatsScoreboard {
+  const ok = i.history === "ok" && i.data !== undefined;
+  const t = ok ? totalsUsd(sumBuckets(i.data!.all.slice(0, 1))) : undefined;
+  const missing: Figure = i.history === "off" || i.history === "down" ? { state: "unknown", when: offlineWhen(i.history) } : LOADING;
+
+  const lastExit = ok ? i.data!.Exit[0] : undefined;
+  const lastAgo = lastExit ? agoInWords(Number(lastExit.timestamp), i.now) : undefined;
+  const exits = i.exitsOnChain ?? t?.exits;
+  const rescues =
+    exits === undefined ? missing : countFigure(exits, exits === 0 ? "None needed yet" : lastAgo ? `The last one ${lastAgo}` : "Counted live on Monad");
+
+  // The chain's count leads; the indexer can trail it by a rescue or two.
+  const lagging = t !== undefined && exits !== undefined && t.exits < exits;
+  const saved = !t
+    ? missing
+    : moneyFigure(
+        t.savedVsAave,
+        exits === 0 ? "Nobody has needed a rescue yet" : `Less than Aave's liquidators would have taken${lagging ? ". History is still counting the newest rescue" : ""}`,
+      );
+
+  let protectedNow: Figure = LOADING;
+  if (i.protectedNow !== undefined) {
+    const newest = ok
+      ? i.data!.Position.filter((p) => p.status === "Protected").reduce((m, p) => Math.max(m, Number(p.optedInAt) || 0), 0)
+      : 0;
+    const newestAgo = newest ? agoInWords(newest, i.now) : undefined;
+    const fuel = i.outOfFuel ? `${i.outOfFuel} more out of fuel` : undefined;
+    protectedNow = countFigure(
+      i.protectedNow,
+      i.protectedNow === 0 ? (fuel ?? "None right now") : newestAgo ? `The newest one ${newestAgo}` : (fuel ?? "Read live from Monad"),
+    );
+  }
+
+  const launch = ok ? Number(i.data!.launch?.[0]?.timestamp ?? 0) || undefined : undefined;
+  const income = !t
+    ? missing
+    : moneyFigure(t.totalIncome, `Vault ${formatUsd(t.vaultIncome)}, treasury ${formatUsd(t.premiumToProtocol)}. ${sinceLaunch(launch, i.now)}`);
+
+  return { rescues, saved, protectedNow, income };
+}
+
+export interface VaultFigures {
+  /** Everything the vault holds: USDC (with fuel payments owed to it) and collateral from rescues at Aave's price. */
+  gross: number;
+  /** USDC the vault can pay out now, including fuel payments not yet swept in. */
+  idle: number;
+  collateralHeld: number;
+  exitsExecuted: number;
+  /** The vault's share of premiums charged so far, swept in or not. */
+  premiumEarned: number;
+  /** Collateral value received at exits above the USDC the vault paid into them. */
+  exitGains: number;
+}
+
+export interface VaultInput {
+  vault?: VaultFigures;
+  /** The vault contract did not answer. */
+  unreachable?: boolean;
+  lastExitSec?: number;
+  launchSec?: number;
+  /** "ETH": what the vault takes at a rescue. */
+  collateral: string;
+  now: number;
+}
+
+/**
+ * The vault page's three numbers, all read live from the vault contract; only the times come from the indexer. The
+ * balance is everything the vault holds, split into USDC and collateral; what a share is worth (less rescue gains still
+ * unlocking) is a detail for the nerd drawer.
+ */
+export function vaultScoreboard(i: VaultInput): { balance: Figure; rescues: Figure; earned: Figure } {
+  if (!i.vault) {
+    const f: Figure = i.unreachable ? { state: "unknown", when: "Monad isn't answering right now. Trying again." } : LOADING;
+    return { balance: f, rescues: f, earned: f };
+  }
+  const v = i.vault;
+  const lastAgo = i.lastExitSec ? agoInWords(i.lastExitSec, i.now) : undefined;
+  return {
+    balance: moneyFigure(
+      v.gross,
+      v.collateralHeld >= 0.01
+        ? `${formatUsd(v.idle)} in USDC and ${formatUsd(v.collateralHeld)} in ${i.collateral} from rescues`
+        : "All of it in USDC right now",
+    ),
+    rescues: countFigure(v.exitsExecuted, v.exitsExecuted === 0 ? "None yet" : lastAgo ? `The last one ${lastAgo}` : "Counted live on Monad"),
+    earned: moneyFigure(v.premiumEarned + v.exitGains, sinceLaunch(i.launchSec, i.now)),
+  };
+}
+
+/** Protocol income over four windows, shortest first: a big-number progression instead of a chart. */
+export function incomeProgression(data: Pick<AnalyticsData, "all" | "hours" | "days">, nowSec: number): { period: Period; label: string; value: number }[] {
+  const labels: Record<Period, string> = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", all: "Since launch" };
+  return PERIODS.map((p) => ({ period: p.id, label: labels[p.id], value: totalsUsd(periodTotals(data, p.id, nowSec)).totalIncome }));
+}
+
+export interface RescueItem {
+  txHash: string;
+  borrower: string;
+  collateral?: string;
+  block: number;
+  repaidUsd: number;
+  /** Collateral value the vault took: the repaid amount plus the discount. */
+  tookUsd: number;
+  savedUsd: number;
+  when?: string;
+}
+
+/** Exits as plain sentences' numbers, newest first as the indexer returns them. */
+export function rescueItems(rows: readonly AnalyticsExitRow[], nowSec: number): RescueItem[] {
+  return rows.map((e) => {
+    const repaidUsd = toNumber(big(e.repaid), 6);
+    return {
+      txHash: e.txHash,
+      borrower: e.borrower,
+      collateral: e.collateral,
+      block: Number(e.blockNumber),
+      repaidUsd,
+      tookUsd: repaidUsd * (1 + (Number(e.discountBps) || 0) / 10_000),
+      savedUsd: toNumber(big(e.savedVsAave), 6),
+      when: e.timestamp ? agoInWords(Number(e.timestamp), nowSec) : undefined,
+    };
+  });
 }
