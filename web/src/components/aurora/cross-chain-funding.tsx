@@ -86,7 +86,7 @@ function AddressLine({ value, label, onMonad }: { value: string; label: string; 
   };
   return (
     <div className="flex items-start gap-1">
-      <code className="min-w-0 flex-1 break-all rounded-md bg-raised px-2.5 py-2 font-mono text-[0.8125rem] leading-relaxed text-foreground">{value}</code>
+      <code className="min-w-0 flex-1 break-all rounded-xl border-2 border-ink/30 bg-cloud px-3 py-2 font-mono text-[14px] font-semibold leading-relaxed text-ink">{value}</code>
       <button
         type="button"
         onClick={copy}
@@ -159,22 +159,22 @@ function DepositAddressCard({
   const premium = kind === "premium";
   const action = premium ? "Move into premium" : "Move into the vault";
   return (
-    <section className="rounded-lg border p-4" aria-labelledby={`${kind}-deposit-heading`}>
-      <h3 id={`${kind}-deposit-heading`} className="flex items-center gap-1.5 text-sm font-medium">
+    <section className="c-panel" aria-labelledby={`${kind}-deposit-heading`}>
+      <h3 id={`${kind}-deposit-heading`} className="flex items-center gap-1.5 font-display text-[19px] leading-tight">
         <TokenIcon symbol="MON" size={16} />
         {premium ? "Your deposit address on Monad" : "Treasury deposit address on Monad"}
       </h3>
       <div className="mt-2.5">{address ? <AddressLine value={address} label="deposit address" onMonad /> : <Skeleton className="h-[3.75rem] w-full" />}</div>
-      <p className="mt-2.5 text-[0.8125rem] text-muted-foreground">
+      <p className="mt-2.5 text-[14.5px] text-ink-soft">
         {premium
           ? "USDC that reaches this address, sent on Monad or delivered by Aurora Intents from another chain, becomes your prepaid premium."
           : `USDC that reaches this address, sent on Monad or delivered by Aurora Intents from another chain, is deposited into the vault with the shares going to the treasury${config ? `, ${truncateHex(config.treasury)}` : ""}.`}{" "}
-        <span className="text-foreground">Send only USDC on Monad to it directly{auroraAppKey ? "; from another chain, use an Aurora deposit address below" : ""}.</span>
+        <span className="font-semibold text-ink">Send only USDC on Monad to it directly{auroraAppKey ? "; from another chain, use an Aurora deposit address below" : ""}.</span>
       </p>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t-[1.5px] border-dashed border-ink/25 pt-3">
         <div>
-          <p className="text-[0.8125rem] text-muted-foreground">Waiting here</p>
-          <div className="reading font-semibold" aria-live="polite">
+          <p className="text-[14.5px] text-ink-soft">Waiting here</p>
+          <div className="text-[20px] font-extrabold num" aria-live="polite">
             {waitingUnits === undefined ? <Skeleton className="h-5 w-16" /> : formatUsd(toNumber(waiting, 6))}
           </div>
         </div>
@@ -192,7 +192,7 @@ function DepositAddressCard({
           </Button>
         )}
       </div>
-      <p className="mt-2 text-[0.75rem] text-muted-foreground">
+      <p className="mt-2 text-[13.5px] text-ink-soft">
         Shield&rsquo;s keeper also checks deposit addresses and moves what it finds on its own; anyone may run the move, and it only ever credits{" "}
         {premium ? "this borrower" : "the treasury"}.
       </p>
@@ -203,8 +203,8 @@ function DepositAddressCard({
 
 function NotConfigured() {
   return (
-    <section className="rounded-lg border border-dashed p-4 text-[0.8125rem] text-muted-foreground" aria-label="From another chain">
-      <p className="font-medium text-foreground">Cross-chain transfers are not configured on this build</p>
+    <section className="rounded-2xl border-2 border-dashed border-ink bg-heads-tint p-4 text-[14.5px] text-ink" aria-label="From another chain">
+      <p className="font-bold">Cross-chain transfers are not configured on this build</p>
       <p className="mt-1">
         It has no Aurora Intents app key, so it cannot quote a transfer from another chain. Sending USDC on Monad to the deposit address above still works.
       </p>
@@ -301,13 +301,13 @@ function StatusStrip({ steps, stage }: { steps: string[]; stage: StageView }) {
 }
 
 const TONE_BOX = {
-  progress: "bg-raised",
-  action: "bg-raised",
-  done: "bg-safe-soft",
-  caution: "border border-caution/40 bg-caution-soft",
-  danger: "border border-danger/30 bg-danger-soft",
+  progress: "bg-sky-2",
+  action: "bg-grape-tint",
+  done: "bg-chill-tint",
+  caution: "bg-heads-tint",
+  danger: "bg-lava-tint",
 } as const;
-const TONE_TITLE = { progress: "text-foreground", action: "text-foreground", done: "text-safe", caution: "text-caution", danger: "text-danger" } as const;
+const TONE_TITLE = { progress: "text-ink", action: "text-ink", done: "text-ink", caution: "text-ink", danger: "text-ink" } as const;
 
 /** One accepted quote: what to send and where, then Aurora's progress through to USDC on Monad. */
 function ActiveTransfer({ appKey, transfer, waitingUnits, onReset }: { appKey: string; transfer: AuroraTransfer; waitingUnits: bigint; onReset: () => void }) {
@@ -325,9 +325,9 @@ function ActiveTransfer({ appKey, transfer, waitingUnits, onReset }: { appKey: s
   const where = transfer.kind === "premium" ? "then into your premium" : "then into the vault";
 
   return (
-    <section className="rounded-lg border" aria-label="Transfer from another chain">
-      <div className="border-b px-4 py-3">
-        <p className="text-sm font-medium">
+    <section className="overflow-hidden rounded-2xl border-[2.5px] border-ink bg-cloud" aria-label="Transfer from another chain">
+      <div className="border-b-2 border-ink bg-sky-2 px-4 py-3">
+        <p className="font-display text-[19px] leading-tight">
           {awaitingDeposit ? `Send exactly ${send} on ${transfer.chainName}` : `${send} from ${transfer.chainName}`}
         </p>
         <p className="mt-0.5 text-[0.8125rem] text-muted-foreground num">
@@ -337,7 +337,7 @@ function ActiveTransfer({ appKey, transfer, waitingUnits, onReset }: { appKey: s
       </div>
 
       {awaitingDeposit && (
-        <div className="grid gap-3 border-b px-4 py-4">
+        <div className="grid gap-3 border-b-2 border-ink px-4 py-4">
           <dl className="grid grid-cols-2 gap-3 text-[0.8125rem]">
             <div>
               <dt className="text-muted-foreground">Sending from chain</dt>
@@ -352,7 +352,7 @@ function ActiveTransfer({ appKey, transfer, waitingUnits, onReset }: { appKey: s
             </div>
             <div className="col-span-2">
               <dt className="text-muted-foreground">Amount to send</dt>
-              <dd className="reading mt-0.5 text-lg font-semibold">{send}</dd>
+              <dd className="mt-0.5 text-[22px] font-extrabold num">{send}</dd>
             </div>
             <div className="col-span-2">
               <dt className="mb-1 text-muted-foreground">Aurora deposit address on {transfer.chainName}</dt>
@@ -362,8 +362,8 @@ function ActiveTransfer({ appKey, transfer, waitingUnits, onReset }: { appKey: s
               </dd>
             </div>
           </dl>
-          <div className="rounded-lg border border-caution/40 bg-caution-soft p-3 text-[0.8125rem]" role="note">
-            <p className="font-medium">Transfer requirements</p>
+          <div className="rounded-xl border-2 border-ink bg-heads-tint p-3 text-[14.5px]" role="note">
+            <p className="font-bold">Transfer requirements</p>
             <p className="mt-0.5">
               Send only {transfer.symbol} from {transfer.chainName} to this address, exactly {send}
               {closeText ? `, before ${closeText}` : ""}. Another token or another network may be lost. Less than {send} is refunded after that time; more is
@@ -376,8 +376,8 @@ function ActiveTransfer({ appKey, transfer, waitingUnits, onReset }: { appKey: s
 
       <div className="grid gap-3 px-4 py-4">
         <StatusStrip steps={steps} stage={stage} />
-        <div className={cn("rounded-lg p-3 text-[0.8125rem]", TONE_BOX[stage.tone])} role={stage.tone === "danger" ? "alert" : "status"} aria-live="polite">
-          <p className={cn("font-medium", TONE_TITLE[stage.tone])}>{stage.title}</p>
+        <div className={cn("rounded-xl border-2 border-ink p-3 text-[14.5px]", TONE_BOX[stage.tone])} role={stage.tone === "danger" ? "alert" : "status"} aria-live="polite">
+          <p className={cn("font-bold", TONE_TITLE[stage.tone])}>{stage.title}</p>
           <p className="mt-0.5 text-muted-foreground">{stage.body}</p>
         </div>
         {!awaitingDeposit && (
@@ -419,11 +419,11 @@ function ActiveTransfer({ appKey, transfer, waitingUnits, onReset }: { appKey: s
           </p>
         )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
-          <Button size="sm" variant="outline" className="bg-card" onClick={onReset}>
+          <Button size="sm" variant="white" onClick={onReset}>
             {isTerminal(report?.status) || stage.final ? "Start a new transfer" : "Use a different amount or chain"}
           </Button>
           {report?.status === "FAILED" && (
-            <a href={AURORA_SUPPORT} target="_blank" rel="noreferrer" className="text-[0.8125rem] font-medium text-brand underline-offset-4 hover:underline">
+            <a href={AURORA_SUPPORT} target="_blank" rel="noreferrer" className="c-link inline-flex min-h-11 items-center text-[14.5px]">
               Report it to Aurora support
             </a>
           )}
@@ -507,7 +507,7 @@ function AuroraFlow({
 
   const header = (
     <div>
-      <h3 id={`${kind}-aurora-heading`} className="text-sm font-medium">
+      <h3 id={`${kind}-aurora-heading`} className="font-display text-[19px] leading-tight">
         Send from another chain
       </h3>
       <p className="mt-0.5 text-[0.8125rem] text-muted-foreground">
@@ -532,7 +532,7 @@ function AuroraFlow({
         {header}
         <div role="alert" className="text-[0.8125rem] text-danger">
           {tokens.error instanceof AuroraApiError ? tokens.error.message : "Aurora listed no stablecoins on the chains Shield offers."}
-          <Button size="sm" variant="outline" className="ml-0 mt-2 block bg-card" onClick={() => void tokens.refetch()}>
+          <Button size="sm" variant="white" className="mt-2 flex" onClick={() => void tokens.refetch()}>
             Retry
           </Button>
         </div>
@@ -563,7 +563,7 @@ function AuroraFlow({
               setChainCode(e.target.value);
               setQuoteError(undefined);
             }}
-            className="h-11 w-full appearance-none rounded-lg border border-input bg-card px-3 pr-9 text-[0.9375rem] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            className="c-field appearance-none pr-9 text-[16px]"
           >
             {chains.map((c) => (
               <option key={c.code} value={c.code}>
@@ -609,8 +609,8 @@ function AuroraFlow({
           Aurora quotes what arrives on Monad, after its fees, before you send anything.
         </AmountHint>
       </div>
-      <Button className="h-11 w-full" disabled={!check.ok || quoting || !recipient} onClick={() => void quote()}>
-        {quoting ? "Asking Aurora for a quote" : `Get a deposit address on ${chain.name}`}
+      <Button size="big" disabled={!check.ok || !recipient} loading={quoting} loadingText="Asking Aurora for a quote" onClick={() => void quote()}>
+        {`Get a deposit address on ${chain.name}`}
       </Button>
       {quoteError && (
         <p className="text-[0.8125rem] text-danger" role="alert">

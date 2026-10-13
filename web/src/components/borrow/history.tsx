@@ -2,15 +2,10 @@
 
 import type { Address } from "viem";
 import { HashLink } from "@/components/data/hash-link";
-import { Panel } from "@/components/data/stat";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BORROWER_HISTORY, historyError, type ExitRow, type PositionRow, type RepriceRow } from "@/lib/envio";
-import { envioUrl } from "@/lib/env";
+import { BORROWER_HISTORY, type ExitRow, type PositionRow, type RepriceRow } from "@/lib/envio";
 import type { ChainExit } from "@/hooks/useChainExit";
 import { useIndexerQuery } from "@/hooks/useIndexer";
-import { BLOCKS_PER_YEAR } from "@/lib/economics";
-import { formatHf, formatUsd, formatUsdFixed, timeAgo, toNumber } from "@/lib/format";
+import { formatHf, formatUsd, timeAgo, toNumber } from "@/lib/format";
 
 export interface BorrowerHistory {
   Position: PositionRow[];
@@ -48,41 +43,6 @@ export function exitRows(history?: BorrowerHistory, chainExit?: ChainExit | null
 
 const th = "px-3 pb-2.5 font-medium first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6";
 const td = "px-3 py-3 first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6";
-
-function Empty({ children, tone }: { children: React.ReactNode; tone?: "caution" }) {
-  return (
-    <p className={tone === "caution" ? "px-5 py-6 text-center text-sm text-caution sm:px-6" : "px-5 py-8 text-center text-sm text-muted-foreground sm:px-6"} role={tone ? "status" : undefined}>
-      {children}
-    </p>
-  );
-}
-
-/**
- * The health-factor history panel while its code or data loads: the same title row, readout line, chart heights and
- * legend as the loaded panel, so nothing below it moves when it arrives. `bare` is the body alone, inside the panel.
- */
-export function HfHistorySkeleton({ bare }: { bare?: boolean }) {
-  const body = (
-    <div aria-busy="true" aria-label="Loading the health factor history">
-      <Skeleton className="h-4 w-full max-w-md" />
-      <Skeleton className="mt-[1.875rem] h-[216px] w-full sm:mt-[1.125rem]" />
-      <Skeleton className="mt-2 h-[124px] w-full" />
-      <Skeleton className="mt-4 h-5 w-64" />
-      <Skeleton className="mt-7 h-5 w-44" />
-    </div>
-  );
-  if (bare) return body;
-  return (
-    <Panel
-      title="Health factor history"
-      labelledBy="hf-history-heading"
-      description="From each reprice the Envio indexer recorded"
-      action={<Skeleton className="h-8 w-[17rem] rounded-lg" />}
-    >
-      {body}
-    </Panel>
-  );
-}
 
 /** The saved figure's column header, the same words everywhere an exit is listed. */
 export const SAVED_LABEL = "Saved against Aave's bonus on the same repayment";
@@ -125,119 +85,5 @@ export function ExitTable({ rows, borrowerColumn }: { rows: ExitRow[]; borrowerC
         </tbody>
       </table>
     </div>
-  );
-}
-
-function RepriceTable({ rows }: { rows: RepriceRow[] }) {
-  return (
-    <div className="relative overflow-x-auto">
-      <table className="w-full min-w-[38rem] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
-        <thead>
-          <tr className="border-b text-[0.75rem] text-muted-foreground">
-            <th scope="col" className={th}>Block</th>
-            <th scope="col" className={`${th} text-right`}>Rate, a year</th>
-            <th scope="col" className={`${th} text-right`}>Charged</th>
-            <th scope="col" className={`${th} text-right`}>Health factor</th>
-            <th scope="col" className={th}>Transaction</th>
-          </tr>
-        </thead>
-        <tbody className="num">
-          {rows.slice(0, 10).map((r) => (
-            <tr key={r.txHash + r.blockNumber} className="border-b last:border-b-0">
-              <td className={td}>{Number(r.blockNumber).toLocaleString("en-US")}</td>
-              <td className={`${td} text-right`}>{formatUsd(toNumber(BigInt(r.premiumPerBlock), 18) * BLOCKS_PER_YEAR)}</td>
-              <td className={`${td} text-right text-muted-foreground`}>{formatUsdFixed(toNumber(BigInt(r.charged), 18), 6)}</td>
-              <td className={`${td} text-right`}>{formatHf(toNumber(BigInt(r.healthFactor), 18))}</td>
-              <td className={td}>
-                <HashLink value={r.txHash} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/** Exits and the per-block repricing log, one panel with two tabs. An indexer failure is said in each tab, never hidden. */
-export function ActivityPanel({
-  history,
-  isLoading,
-  error,
-  chainExit,
-  active,
-}: {
-  history?: BorrowerHistory;
-  isLoading: boolean;
-  error: Error | null;
-  chainExit?: ChainExit | null;
-  /** Whether a cover is active now, for the empty repricing text. */
-  active: boolean;
-}) {
-  const exits = exitRows(history, chainExit);
-  const reprices = history?.Reprice ?? [];
-  const failed = Boolean(envioUrl && error);
-  const unavailable = historyError(error);
-  const notConfigured = "History comes from the Envio indexer. Set NEXT_PUBLIC_ENVIO_GRAPHQL_URL to its GraphQL endpoint to show it.";
-  const loading = (
-    <div className="space-y-2 px-5 py-4 sm:px-6" aria-busy="true" aria-label="Loading activity">
-      <Skeleton className="h-10 w-full" />
-      <Skeleton className="h-10 w-full" />
-    </div>
-  );
-
-  const exitsBody = exits.length ? (
-    <>
-      <ExitTable rows={exits} />
-      {failed && (
-        <p className="border-t px-5 py-3 text-[0.8125rem] text-caution sm:px-6" role="status">
-          {unavailable} The exit above was read from the chain.
-        </p>
-      )}
-    </>
-  ) : !envioUrl ? (
-    <Empty>{notConfigured}</Empty>
-  ) : failed ? (
-    <Empty tone="caution">{unavailable}</Empty>
-  ) : isLoading ? (
-    loading
-  ) : (
-    <Empty>No exits yet. If your health factor reaches the trigger, the exit and what it saved against Aave&rsquo;s bonus appear here.</Empty>
-  );
-
-  const repricesBody = !envioUrl ? (
-    <Empty>{notConfigured}</Empty>
-  ) : failed ? (
-    <Empty tone="caution">{unavailable}</Empty>
-  ) : isLoading && !history ? (
-    loading
-  ) : reprices.length ? (
-    <RepriceTable rows={reprices} />
-  ) : (
-    <Empty>
-      {active
-        ? "No repricing indexed yet. The keeper reprices your cover every block; each transaction appears here once the indexer has it."
-        : "No repricing yet. Once you opt in, the keeper reprices your cover every block and each transaction appears here."}
-    </Empty>
-  );
-
-  return (
-    <Panel bodyClassName="p-0 sm:p-0" className="overflow-hidden">
-      <Tabs defaultValue="exits">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-6">
-          <h2 className="text-base font-semibold">Activity</h2>
-          <TabsList>
-            <TabsTrigger value="exits">Exits{exits.length ? ` (${exits.length})` : ""}</TabsTrigger>
-            <TabsTrigger value="reprices">Repricing</TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent value="exits" className="mt-4">
-          {exitsBody}
-        </TabsContent>
-        <TabsContent value="reprices" className="mt-4">
-          {repricesBody}
-        </TabsContent>
-      </Tabs>
-    </Panel>
   );
 }
