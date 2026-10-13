@@ -132,6 +132,56 @@ The same commands again after the protocol share (ADR-037) changed the deploy an
 | `sweepProtocol()` | `0xea7d6bf1b04f99323dd5b3be1daaa063644f79bb0c274de09bc03080ae1bbcb7` in block 110763033: 3 USDC units (0.000003 USDC) to the treasury, the whole units of its 10% owed so far |
 | `proof.sh --fork` | exit 0; Deployments with the Treasury row, and Proof with the opt-in, three consecutive reprices, the exit and the treasury payout, each checked on chain |
 
+## Staging on Monad testnet (ADR-040)
+
+Aave V3 is not on Monad testnet, so the staging run uses an Aave V3 market deployed there from Aave's own code, with test WETH and USDC priced by Pyth. Shield's contracts are the mainnet code. Results and addresses: README, Staging run on Monad testnet.
+
+The first run, 13 Oct 2026: the market cost 7.83 MON; Shield's deployment (18.4M gas estimated, limits at 1.15 times) and the setup come to about 2.6 MON at 100 gwei; the keeper spent 0.33 MON on ten reprices and the exit. Testnet MON comes from https://testnet.monad.xyz and the faucets listed in the Monad docs.
+
+```bash
+# Keys: chmod 600 files outside the repo. ~/.shield/testnet.key deploys and owns everything (Aave market admin,
+# test token owner, Shield owner and treasury); testnet-borrower.key and testnet-keeper.key are the other two roles.
+git submodule update --init --recursive contracts/lib/aave-v3-origin   # the market script needs Aave's nested deps
+R=https://testnet-rpc.monad.xyz; K() { v=$(cat ~/.shield/$1.key); echo "0x${v#0x}"; }
+cd contracts
+
+# 1. The Aave V3 market: writes deployments/aave-10143.json
+FOUNDRY_PROFILE=testnet forge script testnet/TestnetMarket.s.sol:TestnetMarket --rpc-url $R --private-key $(K testnet) \
+  --broadcast --slow --gas-estimate-multiplier 115
+
+# 2. Shield on it (60 s waiting period); writes deployments/10143.json
+KEEPER_ADDRESS=$(cat ~/.shield/testnet-keeper.address) SHIELD_MIN_COVER_SECONDS=60 forge script script/Deploy.s.sol:Deploy \
+  --rpc-url $R --private-key $(K testnet) --broadcast --slow --gas-estimate-multiplier 115
+
+# 3. Pyth's testnet push feed updates rarely and Hermes needs an API key, so allow prices up to 24 h old
+E=$(node -e "console.log(require('./deployments/10143.json').Executor)")
+cast send $E "setExitParams(uint16,uint16,uint32)" 300 200 86400 --rpc-url $R --private-key $(K testnet)
+
+# 4. Liquidity in Aave, the vault deposit, test WETH and gas for the borrower and the keeper
+TESTNET_BORROWER=$(cat ~/.shield/testnet-borrower.address) TESTNET_KEEPER=$(cat ~/.shield/testnet-keeper.address) \
+  FOUNDRY_PROFILE=testnet forge script testnet/TestnetDemo.s.sol:TestnetDemo --sig "seed()" --rpc-url $R \
+  --private-key $(K testnet) --broadcast --slow --gas-estimate-multiplier 115
+
+# 5. The borrower: supply, borrow to 1.07, approve, prepay 5 USDC, opt in at 1.06
+DEMO_HF_BPS=10700 DEMO_TRIGGER_BPS=10600 DEMO_PREPAY=5000000 FOUNDRY_PROFILE=testnet forge script \
+  testnet/TestnetDemo.s.sol:TestnetDemo --sig "open()" --rpc-url $R --private-key $(K testnet-borrower) --broadcast --slow
+
+# 6. The keeper (from keeper/), every block for its first 40 blocks, then every 200
+MONAD_RPC_URL=$R MONAD_WS_URL=wss://testnet-rpc.monad.xyz RPC_FALLBACK_URLS=off CHAIN_ID=10143 \
+  KEEPER_PRIVATE_KEY_FILE=~/.shield/testnet-keeper.key SHIELD_DEPLOYMENT_FILE=../contracts/deployments/10143.json \
+  REPRICE_WINDOW_BLOCKS=40 pnpm start
+
+# 7. After the 60 s waiting period, the borrower borrows to 1.05, below the trigger; the keeper exits
+DEMO_HF_BPS=10500 FOUNDRY_PROFILE=testnet forge script testnet/TestnetDemo.s.sol:TestnetDemo --sig "borrowTo()" \
+  --rpc-url $R --private-key $(K testnet-borrower) --broadcast --slow
+
+# The web app on this market: a local build, or the hosted one
+bash scripts/web-env.sh --testnet && pnpm --filter web build && pnpm --filter web start
+SHIELD_WEB_NETWORK=testnet bash scripts/deploy-web-aws.sh
+```
+
+The test tokens are `TestnetERC20`: only the owner (`~/.shield/testnet.key`) mints, with `cast send <token> "mint(address,uint256)" <to> <amount>`.
+
 ## Part 2: the mainnet runbook
 
 Everything here spends real MON and moves real tokens, so it is run by the repo owner. Use four fresh accounts. No key is ever typed on a command line, exported in the shell or stored inside the repo: three accounts live in encrypted Foundry keystores (`~/.foundry/keystores`) and the keeper's key lives in a chmod 600 file outside the repo, because the keeper is TypeScript and reads a raw key. The `*_PRIVATE_KEY` variables still work and are what the fork scripts use; do not use them on mainnet.
@@ -254,6 +304,30 @@ ENVIO_GRAPHQL_URL=<endpoint from step 3> bash scripts/proof.sh   # README Deploy
 `scripts/proof.sh` counts only keeper log lines whose `to` is this deployment's Repricer (reprices) or Executor (the exit), so a `keeper.log` that also holds older runs is safe. Paste the output into the README Deployments and Proof tables.
 
 To run the opt-in from the command line instead of the browser, replace step 6 with `bash scripts/demo-position.sh open` (trigger `DEMO_TRIGGER_BPS`, default 10500, prepay `DEMO_PREPAY`, default 5 USDC).
+
+### Hosting the web app
+
+The app is hosted on an AWS Lightsail container service, `shield-web` in ap-south-1 (power micro, USD 10 a month): https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com. `bash scripts/deploy-web-aws.sh` builds the image in Docker, scans it for a local RPC, pushes it, waits for the new version and checks every page; it reads `contracts/deployments/143.json` once it exists. Until then the hosted app is the testnet staging build (`SHIELD_WEB_NETWORK=testnet bash scripts/deploy-web-aws.sh`). Set `NEXT_PUBLIC_ENVIO_GRAPHQL_URL` (and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` if used) in the environment before the mainnet build.
+
+A custom domain, once bought (D=shieldexit.xyz for example; Lightsail's own DNS zone is free and can point the bare domain at the service; its domain commands run in us-east-1):
+
+```bash
+D=shieldexit.xyz
+aws lightsail create-certificate --region ap-south-1 --certificate-name shield-web-cert --domain-name $D \
+  --subject-alternative-names www.$D --tags key=project,value=shield
+aws lightsail get-certificates --region ap-south-1 --certificate-name shield-web-cert --include-certificate-details \
+  --query 'certificates[0].certificateDetail.domainValidationRecords[].resourceRecord'
+aws lightsail create-domain --region us-east-1 --domain-name $D --tags key=project,value=shield
+aws lightsail get-domain --region us-east-1 --domain-name $D      # set these nameservers at the registrar
+# one CNAME per validation record above, then wait for ISSUED
+aws lightsail create-domain-entry --region us-east-1 --domain-name $D --domain-entry name=<name>,type=CNAME,target=<value>
+aws lightsail get-certificates --region ap-south-1 --certificate-name shield-web-cert --query 'certificates[0].certificateDetail.status'
+aws lightsail update-container-service --region ap-south-1 --service-name shield-web \
+  --public-domain-names '{"shield-web-cert":["'$D'","www.'$D'"]}'
+for n in $D www.$D; do aws lightsail create-domain-entry --region us-east-1 --domain-name $D \
+  --domain-entry name=$n,type=A,target=shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com,isAlias=true; done
+SHIELD_WEB_URL=https://$D bash scripts/deploy-web-aws.sh --check   # if it does not serve yet, redeploy once
+```
 
 ### Video, 3 minutes
 

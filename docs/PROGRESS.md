@@ -2,6 +2,13 @@
 
 Newest entry first. One entry per session: what moved, commit hashes, what is next, what is blocked and why.
 
+## 13 Oct 2026, staging on Monad testnet and hosting on AWS
+
+- **Testnet staging (ADR-040, `97a9206`).** The owner asked to test on testnet first. Aave V3 is not on Monad testnet, so we deployed a full Aave V3 market there from Aave's own code (aave-v3-origin v3.7) with test WETH and USDC priced by Pyth at Aave Monad's mainnet parameters, then Shield's unchanged contracts on it. A borrower opted in at 1.07 with a 1.06 trigger. The keeper repriced through `eth_sendRawTransactionSync`, and when the borrower borrowed down to 1.05 it exited in block 70,734,827 (tx 0xb420db749132b14f55562070971fedbabdbcd3d6b7bdb53e5a18767d465242ee). It repaid 518.22 USDC from the vault, took 0.2082 WETH, and the health factor went from 1.05 to 1.12; $23.32 under Aave's bonus. This meets M3's testnet criterion with one caveat: from here the sync receipts took 0.49 to 0.79 s, so reprices landed every three to five blocks, not every block.
+- **Hosting (`76cec4f`).** The web app runs on an AWS Lightsail container service (`shield-web`, ap-south-1, micro, USD 10 a month) at https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com, built and deployed by `scripts/deploy-web-aws.sh`. Until the mainnet deployment it serves the testnet build (`SHIELD_WEB_NETWORK=testnet`), which says on every page that it runs on test tokens; rerun the script without that variable after M6.
+- **Domain.** Checked only, nothing bought (Route 53 prices a year): shieldexit.xyz USD 19, shieldexit.com USD 16; names with "monad" avoided because Shield is not affiliated with Monad. The steps to attach a bought domain are in docs/DEMO.md, Hosting the web app.
+- **Next.** Unchanged for M6: mainnet funds and keystores, the deploy, the hosted indexer, the demo with the Aurora top-up, `proof.sh`, then the hosted app rebuilt for mainnet, the video, the repo going public and the submission.
+
 ## 13 Oct 2026, Aurora app key and the keeper on testnet
 
 - **Done.**

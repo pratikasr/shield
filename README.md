@@ -171,6 +171,8 @@ Aave V3 is not deployed on Monad testnet, so for this run we deployed a full Aav
 
 From this machine the keeper's `eth_sendRawTransactionSync` receipts took 0.49 to 0.79 s (median 0.65 s), longer than a 300 ms block, so its reprices landed every three to five blocks rather than every block. The commands are in [docs/DEMO.md](docs/DEMO.md), Staging on Monad testnet.
 
+The hosted app, https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com, runs on this testnet market until the mainnet deployment and says so on every page; the read-only view of the rescued borrower is [/app/borrow?address=0x2F50...962d](https://shield-web.dkf7yg5wctpdj.ap-south-1.cs.amazonlightsail.com/app/borrow?address=0x2F5068762ee626Ae91f3745cED7F021e2710962d).
+
 ## Quick start
 
 Requirements: git, [Foundry](https://getfoundry.sh) 1.8 or later (`foundryup`; earlier versions have no Monad execution), Node 22 or later, pnpm 11, and Docker for the local indexer.
