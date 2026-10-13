@@ -75,11 +75,12 @@ describe("earnings totals", () => {
     expect(t.exits).toBe(1);
   });
 
-  it("converts to dollars with the right decimals; LP earnings are vault premiums plus exit discounts", () => {
+  it("converts to dollars with the right decimals; vault income is vault premiums plus exit discounts, total income adds the treasury's share", () => {
     const u = totalsUsd(sumBuckets([bucket("all", 0, forkHour)]));
     expect(u.premiumToProtocol).toBeCloseTo(7.61182598265e-7, 18);
     expect(u.exitDiscount).toBeCloseTo(0.263655, 9);
-    expect(u.lpEarnings).toBeCloseTo(0.263655 + 6.850643384837e-6, 12);
+    expect(u.vaultIncome).toBeCloseTo(0.263655 + 6.850643384837e-6, 12);
+    expect(u.totalIncome).toBeCloseTo(0.263655 + 6.850643384837e-6 + 7.61182598265e-7, 12);
     expect(u.savedVsAave).toBeCloseTo(1.186447, 9);
     expect(u.debtRepaid).toBeCloseTo(26.365511, 9);
   });

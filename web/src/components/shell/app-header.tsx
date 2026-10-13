@@ -15,7 +15,7 @@ import { Wordmark } from "./wordmark";
 
 const NAV = [
   { href: "/app/borrow", label: "Protect" },
-  { href: "/app/vault", label: "Earn" },
+  { href: "/app/vault", label: "Vault" },
   { href: "/app/analytics", label: "Analytics" },
 ];
 

@@ -33,7 +33,7 @@ const comparison: { row: string; cells: [Cell, Cell, Cell, Cell] }[] = [
       "About 0.3% per automated repay (0.25% service fee plus 0.05% automation fee), plus gas and slippage",
     ],
   },
-  { row: "Who funds the exit", cells: ["Vault LPs, with an Aave flash loan as fallback", "Any liquidator", "Any liquidator", "Your collateral"] },
+  { row: "Who funds the exit", cells: ["Shield's vault, funded by the protocol, with an Aave flash loan as fallback", "Any liquidator", "Any liquidator", "Your collateral"] },
   {
     row: "Best when",
     cells: [
@@ -52,7 +52,7 @@ const faqs: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "What can the owner change?",
-    a: "Parameters within set bounds: the exit discount (at most 5% and never above your maximum), the exit buffer, the premium floor, each collateral's pricing constant (at most ten times the launch value) and fallback volatility (10% to 500%), the waiting period (up to 7 days), the oracle and slippage bounds, and which swap adapter sells the vault's collateral (every sale is checked by the USDC actually received, within at most 10% of Aave's price). The owner can also set the protocol share of premiums, up to 20%, and the treasury it is paid to; the share splits what you pay and never adds to it. With these the owner can raise your premium within those bounds or pause exits. No owner function can transfer your aTokens or the vault's USDC, the contracts are not upgradeable, and ownership transfers in two steps.",
+    a: "Parameters within set bounds: the exit discount (at most 5% and never above your maximum), the exit buffer, the premium floor, each collateral's pricing constant (at most ten times the launch value) and fallback volatility (10% to 500%), the waiting period (up to 7 days), the oracle and slippage bounds, and which swap adapter sells the vault's collateral (every sale is checked by the USDC actually received, within at most 10% of Aave's price). The owner can also set the protocol share of premiums, up to 20%, and the treasury it is paid to (the share splits what you pay and never adds to it), and which accounts may deposit into the vault. With these the owner can raise your premium within those bounds or pause exits. No owner function can transfer your aTokens or the vault's USDC, the contracts are not upgradeable, and ownership transfers in two steps.",
   },
   {
     q: "What if the vault is empty when I reach my trigger?",
@@ -83,16 +83,20 @@ const faqs: { q: string; a: React.ReactNode }[] = [
     a: "Aave V3 Monad positions with WETH collateral and USDC debt. Shield covers positions outside eMode only. cbBTC is listed and its cover arrives once a cbBTC swap route exists on Monad.",
   },
   {
-    q: "How do liquidity providers earn?",
-    a: "LPs deposit USDC into an ERC-4626 vault. The vault earns 90% of every covered borrower's premium, block by block, and the whole exit discount: it takes collateral worth 1% more than it repays at each exit. The other 10% of premiums goes to the protocol treasury at launch; the contract caps that share at 20%, and the owner can change it within the cap. Seized collateral stays in Aave until the owner or the unwinder sells it through the swap adapter for no less than Aave's price minus 3% (the owner can set at most 10%); a sale can cost more than the 1% earned, and collateral cannot be withdrawn until it is sold. Exit gains reach the share price over 6 hours.",
+    q: "Who funds the vault?",
+    a: "The protocol. The vault is an ERC-4626 vault that takes deposits only from accounts on its depositor list, and at launch the protocol treasury is the only one. It keeps 90% of every covered borrower's premium, block by block, and the whole exit discount: it takes collateral worth 1% more than it repays at each exit. Seized collateral stays in Aave until the owner or the unwinder sells it through the swap adapter for no less than Aave's price minus 3% (the owner can set at most 10%); until then the vault carries its price, and a sale can cost more than the 1% earned. Exit gains reach the share price over 6 hours, and any shareholder can withdraw, up to the USDC the vault holds. Outside liquidity providers are on the roadmap: the owner can add them to the depositor list without a new contract, and the plan is 90% of income to them through the share price and 10% to the protocol.",
+  },
+  {
+    q: "Can I pay the premium from another chain?",
+    a: "Yes. Every borrower has a deposit address on Monad. Aurora Intents, powered by NEAR Intents, takes USDC or USDT from Base, Arbitrum, Ethereum and other chains and delivers USDC there, and USDC sent to it on Monad works the same way. Shield's keeper then moves it into your prepaid premium, or you move it yourself from the app; the move only ever credits the borrower the address belongs to.",
   },
   {
     q: "How does Shield make money?",
     a: (
       <>
-        From a share of premiums: 10% of every premium goes to the protocol treasury at launch, split off when the premium is charged. The contract caps the share at
-        20%, and the owner can change it within the cap. The exit discount goes entirely to liquidity providers, and the share never changes what a borrower pays.
-        Every figure is on the{" "}
+        All of Shield&rsquo;s income goes to the protocol. 10% of every premium is paid to the treasury directly, split off when the premium is charged; the contract
+        caps that share at 20%, and the owner can change it within the cap. The other 90% and the whole exit discount go to the vault, whose shares the treasury
+        holds. None of this changes what a borrower pays. Every figure is on the{" "}
         <Link href="/app/analytics" prefetch={false} className="font-medium text-foreground underline underline-offset-4">
           analytics page
         </Link>
@@ -192,7 +196,7 @@ export default function Landing() {
               </Button>
               <Button asChild size="lg" variant="outline" className="h-12 bg-card px-6 text-[0.9375rem]">
                 <Link href="/app/vault" prefetch={false}>
-                  Earn as a liquidity provider
+                  See the vault
                 </Link>
               </Button>
             </div>
@@ -510,7 +514,7 @@ export default function Landing() {
               </Button>
               <Button asChild size="lg" variant="outline" className="h-12 border-white/25 bg-transparent px-6 text-[0.9375rem] text-white hover:bg-white/10 hover:text-white">
                 <Link href="/app/vault" prefetch={false}>
-                  Provide liquidity
+                  See the vault
                 </Link>
               </Button>
             </div>

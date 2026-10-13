@@ -164,14 +164,18 @@ export function sumBuckets(rows: readonly BucketRow[]): Totals {
   return t;
 }
 
-/** Totals in dollars, for display. LP earnings are premiums to the vault plus gross exit discounts. */
+/**
+ * Totals in dollars, for display. Vault income is premiums to the vault plus gross exit discounts; total income adds
+ * the share of premiums paid to the treasury directly. All of it goes to the protocol, which holds the vault's shares.
+ */
 export interface TotalsUsd {
   premiumCharged: number;
   premiumToVault: number;
   premiumToProtocol: number;
   protocolPaid: number;
   exitDiscount: number;
-  lpEarnings: number;
+  vaultIncome: number;
+  totalIncome: number;
   debtRepaid: number;
   savedVsAave: number;
   deposited: number;
@@ -184,13 +188,15 @@ export interface TotalsUsd {
 export function totalsUsd(t: Totals): TotalsUsd {
   const premiumToVault = toNumber(t.premiumToVault, 18);
   const exitDiscount = toNumber(t.exitDiscount, 6);
+  const premiumToProtocol = toNumber(t.premiumToProtocol, 18);
   return {
     premiumCharged: toNumber(t.premiumCharged, 18),
     premiumToVault,
-    premiumToProtocol: toNumber(t.premiumToProtocol, 18),
+    premiumToProtocol,
     protocolPaid: toNumber(t.protocolPaid, 6),
     exitDiscount,
-    lpEarnings: premiumToVault + exitDiscount,
+    vaultIncome: premiumToVault + exitDiscount,
+    totalIncome: premiumToVault + exitDiscount + premiumToProtocol,
     debtRepaid: toNumber(t.debtRepaid, 6),
     savedVsAave: toNumber(t.savedVsAave, 6),
     deposited: toNumber(t.deposited, 6),
@@ -221,9 +227,9 @@ export function periodTotals(data: Pick<AnalyticsData, "all" | "hours" | "days">
 // ------------------------------------------------------------------------------------------------ chart series
 
 export const SERIES = [
-  { key: "lpPremium", label: "Premiums to liquidity providers" },
-  { key: "protocolPremium", label: "Premiums to the protocol" },
-  { key: "exitDiscount", label: "Exit discounts to liquidity providers" },
+  { key: "vaultPremium", label: "Premiums to the vault" },
+  { key: "protocolPremium", label: "Premiums to the treasury" },
+  { key: "exitDiscount", label: "Exit discounts to the vault" },
 ] as const;
 
 export interface Bar {

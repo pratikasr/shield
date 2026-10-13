@@ -3,7 +3,7 @@ import { AnalyticsView } from "@/components/analytics/analytics-view";
 
 export const metadata: Metadata = {
   title: "Analytics",
-  description: "What Shield earns and who earns it, live from Monad and the Envio indexer.",
+  description: "What Shield earns and where it goes, live from Monad and the Envio indexer.",
 };
 
 export default function AnalyticsPage() {

@@ -3,6 +3,7 @@
 import { ShieldCheck, Wallet } from "lucide-react";
 import { useState } from "react";
 import type { Address } from "viem";
+import { FundingSource } from "@/components/aurora/funding-source";
 import { AmountHint, AmountInput } from "@/components/data/amount-input";
 import { SwitchButton } from "@/components/shell/network-guard";
 import { TxStatus } from "@/components/tx/tx-status";
@@ -24,7 +25,7 @@ import { cn } from "@/lib/utils";
  * Prepaid USDC with no active cover behind it (after an opt-out or an exit, or before opting in). Always withdrawable,
  * and it can be topped up before opting in.
  */
-export function PrepaidCard({ cover, disabled, refetch }: { cover: Cover; disabled: boolean; refetch: () => Promise<unknown> }) {
+export function PrepaidCard({ user, cover, disabled, refetch }: { user: Address; cover: Cover; disabled: boolean; refetch: () => Promise<unknown> }) {
   const [tab, setTab] = useState("withdraw");
   const [withdraw, setWithdraw] = useState("");
   const [topup, setTopup] = useState("");
@@ -98,47 +99,49 @@ export function PrepaidCard({ cover, disabled, refetch }: { cover: Cover; disabl
             )}
             <TxStatus state={withdrawTx.state} />
           </TabsContent>
-          <TabsContent value="add" className="mt-4 space-y-3">
-            <SectionLabel htmlFor="prepaid-add" aside={<span className="text-[0.8125rem] text-muted-foreground num">Balance {formatUsd(cover.usdcBalance)}</span>}>
-              Add to the prepaid balance
-            </SectionLabel>
-            <AmountInput
-              id="prepaid-add"
-              value={topup}
-              onChange={setTopup}
-              onMax={() => setTopup(amountText(cover.usdcBalanceRaw))}
-              maxDisabled={cover.usdcBalanceRaw === 0n}
-              check={topupCheck}
-              hintId="prepaid-add-help"
-              placeholder="10.00"
-            />
-            <AmountHint id="prepaid-add-help" check={topupCheck}>
-              Nothing is charged until you opt in.
-            </AmountHint>
-            {disabled ? (
-              <SwitchButton action="top up" size="default" className="h-11 w-full" />
-            ) : needsApproval ? (
-              <Button
-                className="h-11 w-full"
-                disabled={busy || !topupCheck.ok || lock.isHeld(approveKey)}
-                onClick={async () =>
-                  after(await topupTx.send("USDC approval", { address: aave.usdc, abi: erc20Abi, functionName: "approve", args: [shield.repricer!, topupCheck.units] }), approveKey)
-                }
-              >
-                Approve USDC
-              </Button>
-            ) : (
-              <Button
-                className="h-11 w-full"
-                disabled={busy || !topupCheck.ok}
-                onClick={async () => {
-                  if (await after(await topupTx.send("Top-up", { address: shield.repricer!, abi: repricerAbi, functionName: "topUp", args: [topupCheck.units] }))) setTopup("");
-                }}
-              >
-                {topup.trim() === "" ? "Enter an amount" : `Add ${topupCheck.units > 0n ? unitsUsd(topupCheck.units) : ""}`}
-              </Button>
-            )}
-            <TxStatus state={topupTx.state} />
+          <TabsContent value="add" className="mt-4">
+            <FundingSource kind="premium" owner={user} refundTo={user} wrongNetwork={disabled} onSwept={() => void refetch()}>
+              <SectionLabel htmlFor="prepaid-add" aside={<span className="text-[0.8125rem] text-muted-foreground num">Balance {formatUsd(cover.usdcBalance)}</span>}>
+                Add to the prepaid balance
+              </SectionLabel>
+              <AmountInput
+                id="prepaid-add"
+                value={topup}
+                onChange={setTopup}
+                onMax={() => setTopup(amountText(cover.usdcBalanceRaw))}
+                maxDisabled={cover.usdcBalanceRaw === 0n}
+                check={topupCheck}
+                hintId="prepaid-add-help"
+                placeholder="10.00"
+              />
+              <AmountHint id="prepaid-add-help" check={topupCheck}>
+                Nothing is charged until you opt in.
+              </AmountHint>
+              {disabled ? (
+                <SwitchButton action="top up" size="default" className="h-11 w-full" />
+              ) : needsApproval ? (
+                <Button
+                  className="h-11 w-full"
+                  disabled={busy || !topupCheck.ok || lock.isHeld(approveKey)}
+                  onClick={async () =>
+                    after(await topupTx.send("USDC approval", { address: aave.usdc, abi: erc20Abi, functionName: "approve", args: [shield.repricer!, topupCheck.units] }), approveKey)
+                  }
+                >
+                  Approve USDC
+                </Button>
+              ) : (
+                <Button
+                  className="h-11 w-full"
+                  disabled={busy || !topupCheck.ok}
+                  onClick={async () => {
+                    if (await after(await topupTx.send("Top-up", { address: shield.repricer!, abi: repricerAbi, functionName: "topUp", args: [topupCheck.units] }))) setTopup("");
+                  }}
+                >
+                  {topup.trim() === "" ? "Enter an amount" : `Add ${topupCheck.units > 0n ? unitsUsd(topupCheck.units) : ""}`}
+                </Button>
+              )}
+              <TxStatus state={topupTx.state} />
+            </FundingSource>
           </TabsContent>
         </Tabs>
       </div>

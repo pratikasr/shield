@@ -2,7 +2,7 @@ import { formatUnits, parseUnits } from "viem";
 import { formatUsd } from "./format";
 
 /**
- * One parser for every amount field (prepay, top up, withdraw, LP deposit and withdraw). It works on the raw string
+ * One parser for every amount field (prepay, top up, withdraw, vault deposit and withdraw). It works on the raw string
  * and in bigint units, so no amount ever passes through a float: 1e21 typed in a field is a validation message,
  * never exponent notation or a thrown error during render.
  */

@@ -40,6 +40,11 @@ export interface VaultState {
     maxRedeem: bigint;
     usdcBalance: bigint;
     usdcAllowance: bigint;
+    /**
+     * Whether this account may deposit (the vault's depositor allowlist, ADR-039): at launch only the protocol
+     * treasury. Undefined when the read failed, for example on a vault deployed before the allowlist.
+     */
+    depositAllowed?: boolean;
   };
 }
 
@@ -66,6 +71,7 @@ export function useVault(user?: Address) {
               { address: v, abi: shieldVaultAbi, functionName: "maxRedeem", args: [user], chainId },
               { address: aave.usdc, abi: erc20Abi, functionName: "balanceOf", args: [user], chainId },
               { address: aave.usdc, abi: erc20Abi, functionName: "allowance", args: [user, v], chainId },
+              { address: v, abi: shieldVaultAbi, functionName: "depositorAllowed", args: [user], chainId },
             ]
           : []),
       ]
@@ -110,6 +116,7 @@ export function useVault(user?: Address) {
             maxRedeem: n(13),
             usdcBalance: n(14),
             usdcAllowance: n(15),
+            depositAllowed: d[16]?.status === "success" ? Boolean(d[16]!.result) : undefined,
           }
         : undefined,
     };

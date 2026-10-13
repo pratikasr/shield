@@ -3,6 +3,7 @@
 import { Clock3, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { maxUint256, type Address } from "viem";
+import { FundingSource } from "@/components/aurora/funding-source";
 import { AmountHint, AmountInput } from "@/components/data/amount-input";
 import { Chip } from "@/components/data/chip";
 import { TokenIcon } from "@/components/data/token";
@@ -212,46 +213,48 @@ export function CoverManage({
             <TabsTrigger value="optout">Opt out</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="topup" className="mt-4 space-y-3">
-            <SectionLabel htmlFor="topup" aside={<span className="text-[0.8125rem] text-muted-foreground num">Balance {formatUsd(cover.usdcBalance)}</span>}>
-              Add to the prepaid balance
-            </SectionLabel>
-            <AmountInput
-              id="topup"
-              value={topup}
-              onChange={setTopup}
-              onMax={() => setTopup(amountText(cover.usdcBalanceRaw))}
-              maxDisabled={cover.usdcBalanceRaw === 0n}
-              check={topupCheck}
-              hintId="topup-help"
-              placeholder="10.00"
-            />
-            <AmountHint id="topup-help" check={topupCheck}>
-              {cover.lapsed ? "Topping up re-arms the cover after the waiting period." : "Adds to the balance the premium is charged from, block by block."}
-            </AmountHint>
-            {needsApproval ? (
-              <Button
-                className="h-11 w-full"
-                disabled={disabled || busy || !topupCheck.ok || lock.isHeld(approveKey)}
-                onClick={async () =>
-                  // The typed amount stays after the approval, so the top-up is one more click.
-                  after(await topupTx.send("USDC approval", { address: aave.usdc, abi: erc20Abi, functionName: "approve", args: [shield.repricer!, topupCheck.units] }), approveKey)
-                }
-              >
-                Approve USDC
-              </Button>
-            ) : (
-              <Button
-                className="h-11 w-full"
-                disabled={disabled || busy || !topupCheck.ok}
-                onClick={async () => {
-                  if (await after(await topupTx.send("Top-up", { address: shield.repricer!, abi: repricerAbi, functionName: "topUp", args: [topupCheck.units] }))) setTopup("");
-                }}
-              >
-                {topup.trim() === "" ? "Enter an amount" : `Top up ${topupCheck.units > 0n ? unitsUsd(topupCheck.units) : ""}`}
-              </Button>
-            )}
-            <TxStatus state={topupTx.state} />
+          <TabsContent value="topup" className="mt-4">
+            <FundingSource kind="premium" owner={user} refundTo={user} wrongNetwork={disabled} onSwept={() => void refetch()}>
+              <SectionLabel htmlFor="topup" aside={<span className="text-[0.8125rem] text-muted-foreground num">Balance {formatUsd(cover.usdcBalance)}</span>}>
+                Add to the prepaid balance
+              </SectionLabel>
+              <AmountInput
+                id="topup"
+                value={topup}
+                onChange={setTopup}
+                onMax={() => setTopup(amountText(cover.usdcBalanceRaw))}
+                maxDisabled={cover.usdcBalanceRaw === 0n}
+                check={topupCheck}
+                hintId="topup-help"
+                placeholder="10.00"
+              />
+              <AmountHint id="topup-help" check={topupCheck}>
+                {cover.lapsed ? "Topping up re-arms the cover after the waiting period." : "Adds to the balance the premium is charged from, block by block."}
+              </AmountHint>
+              {needsApproval ? (
+                <Button
+                  className="h-11 w-full"
+                  disabled={disabled || busy || !topupCheck.ok || lock.isHeld(approveKey)}
+                  onClick={async () =>
+                    // The typed amount stays after the approval, so the top-up is one more click.
+                    after(await topupTx.send("USDC approval", { address: aave.usdc, abi: erc20Abi, functionName: "approve", args: [shield.repricer!, topupCheck.units] }), approveKey)
+                  }
+                >
+                  Approve USDC
+                </Button>
+              ) : (
+                <Button
+                  className="h-11 w-full"
+                  disabled={disabled || busy || !topupCheck.ok}
+                  onClick={async () => {
+                    if (await after(await topupTx.send("Top-up", { address: shield.repricer!, abi: repricerAbi, functionName: "topUp", args: [topupCheck.units] }))) setTopup("");
+                  }}
+                >
+                  {topup.trim() === "" ? "Enter an amount" : `Top up ${topupCheck.units > 0n ? unitsUsd(topupCheck.units) : ""}`}
+                </Button>
+              )}
+              <TxStatus state={topupTx.state} />
+            </FundingSource>
           </TabsContent>
 
           <TabsContent value="withdraw" className="mt-4 space-y-3">

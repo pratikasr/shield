@@ -35,7 +35,11 @@ function explainRevert(name: string, args: readonly unknown[] | undefined, ctx: 
       return "That is more than the vault can pay out now: collateral from exits must be sold before it can be withdrawn. Lower the amount or use Max.";
     case "ERC4626ExceededMaxDeposit":
     case "ERC4626ExceededMaxMint":
-      return "The vault is not accepting this deposit right now.";
+      return "The vault takes deposits only from accounts on its depositor list; at launch that is the protocol treasury alone.";
+    case "NotTopUpAgent":
+      return "The Repricer does not accept top-ups from the deposit-address contract yet. The owner must set it as the top-up agent.";
+    case "ZeroBorrower":
+      return "No borrower address was given for the sweep.";
     case "InsufficientLiquidity":
       return "The vault does not hold enough USDC for this right now.";
     case "ExitBlocked": {

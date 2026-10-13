@@ -94,8 +94,8 @@ export function useShieldConfig() {
   return { config, isLoading: list.isLoading || reads.isLoading, error: list.error ?? reads.error };
 }
 
-/** The liquidity providers' share of each premium, as a fraction (0.9 at a 10% protocol share). */
-export function lpPremiumShare(config: Pick<ShieldConfig, "protocolShareBps">): number {
+/** The vault's share of each premium, as a fraction (0.9 when 10% is paid to the treasury directly). */
+export function vaultPremiumShare(config: Pick<ShieldConfig, "protocolShareBps">): number {
   return 1 - config.protocolShareBps / 10_000;
 }
 

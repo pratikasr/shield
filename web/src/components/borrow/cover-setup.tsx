@@ -3,6 +3,7 @@
 import { ChevronDown, Clock3, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatUnits, maxUint256, type Address } from "viem";
+import { CrossChainFunding, hasStoredTransfer } from "@/components/aurora/funding-source";
 import { AmountHint, AmountInput } from "@/components/data/amount-input";
 import { Chip } from "@/components/data/chip";
 import { Info } from "@/components/data/info";
@@ -116,6 +117,11 @@ export function CoverSetup({
   const [prepay, setPrepay] = useState(saved.prepay ?? "");
   const [preset, setPreset] = useState<number | undefined>(saved.preset);
   const [ack, setAck] = useState(false);
+  // "Prepay from another chain" opens by itself when this browser is following a transfer for this wallet.
+  const [crossOpen, setCrossOpen] = useState(false);
+  useEffect(() => {
+    if (hasStoredTransfer("premium", user)) setCrossOpen(true);
+  }, [user]);
   useEffect(() => writeSetup(storeKey, { trigger, maxDiscount, prepay, preset }), [storeKey, trigger, maxDiscount, prepay, preset]);
   useEffect(() => onTriggerChange(trigger), [trigger, onTriggerChange]);
 
@@ -333,6 +339,22 @@ export function CoverSetup({
             <AmountHint id="prepay-help" check={prepayCheck} className="mt-2.5">
               {prepayHint}
             </AmountHint>
+            {shield.forwarders && (
+              <details className="group mt-3" open={crossOpen} onToggle={(e) => setCrossOpen(e.currentTarget.open)}>
+                <summary className="hit relative flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-[0.8125rem] font-medium text-brand [&::-webkit-details-marker]:hidden">
+                  No USDC on Monad? Prepay from another chain
+                  <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden />
+                </summary>
+                <p className="mt-2 text-[0.8125rem] text-muted-foreground">
+                  USDC that reaches your deposit address becomes prepaid premium, so you skip the USDC approval and prepay steps below.
+                </p>
+                {crossOpen && (
+                  <div className="mt-3">
+                    <CrossChainFunding kind="premium" owner={user} refundTo={user} wrongNetwork={disabled} onSwept={() => void refetch()} />
+                  </div>
+                )}
+              </details>
+            )}
           </div>
         )}
 

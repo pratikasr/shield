@@ -13,9 +13,17 @@ export const shield = {
   repricer: addr(process.env.NEXT_PUBLIC_SHIELD_REPRICER),
   executor: addr(process.env.NEXT_PUBLIC_SHIELD_EXECUTOR),
   vault: addr(process.env.NEXT_PUBLIC_SHIELD_VAULT),
+  /** ShieldForwarderFactory: each borrower's deposit address for premium, and the treasury's for the vault (ADR-039). */
+  forwarders: addr(process.env.NEXT_PUBLIC_SHIELD_FORWARDERS),
 };
 
 export const isDeployed = Boolean(shield.registry && shield.repricer && shield.executor && shield.vault);
+
+/**
+ * Aurora Intents app key, from Intents Studio. Aurora's docs say the key is not confidential and is meant for public
+ * front ends. Empty: cross-chain top-ups say they are not configured, and sending USDC on Monad still works.
+ */
+export const auroraAppKey = (process.env.NEXT_PUBLIC_AURORA_APP_KEY ?? "").trim() || undefined;
 
 export const envioUrl = process.env.NEXT_PUBLIC_ENVIO_GRAPHQL_URL || undefined;
 

@@ -376,7 +376,7 @@ export function BorrowView({ initialWatch = "", walletHint = false }: { initialW
             />
           )}
           {panel}
-          {!watching && cover && !cover.active && cover.prepaidWad > 0n && <PrepaidCard cover={cover} disabled={wrongNetwork} refetch={refetch} />}
+          {!watching && cover && !cover.active && cover.prepaidWad > 0n && <PrepaidCard user={viewer} cover={cover} disabled={wrongNetwork} refetch={refetch} />}
         </aside>
         <div className="grid min-w-0 gap-6 self-start lg:col-start-1">
           {/* The health factor at the 3 decimals shown and the clock in 5 s steps, so the chart redraws when they move, not on every block. */}

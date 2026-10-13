@@ -51,6 +51,7 @@ export function SourcesPanel({ collateral, config }: { collateral?: ReserveLine;
     { name: "Shield PositionRegistry", address: shield.registry },
     { name: "Shield Repricer", address: shield.repricer },
     { name: "Shield vault", address: shield.vault },
+    { name: "Shield ForwarderFactory", address: shield.forwarders },
   ].filter((c) => c.address);
 
   return (

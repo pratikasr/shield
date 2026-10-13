@@ -128,11 +128,12 @@ test("the video script, end to end on a Monad mainnet fork", async ({ page }) =>
   result.hfAfter = (Number(args.healthFactorAfter) / 1e18).toFixed(4);
   await page.screenshot({ path: "e2e-results/borrower-after-exit.png", fullPage: true });
 
-  // 6. The LP page updates: one exit executed, the exit transaction listed, premium earned.
+  // 6. The vault page updates: one exit executed, premium earned, and the exit transaction listed by the indexer
+  // (skipped when the stack runs without it, STACK_INDEXER=0).
   await page.goto("/app/vault");
   await expect(page.locator("dt", { hasText: "Exits executed" }).first()).toBeVisible();
   await expect.poll(async () => statValue(page, "Exits executed"), { timeout: 60_000 }).toBe("1");
-  await expect(page.getByTitle(exit.transactionHash).first()).toBeVisible({ timeout: 60_000 });
+  if (process.env.E2E_INDEXER !== "0") await expect(page.getByTitle(exit.transactionHash).first()).toBeVisible({ timeout: 60_000 });
   expect(usd(await statValue(page, "Premium earned"))).toBeGreaterThan(0);
   result.vault = {
     exitsExecuted: await statValue(page, "Exits executed"),

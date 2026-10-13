@@ -175,9 +175,9 @@ const KeyFigures = memo(function KeyFigures({
   historyState: HistoryState;
 }) {
   const info = periodInfo(period);
-  const share = shareBps !== undefined ? `${formatBps(shareBps)} of premiums` : "A share of premiums";
-  const protocol = money(totals?.premiumToProtocol, share, historyState);
-  const lp = money(totals?.lpEarnings, "Premiums and exit discounts", historyState);
+  const share = shareBps !== undefined ? `${formatBps(shareBps)} of premiums direct, the rest through the vault` : "Premiums and exit discounts";
+  const protocol = money(totals?.totalIncome, share, historyState);
+  const vault = money(totals?.vaultIncome, "Premiums and exit discounts", historyState);
   const saved = money(totals?.savedVsAave, "For borrowers, against Aave's bonus", historyState);
   const exitsHint = historyState ? "Indexer unavailable" : !totals ? <HintSkeleton /> : totals.exits > 0 ? `${formatUsd(totals.debtRepaid)} of debt repaid` : `None ${info.phrase}`;
   const optIns = totals ? `${totals.optIns.toLocaleString("en-US")} opt-in${totals.optIns === 1 ? "" : "s"} ${info.phrase}` : undefined;
@@ -189,10 +189,11 @@ const KeyFigures = memo(function KeyFigures({
           size="lg"
           label={
             <span>
-              Protocol earnings{" "}
+              Protocol income{" "}
               <Info>
-                The protocol&rsquo;s share of every premium, split when the premium is charged and paid to the treasury at each sweep. The registry caps the share at{" "}
-                {formatBps(maxShareBps)}; the exit discount is never shared.
+                Everything Shield earned, all of it to the protocol: the share of every premium paid to the treasury directly (split when the premium is charged,
+                capped at {formatBps(maxShareBps)} in the registry), plus the rest of the premium and the whole exit discount, which go to the vault whose shares the
+                treasury holds.
               </Info>
             </span>
           }
@@ -204,15 +205,15 @@ const KeyFigures = memo(function KeyFigures({
           size="lg"
           label={
             <span>
-              Liquidity providers&rsquo; earnings{" "}
+              Vault income{" "}
               <Info>
                 Premiums to the vault plus exit discounts, gross. Each exit gives the vault collateral worth more than the debt it repaid; that discount is valued at
-                Aave&rsquo;s oracle when the exit ran.
+                Aave&rsquo;s oracle when the exit ran. The vault is funded by the protocol, so this is protocol income too.
               </Info>
             </span>
           }
-          value={lp.value}
-          hint={lp.hint}
+          value={vault.value}
+          hint={vault.hint}
         />
         <Stat className={KPI} size="lg" label="Penalty avoided" tone={totals && totals.savedVsAave > 0 ? "safe" : undefined} value={saved.value} hint={saved.hint} />
         <Stat
@@ -246,9 +247,9 @@ const Breakdown = memo(function Breakdown({ period, current, all }: { period: Pe
   const info = periodInfo(period);
   const rows: { label: ReactNode; get: (t: TotalsUsd) => number; indent?: boolean; strong?: boolean }[] = [
     { label: "Premiums charged", get: (t) => t.premiumCharged, strong: true },
-    { label: "to liquidity providers", get: (t) => t.premiumToVault, indent: true },
-    { label: "to the protocol", get: (t) => t.premiumToProtocol, indent: true },
-    { label: "Protocol share paid to the treasury", get: (t) => t.protocolPaid },
+    { label: "to the vault", get: (t) => t.premiumToVault, indent: true },
+    { label: "to the treasury directly", get: (t) => t.premiumToProtocol, indent: true },
+    { label: "Treasury share paid out", get: (t) => t.protocolPaid },
     {
       label: (
         <span className="inline-flex items-center gap-1">
@@ -261,7 +262,8 @@ const Breakdown = memo(function Breakdown({ period, current, all }: { period: Pe
       ),
       get: (t) => t.exitDiscount,
     },
-    { label: "Total to liquidity providers", get: (t) => t.lpEarnings, strong: true },
+    { label: "Total to the vault", get: (t) => t.vaultIncome },
+    { label: "Total income, all to the protocol", get: (t) => t.totalIncome, strong: true },
   ];
   const cell = (t: TotalsUsd | undefined, get: (t: TotalsUsd) => number) => (t ? formatUsd(get(t)) : <Skeleton className="ml-auto h-4 w-16" />);
   return (
@@ -296,7 +298,7 @@ const Breakdown = memo(function Breakdown({ period, current, all }: { period: Pe
           <tr>
             <th scope="row" className="py-2.5 pr-3 text-left font-normal">
               <span className="inline-flex items-center gap-1">
-                Protocol share waiting for the next sweep
+                Treasury share waiting for the next sweep
                 <Info>Read live from the Repricer on the proposed block. The next sweep pays it to the treasury in whole micro-USDC; anyone can call the sweep.</Info>
               </span>
             </th>
@@ -505,7 +507,7 @@ export function AnalyticsView() {
           </p>
           <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.02em]">Analytics</h1>
           <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">
-            What Shield earns, who earns it, and the keeper&rsquo;s work block by block. Earnings come from the Envio indexer; live figures come from Monad. No wallet
+            What Shield earns, where it goes, and the keeper&rsquo;s work block by block. Earnings come from the Envio indexer; live figures come from Monad. No wallet
             needed.
           </p>
         </div>
@@ -534,15 +536,16 @@ export function AnalyticsView() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
         <EarningsChart period={period} bars={bars} stale={failing} historyState={historyState} />
-        <Panel title="Earnings breakdown" description="Who earned what, for the period and since launch." labelledBy="breakdown-heading">
+        <Panel title="Earnings breakdown" description="Where the income went, for the period and since launch." labelledBy="breakdown-heading">
           {historyState ? (
             <p className={historyState.tone ? "text-sm text-caution" : "text-sm text-muted-foreground"}>{historyState.text}</p>
           ) : (
             <Breakdown period={period} current={totals} all={allTotals} />
           )}
           <p className="mt-4 text-[0.8125rem] leading-relaxed text-muted-foreground">
-            Liquidity providers earn {share !== undefined ? formatBps(10_000 - share) : "the rest"} of every premium and the whole exit discount;{" "}
-            {share !== undefined ? formatBps(share) : "a share"} of premiums goes to the protocol treasury, capped at {formatBps(maxShare)} in the contract.
+            All of Shield&rsquo;s income goes to the protocol: {share !== undefined ? formatBps(share) : "a share"} of every premium is paid to the treasury directly,
+            capped at {formatBps(maxShare)} in the contract, and the other {share !== undefined ? formatBps(10_000 - share) : "part"} plus the whole exit discount
+            goes to the vault, whose shares the treasury holds. Outside liquidity providers are a roadmap item.
           </p>
         </Panel>
       </div>

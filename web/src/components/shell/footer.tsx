@@ -21,6 +21,8 @@ const CONTRACTS = [
   ["Executor", shield.executor],
   ["ShieldVault", shield.vault],
 ] as const;
+/** Listed when the build has it; a deployment from before ADR-039 has none. */
+const OPTIONAL_CONTRACTS = [["ShieldForwarderFactory", shield.forwarders]] as const;
 
 function Column({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -60,7 +62,7 @@ export function SiteFooter() {
           </div>
           <Column title="Product">
             <Item href="/app/borrow">Protect a position</Item>
-            <Item href="/app/vault">Earn as a liquidity provider</Item>
+            <Item href="/app/vault">The vault</Item>
             <Item href="/app/analytics">Analytics</Item>
             <Item href="/#how">How an exit works</Item>
             <Item href="/#faq">Questions</Item>
@@ -70,7 +72,7 @@ export function SiteFooter() {
             <Item href={DOCS.tests} external>Test report</Item>
             <Item href={REPO} external>Source code (MIT)</Item>
             {deployed ? (
-              CONTRACTS.map(([name, a]) => (
+              [...CONTRACTS, ...OPTIONAL_CONTRACTS.filter(([, a]) => a)].map(([name, a]) => (
                 <Item key={name} href={`${explorerUrl}/address/${a}`} external>
                   {name} <span className="num">{truncateHex(a!, 6, 4)}</span>
                 </Item>

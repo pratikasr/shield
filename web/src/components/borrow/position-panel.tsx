@@ -258,7 +258,7 @@ export function PositionPanel({
                   distance is the floor, the most expensive rate. Each reprice charges the blocks since the last one at the higher of the stored and the
                   live rate.
                   {sharePct !== undefined &&
-                    ` Of what you pay, ${100 - sharePct}% goes to the vault's liquidity providers and ${sharePct}% to the protocol treasury; the split does not change your rate.`}
+                    ` Of what you pay, ${100 - sharePct}% goes to the vault that funds exits and ${sharePct}% to the protocol treasury directly; both belong to the protocol, and the split does not change your rate.`}
                 </Info>
               </p>
               <p className="reading mt-1 text-[1.25rem] font-semibold">

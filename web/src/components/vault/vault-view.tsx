@@ -5,6 +5,7 @@ import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount } from "wagmi";
+import { FundingSource } from "@/components/aurora/funding-source";
 import { ExitTable } from "@/components/borrow/history";
 import { useSentLock } from "@/components/borrow/cover-shared";
 import { AmountHint, AmountInput } from "@/components/data/amount-input";
@@ -19,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VaultIncome, headlineUsd } from "@/components/vault/vault-income";
-import { lpPremiumShare, useShieldConfig } from "@/hooks/useShieldConfig";
+import { useShieldConfig, vaultPremiumShare } from "@/hooks/useShieldConfig";
 import { useTx } from "@/hooks/useTx";
 import { useVault, type VaultState } from "@/hooks/useVault";
 import { erc20Abi, shieldVaultAbi } from "@/lib/abis";
@@ -29,6 +30,7 @@ import { useIndexerQuery } from "@/hooks/useIndexer";
 import { PROTECTED_RATE_LIMIT, VAULT_HISTORY, historyError, type ExitRow, type PositionRow, type VaultFlowRow } from "@/lib/envio";
 import { aave, collateralName, envioUrl, isDeployed, shield } from "@/lib/env";
 import { firstLine, formatDiscount, formatDuration, formatPct, formatToken, formatUsd, timeAgo, toNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 interface VaultHistory {
   VaultStats: { deposited: string; withdrawn: string; premiumEarned: string; exitsExecuted: number; depositors: number }[];
@@ -55,19 +57,163 @@ const LOAD_TIMEOUT_MS = 10_000;
 const th = "px-3 pb-2.5 font-medium first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6";
 const td = "px-3 py-3 first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6";
 
+type VaultUser = NonNullable<VaultState["user"]>;
+
+function DepositForm({ u, vault, refetch }: { u?: VaultUser; vault?: VaultState; refetch: () => Promise<unknown> }) {
+  const { address } = useAccount();
+  const wrong = useWrongNetwork();
+  const tx = useTx();
+  const lock = useSentLock();
+  const [deposit, setDeposit] = useState("");
+  const check = checkAmount(deposit, { balance: u?.usdcBalance });
+  const shares = vault && vault.sharePrice > 0 && check.units > 0n ? Number(formatUnits(check.units, 6)) / vault.sharePrice : 0;
+  const needsApproval = Boolean(u && check.units > 0n && u.usdcAllowance < check.units);
+  const approveKey = `approve:${check.units}`;
+  const after = async (receipt: unknown, key?: string) => {
+    if (!receipt) return false;
+    if (key) lock.hold(key);
+    await refetch();
+    return true;
+  };
+  return (
+    <>
+      <Label htmlFor="deposit">Amount, USDC</Label>
+      <AmountInput
+        id="deposit"
+        size="lg"
+        value={deposit}
+        onChange={setDeposit}
+        onMax={() => u && setDeposit(amountText(u.usdcBalance))}
+        maxDisabled={!u || u.usdcBalance === 0n}
+        check={check}
+        hintId="deposit-help"
+      />
+      <div className="flex items-center justify-between text-[0.8125rem] text-muted-foreground num">
+        <span>You receive</span>
+        <span className="text-foreground">{shares > 0 ? `${shares.toLocaleString("en-US", { maximumFractionDigits: 4 })} shUSDC` : "0 shUSDC"}</span>
+      </div>
+      <AmountHint id="deposit-help" check={check}>
+        Shares are priced at the vault&rsquo;s value now; exit gains reach the share price over {formatDuration(vault?.profitUnlockSeconds ?? 21_600)}.
+      </AmountHint>
+      {wrong ? (
+        <SwitchButton action="deposit" size="lg" className="h-12 w-full" />
+      ) : needsApproval ? (
+        <Button
+          className="h-12 w-full"
+          size="lg"
+          disabled={tx.busy || !check.ok || lock.isHeld(approveKey)}
+          onClick={async () =>
+            // The typed amount stays after the approval, so the deposit is one more click.
+            after(await tx.send("USDC approval", { address: aave.usdc, abi: erc20Abi, functionName: "approve", args: [shield.vault!, check.units] }, { context: "vault" }), approveKey)
+          }
+        >
+          Approve USDC
+        </Button>
+      ) : (
+        <Button
+          className="h-12 w-full"
+          size="lg"
+          disabled={tx.busy || !check.ok || !u}
+          onClick={async () => {
+            if (await after(await tx.send("Deposit", { address: shield.vault!, abi: shieldVaultAbi, functionName: "deposit", args: [check.units, address!] }, { context: "vault" }))) setDeposit("");
+          }}
+        >
+          {tx.busy ? "Check your wallet" : deposit.trim() === "" ? "Enter an amount" : `Deposit ${check.units > 0n ? unitsUsd(check.units) : ""}`}
+        </Button>
+      )}
+      <TxStatus state={tx.state} />
+    </>
+  );
+}
+
+function WithdrawForm({ u, vault, refetch }: { u?: VaultUser; vault?: VaultState; refetch: () => Promise<unknown> }) {
+  const { address } = useAccount();
+  const wrong = useWrongNetwork();
+  const tx = useTx();
+  const [withdraw, setWithdraw] = useState("");
+  // Max redeems the exact share count, so no dust of shares is left behind.
+  const [maxShares, setMaxShares] = useState<bigint>();
+  const check = checkAmount(withdraw, {
+    available: u?.maxWithdraw,
+    availableMessage: (a) =>
+      `Only ${unitsUsd(a)} is available now. The rest is collateral from exits, which leaves the vault only when it is sold. Lower the amount or use Max.`,
+  });
+  const slippage = `${(vault?.maxSwapSlippageBps ?? 300) / 100}%`;
+  return (
+    <>
+      <Label htmlFor="withdraw-lp">Amount, USDC</Label>
+      <AmountInput
+        id="withdraw-lp"
+        size="lg"
+        value={withdraw}
+        onChange={(v) => {
+          setWithdraw(v);
+          setMaxShares(undefined);
+        }}
+        onMax={() => {
+          if (!u) return;
+          setWithdraw(amountText(u.maxWithdraw));
+          setMaxShares(u.maxRedeem);
+        }}
+        maxDisabled={!u || u.maxWithdraw === 0n}
+        check={check}
+        hintId="withdraw-lp-help"
+      />
+      <AmountHint id="withdraw-lp-help" check={check}>
+        Available now: <span className="text-foreground num">{u ? unitsUsd(u.maxWithdraw) : "..."}</span>. Collateral the vault took at exits counts toward
+        its value but stays in Aave, and cannot be withdrawn, until the owner or the unwinder sells it through the swap adapter for no less than
+        Aave&rsquo;s price minus {slippage}.
+      </AmountHint>
+      {wrong ? (
+        <SwitchButton action="withdraw" size="lg" className="h-12 w-full" />
+      ) : (
+        <Button
+          className="h-12 w-full"
+          size="lg"
+          variant="outline"
+          disabled={tx.busy || !check.ok || !u}
+          onClick={async () => {
+            const req =
+              maxShares !== undefined && maxShares > 0n
+                ? { address: shield.vault!, abi: shieldVaultAbi, functionName: "redeem", args: [maxShares, address!, address!] }
+                : { address: shield.vault!, abi: shieldVaultAbi, functionName: "withdraw", args: [check.units, address!, address!] };
+            if (await tx.send("Withdrawal", req, { context: "vault" })) {
+              await refetch();
+              setWithdraw("");
+              setMaxShares(undefined);
+            }
+          }}
+        >
+          {tx.busy ? "Check your wallet" : withdraw.trim() === "" ? "Enter an amount" : `Withdraw ${check.units > 0n ? unitsUsd(check.units) : ""}`}
+        </Button>
+      )}
+      <TxStatus state={tx.state} />
+    </>
+  );
+}
+
+/** Why deposits are closed to this account, and what is planned. */
+function DepositsClosed({ className }: { className?: string }) {
+  return (
+    <div className={cn("rounded-lg bg-raised p-4 text-sm", className)} role="note">
+      <p className="flex items-center gap-2 font-medium">
+        <Lock className="size-4 text-muted-foreground" aria-hidden />
+        Deposits are closed to this wallet
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        The vault is funded by the protocol at launch, so only the protocol treasury can deposit. Outside liquidity providers are planned; the owner can add
+        them to the depositor list later, without a new contract. Withdrawals need no place on the list: any shareholder can withdraw up to the USDC the
+        vault holds.
+      </p>
+    </div>
+  );
+}
+
 function DepositWithdraw() {
   const { address, isConnected } = useAccount();
   const wrong = useWrongNetwork();
   const { vault, refetch } = useVault(isConnected ? address : undefined);
-  const depositTx = useTx();
-  const withdrawTx = useTx();
-  const lock = useSentLock();
   const [tab, setTab] = useState("deposit");
-  // Each tab keeps its own amount.
-  const [deposit, setDeposit] = useState("");
-  const [withdraw, setWithdraw] = useState("");
-  // Max on withdraw redeems the exact share count, so no dust of shares is left behind.
-  const [maxShares, setMaxShares] = useState<bigint>();
 
   if (!isConnected) {
     return (
@@ -75,11 +221,14 @@ function DepositWithdraw() {
         <div className="flex items-center gap-3">
           <TokenIcon symbol="USDC" size={32} />
           <div>
-            <h2 className="text-lg font-semibold">Deposit USDC</h2>
-            <p className="text-[0.8125rem] text-muted-foreground">Receive shUSDC, the vault&rsquo;s share token</p>
+            <h2 className="text-lg font-semibold">Funded by the protocol</h2>
+            <p className="text-[0.8125rem] text-muted-foreground">Deposits come from the protocol treasury only</p>
           </div>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">Connect a wallet holding USDC on Monad to deposit or withdraw.</p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          The vault is funded by the protocol at launch, and outside liquidity providers are planned. Anyone holding shares can withdraw, up to the USDC the
+          vault holds: connect the wallet that holds them.
+        </p>
         <ConnectButton.Custom>
           {({ openConnectModal }) => (
             <Button className="mt-5 h-12 w-full" size="lg" onClick={openConnectModal}>
@@ -91,143 +240,66 @@ function DepositWithdraw() {
     );
   }
   const u = vault?.user;
-  const depositCheck = checkAmount(deposit, { balance: u?.usdcBalance });
-  const withdrawCheck = checkAmount(withdraw, {
-    available: u?.maxWithdraw,
-    availableMessage: (a) =>
-      `Only ${unitsUsd(a)} is available now. The rest is collateral from exits, which leaves the vault only when it is sold. Lower the amount or use Max.`,
-  });
-  const shares = vault && vault.sharePrice > 0 && depositCheck.units > 0n ? Number(formatUnits(depositCheck.units, 6)) / vault.sharePrice : 0;
-  const needsApproval = Boolean(u && depositCheck.units > 0n && u.usdcAllowance < depositCheck.units);
-  const approveKey = `approve:${depositCheck.units}`;
-  const busy = depositTx.busy || withdrawTx.busy;
-  const after = async (receipt: unknown, key?: string) => {
-    if (!receipt) return false;
-    if (key) lock.hold(key);
-    await refetch();
-    return true;
-  };
-  const slippage = `${(vault?.maxSwapSlippageBps ?? 300) / 100}%`;
+  // Undefined means the vault has no allowlist to read (an older deployment): deposits are open, as before.
+  const allowed = u ? u.depositAllowed !== false : undefined;
+  const holds = (u?.shares ?? 0n) > 0n;
 
   return (
     <section aria-labelledby="dw-heading" className="panel overflow-hidden">
       <h2 id="dw-heading" className="sr-only">
-        Deposit or withdraw
+        {allowed === false ? "Withdraw" : "Deposit or withdraw"}
       </h2>
       <dl className="grid grid-cols-2 gap-4 border-b px-5 py-5 sm:px-6">
-        <Stat size="sm" label="Your deposit" value={u ? formatUsd(u.assets) : "..."} />
-        <Stat size="sm" label="Wallet USDC" value={u ? unitsUsd(u.usdcBalance) : "..."} />
+        <Stat size="sm" label="Your shares' value" value={u ? formatUsd(u.assets) : "..."} />
+        {allowed === false ? (
+          <Stat size="sm" label="Withdrawable now" value={u ? unitsUsd(u.maxWithdraw) : "..."} />
+        ) : (
+          <Stat size="sm" label="Wallet USDC" value={u ? unitsUsd(u.usdcBalance) : "..."} />
+        )}
       </dl>
       <div className="px-5 py-5 sm:px-6">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="deposit">Deposit</TabsTrigger>
-            <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
-          </TabsList>
-          <TabsContent value="deposit" className="mt-5 space-y-3">
-            <Label htmlFor="deposit">Amount, USDC</Label>
-            <AmountInput
-              id="deposit"
-              size="lg"
-              value={deposit}
-              onChange={setDeposit}
-              onMax={() => u && setDeposit(amountText(u.usdcBalance))}
-              maxDisabled={!u || u.usdcBalance === 0n}
-              check={depositCheck}
-              hintId="deposit-help"
-            />
-            <div className="flex items-center justify-between text-[0.8125rem] text-muted-foreground num">
-              <span>You receive</span>
-              <span className="text-foreground">{shares > 0 ? `${shares.toLocaleString("en-US", { maximumFractionDigits: 4 })} shUSDC` : "0 shUSDC"}</span>
-            </div>
-            <AmountHint id="deposit-help" check={depositCheck}>
-              Shares are priced at the vault&rsquo;s value now; exit gains reach the share price over {formatDuration(vault?.profitUnlockSeconds ?? 21_600)}.
-            </AmountHint>
-            {wrong ? (
-              <SwitchButton action="deposit" size="lg" className="h-12 w-full" />
-            ) : needsApproval ? (
-              <Button
-                className="h-12 w-full"
-                size="lg"
-                disabled={busy || !depositCheck.ok || lock.isHeld(approveKey)}
-                onClick={async () =>
-                  // The typed amount stays after the approval, so the deposit is one more click.
-                  after(await depositTx.send("USDC approval", { address: aave.usdc, abi: erc20Abi, functionName: "approve", args: [shield.vault!, depositCheck.units] }, { context: "vault" }), approveKey)
-                }
-              >
-                Approve USDC
-              </Button>
+        {allowed === undefined ? (
+          <div className="space-y-3" aria-busy="true" aria-label="Reading the vault">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : allowed ? (
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="deposit">Deposit</TabsTrigger>
+              <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
+            </TabsList>
+            <TabsContent value="deposit" className="mt-5">
+              {address && (
+                <FundingSource kind="vault" owner={address} refundTo={address} wrongNetwork={wrong} onSwept={() => void refetch()}>
+                  <DepositForm u={u} vault={vault} refetch={refetch} />
+                </FundingSource>
+              )}
+            </TabsContent>
+            <TabsContent value="withdraw" className="mt-5 space-y-3">
+              <WithdrawForm u={u} vault={vault} refetch={refetch} />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="space-y-3">
+            <DepositsClosed />
+            {holds ? (
+              <div className="space-y-3 pt-2">
+                <WithdrawForm u={u} vault={vault} refetch={refetch} />
+              </div>
             ) : (
-              <Button
-                className="h-12 w-full"
-                size="lg"
-                disabled={busy || !depositCheck.ok || !u}
-                onClick={async () => {
-                  if (await after(await depositTx.send("Deposit", { address: shield.vault!, abi: shieldVaultAbi, functionName: "deposit", args: [depositCheck.units, address!] }, { context: "vault" })))
-                    setDeposit("");
-                }}
-              >
-                {depositTx.busy ? "Check your wallet" : deposit.trim() === "" ? "Enter an amount" : `Deposit ${depositCheck.units > 0n ? unitsUsd(depositCheck.units) : ""}`}
-              </Button>
+              <p className="text-sm text-muted-foreground">This wallet holds no vault shares, so there is nothing to withdraw.</p>
             )}
-            <TxStatus state={depositTx.state} />
-          </TabsContent>
-          <TabsContent value="withdraw" className="mt-5 space-y-3">
-            <Label htmlFor="withdraw-lp">Amount, USDC</Label>
-            <AmountInput
-              id="withdraw-lp"
-              size="lg"
-              value={withdraw}
-              onChange={(v) => {
-                setWithdraw(v);
-                setMaxShares(undefined);
-              }}
-              onMax={() => {
-                if (!u) return;
-                setWithdraw(amountText(u.maxWithdraw));
-                setMaxShares(u.maxRedeem);
-              }}
-              maxDisabled={!u || u.maxWithdraw === 0n}
-              check={withdrawCheck}
-              hintId="withdraw-lp-help"
-            />
-            <AmountHint id="withdraw-lp-help" check={withdrawCheck}>
-              Available now: <span className="text-foreground num">{u ? unitsUsd(u.maxWithdraw) : "..."}</span>. Collateral the vault took at exits counts toward
-              its value but stays in Aave, and cannot be withdrawn, until the owner or the unwinder sells it through the swap adapter for no less than
-              Aave&rsquo;s price minus {slippage}.
-            </AmountHint>
-            {wrong ? (
-              <SwitchButton action="withdraw" size="lg" className="h-12 w-full" />
-            ) : (
-              <Button
-                className="h-12 w-full"
-                size="lg"
-                variant="outline"
-                disabled={busy || !withdrawCheck.ok || !u}
-                onClick={async () => {
-                  const req =
-                    maxShares !== undefined && maxShares > 0n
-                      ? { address: shield.vault!, abi: shieldVaultAbi, functionName: "redeem", args: [maxShares, address!, address!] }
-                      : { address: shield.vault!, abi: shieldVaultAbi, functionName: "withdraw", args: [withdrawCheck.units, address!, address!] };
-                  if (await after(await withdrawTx.send("Withdrawal", req, { context: "vault" }))) {
-                    setWithdraw("");
-                    setMaxShares(undefined);
-                  }
-                }}
-              >
-                {withdrawTx.busy ? "Check your wallet" : withdraw.trim() === "" ? "Enter an amount" : `Withdraw ${withdrawCheck.units > 0n ? unitsUsd(withdrawCheck.units) : ""}`}
-              </Button>
-            )}
-            <TxStatus state={withdrawTx.state} />
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
       <p className="flex items-start gap-2 border-t bg-raised/60 px-5 py-4 text-[0.75rem] text-muted-foreground sm:px-6">
         <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          ERC-4626 vault. It pays out only to fund exits and to withdrawing depositors; its share of premiums and the exit discounts accrue to every share. Collateral from exits
-          leaves only when the owner or the unwinder sells it through the swap adapter within the slippage bound, and a sale can cost more than the discount
-          earned.
+          ERC-4626 vault, funded by the protocol. It pays out only to fund exits and to shareholders who withdraw; its share of premiums and the exit discounts
+          accrue to every share. Collateral from exits leaves only when the owner or the unwinder sells it through the swap adapter within the slippage bound,
+          and a sale can cost more than the discount earned.
         </span>
       </p>
     </section>
@@ -320,7 +392,7 @@ export function VaultView() {
   const rates = h?.protectedRates ?? [];
   const activeRatePerBlock = rates.reduce((sum, p) => sum + toNumber(BigInt(p.premiumPerBlock ?? "0"), 18), 0);
   // What the vault keeps of what covers pay: the protocol's share goes to the treasury (ADR-037).
-  const premiumRate = vault && config && vault.nav > 0 ? (activeRatePerBlock * lpPremiumShare(config) * BLOCKS_PER_YEAR) / vault.nav : undefined;
+  const premiumRate = vault && config && vault.nav > 0 ? (activeRatePerBlock * vaultPremiumShare(config) * BLOCKS_PER_YEAR) / vault.nav : undefined;
   const sharePct = config ? config.protocolShareBps / 100 : undefined;
   const premiumRateText = !envioUrl || indexerDown ? "Unavailable" : !h ? undefined : activeRatePerBlock === 0 ? "No active covers" : premiumRate !== undefined ? `${formatPct(premiumRate)} a year` : undefined;
   const flashUsed = (h?.flashExits.length ?? 0) > 0;
@@ -351,11 +423,13 @@ export function VaultView() {
             <TokenIcon symbol="USDC" size={18} />
             Shield vault, USDC
           </p>
-          <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.02em]">Earn by funding exits</h1>
-          <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
-            The vault repays covered borrowers&rsquo; debt at their trigger and takes collateral worth {discount} more, held in Aave until it is sold. It also keeps{" "}
+          <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.02em]">The vault that funds exits</h1>
+          <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">
+            Funded by the protocol. The vault repays covered borrowers&rsquo; debt at their trigger and takes collateral worth {discount} more, held in Aave until
+            it is sold. It keeps{" "}
             {/* A fixed-width slot, so the sentence does not reflow when the registry answers. */}
-            <span className="inline-block min-w-[1.9em] num">{sharePct !== undefined ? `${100 - sharePct}%` : " "}</span> of every premium, block by block.
+            <span className="inline-block min-w-[1.9em] num">{sharePct !== undefined ? `${100 - sharePct}%` : " "}</span> of every premium, block by block,
+            and the protocol treasury holds its shares.
           </p>
         </div>
         {/* Phones: a wrapped label must not push its value below its neighbour's. Desktop: labels share one height. */}
@@ -367,7 +441,7 @@ export function VaultView() {
                 <Info>
                   USDC the vault holds, plus collateral it took at exits valued at Aave&rsquo;s oracle, plus premium accrued at the Repricer and not yet swept in,
                   less exit gains still unlocking. Exit gains reach the share price evenly over {formatDuration(vault?.profitUnlockSeconds ?? 21_600)}, so a
-                  deposit made just before an exit cannot take the discount earned by the LPs who carried the cover.
+                  deposit made just before an exit cannot take the discount earned by the shares that carried the cover.
                 </Info>
               </>
             }
@@ -378,8 +452,8 @@ export function VaultView() {
               <>
                 Premium rate, variable
                 <Info>
-                  What every Protected cover pays per block right now, less the protocol&rsquo;s {sharePct !== undefined ? `${sharePct}% ` : ""}share, times a year of 300&nbsp;ms blocks,
-                  over the vault&rsquo;s value. Variable: it moves with health factors, volatility and how many borrowers are covered. Read from the indexer.
+                  What every Protected cover pays per block right now, less the {sharePct !== undefined ? `${sharePct}% ` : "share "}paid to the treasury directly, times a
+                  year of 300&nbsp;ms blocks, over the vault&rsquo;s value. Variable: it moves with health factors, volatility and how many borrowers are covered. Read from the indexer.
                   The exit discount comes on top.
                 </Info>
               </>
@@ -444,7 +518,7 @@ export function VaultView() {
           </Panel>
         </div>
 
-        <aside className="min-w-0 self-start lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1" aria-label="Deposit or withdraw">
+        <aside className="min-w-0 self-start lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1" aria-label="Fund or withdraw">
           <DepositWithdraw />
         </aside>
 

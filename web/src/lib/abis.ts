@@ -5,6 +5,7 @@ export { executorAbi } from "./abi/Executor";
 export { positionRegistryAbi } from "./abi/PositionRegistry";
 export { repricerAbi } from "./abi/Repricer";
 export { shieldVaultAbi } from "./abi/ShieldVault";
+export { shieldForwarderFactoryAbi } from "./abi/ShieldForwarderFactory";
 
 export const aavePoolAbi = [
   {
