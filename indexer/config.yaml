@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
-# Shield on Monad mainnet (chain 143): positions, repricing, exits, vault flows, and the platform's earnings by
-# hour, day and since deployment (ADR-005, ADR-037, Envio bounty).
+# Shield on Monad mainnet (chain 143): positions, repricing, exits, vault flows, deposit-address sweeps, and the
+# platform's earnings by hour, day and since deployment (ADR-005, ADR-037, ADR-039, Envio bounty).
 # Hosted: HyperSync with ENVIO_API_TOKEN. Local rehearsal against a fork: ENVIO_RPC_URL=http://127.0.0.1:8545
 # and ENVIO_RPC_FOR=sync. The contract addresses and the start block have no defaults: ENVIO_START_BLOCK and the
-# four ENVIO_*_ADDRESS variables must be set (indexer/.env, written by scripts/stack.sh on a fork, or the hosted
+# five ENVIO_*_ADDRESS variables must be set (indexer/.env, written by scripts/stack.sh on a fork, or the hosted
 # env from scripts/deploy-indexer.sh), so a missing value stops the indexer instead of indexing the wrong place.
 # Unit tests and codegen read test.env instead (see package.json).
 name: shield-indexer
-description: Shield positions, repricing, exits and vault flows on Monad
+description: Shield positions, repricing, exits, vault flows and deposit-address sweeps on Monad
 contracts:
   - name: PositionRegistry
     abi_file_path: ./abis/PositionRegistry.json
@@ -44,6 +44,12 @@ contracts:
       - event: ExitFunded
       - event: CollateralReceived
       - event: Unwound
+  - name: ShieldForwarderFactory
+    abi_file_path: ./abis/ShieldForwarderFactory.json
+    events:
+      - event: ForwarderDeployed
+      - event: PremiumSwept
+      - event: VaultFunded
 chains:
   - id: 143
     start_block: ${ENVIO_START_BLOCK}
@@ -59,3 +65,5 @@ chains:
         address: "${ENVIO_EXECUTOR_ADDRESS}"
       - name: ShieldVault
         address: "${ENVIO_VAULT_ADDRESS}"
+      - name: ShieldForwarderFactory
+        address: "${ENVIO_FORWARDERS_ADDRESS}"

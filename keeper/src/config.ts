@@ -23,6 +23,7 @@ const EnvSchema = z.object({
   SHIELD_REGISTRY: address.optional(),
   SHIELD_REPRICER: address.optional(),
   SHIELD_EXECUTOR: address.optional(),
+  SHIELD_FORWARDERS: address.optional(),
   RPC_FALLBACK_URLS: z.string().optional(),
   PYTH_HERMES_URL: z.string().url().default("https://hermes.pyth.network"),
   PYTH_HERMES_API_KEY: z.string().optional(),
@@ -35,6 +36,9 @@ const EnvSchema = z.object({
   MAX_GAS_EXIT: z.coerce.bigint().default(3_000_000n),
   MAX_GAS_REPRICE: z.coerce.bigint().default(6_000_000n),
   REPRICE_GAS_HEADROOM: z.coerce.bigint().default(25_000n),
+  SWEEP_EVERY_N_BLOCKS: z.coerce.number().int().min(0).default(20),
+  SWEEP_MIN_UNITS: z.coerce.bigint().min(1n).default(1n),
+  MAX_GAS_SWEEP: z.coerce.bigint().default(1_000_000n),
   POLL_INTERVAL_MS: z.coerce.number().int().min(50).default(150),
   SYNC_TIMEOUT_MS: z.coerce.number().int().min(100).default(2_000),
   DRY_RUN: z
@@ -56,6 +60,8 @@ export interface KeeperConfig {
   registry: Address;
   repricer: Address;
   executor: Address;
+  /** ShieldForwarderFactory: borrowers' and the treasury's deposit addresses. Absent: no sweeps. */
+  forwarders?: Address;
   hermesUrl: string;
   hermesApiKey?: string;
   repriceEveryNBlocks: number;
@@ -69,6 +75,11 @@ export interface KeeperConfig {
   maxGasExit: bigint;
   maxGasReprice: bigint;
   repriceGasHeadroom: bigint;
+  /** Check the deposit addresses every N blocks and sweep what waits there (0: never). */
+  sweepEveryNBlocks: number;
+  /** Smallest balance at a deposit address worth a sweep, in USDC base units (6 decimals). */
+  sweepMinUnits: bigint;
+  maxGasSweep: bigint;
   pollIntervalMs: number;
   syncTimeoutMs: number;
   dryRun: boolean;
@@ -132,7 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KeeperConfig {
   if (e.SHIELD_DEPLOYMENT_FILE) {
     fromFile = JSON.parse(readFileSync(e.SHIELD_DEPLOYMENT_FILE, "utf8")) as Record<string, string>;
   }
-  const pick = (envName: string, envValue: Address | undefined, key: string): Address => {
+  const pickOptional = (envName: string, envValue: Address | undefined, key: string): Address | undefined => {
     const inFile = fromFile[key];
     if (envValue && inFile && getAddress(inFile) !== envValue) {
       throw new Error(
@@ -140,8 +151,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KeeperConfig {
       );
     }
     const v = envValue ?? inFile;
+    return v ? getAddress(v) : undefined;
+  };
+  const pick = (envName: string, envValue: Address | undefined, key: string): Address => {
+    const v = pickOptional(envName, envValue, key);
     if (!v) throw new Error(`missing ${key} address: set ${envName} or SHIELD_DEPLOYMENT_FILE`);
-    return getAddress(v);
+    return v;
   };
   return {
     rpcUrl: e.MONAD_RPC_URL,
@@ -153,6 +168,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KeeperConfig {
     registry: pick("SHIELD_REGISTRY", e.SHIELD_REGISTRY, "PositionRegistry"),
     repricer: pick("SHIELD_REPRICER", e.SHIELD_REPRICER, "Repricer"),
     executor: pick("SHIELD_EXECUTOR", e.SHIELD_EXECUTOR, "Executor"),
+    // Optional: a deployment from before the forwarders (ADR-039) runs without sweeps.
+    forwarders: pickOptional("SHIELD_FORWARDERS", e.SHIELD_FORWARDERS, "ShieldForwarderFactory"),
     hermesUrl: e.PYTH_HERMES_URL,
     hermesApiKey: e.PYTH_HERMES_API_KEY,
     repriceEveryNBlocks: e.REPRICE_EVERY_N_BLOCKS,
@@ -164,6 +181,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KeeperConfig {
     maxGasExit: e.MAX_GAS_EXIT,
     maxGasReprice: e.MAX_GAS_REPRICE,
     repriceGasHeadroom: e.REPRICE_GAS_HEADROOM,
+    sweepEveryNBlocks: e.SWEEP_EVERY_N_BLOCKS,
+    sweepMinUnits: e.SWEEP_MIN_UNITS,
+    maxGasSweep: e.MAX_GAS_SWEEP,
     pollIntervalMs: e.POLL_INTERVAL_MS,
     syncTimeoutMs: e.SYNC_TIMEOUT_MS,
     dryRun: e.DRY_RUN,

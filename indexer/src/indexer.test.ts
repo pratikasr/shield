@@ -327,3 +327,80 @@ describe("audit regressions (5 Oct 2026)", () => {
     expect((await indexer.ProtocolPayout.getAll()).map((p) => p.amount)).toEqual([3n]);
   });
 });
+
+describe("deposit-address sweeps (ADR-039)", () => {
+  const TX = "0x" + "88".repeat(32);
+  const inTx = { transaction: { hash: TX } as never };
+  const saltOf = (a: string) => `0x${"0".repeat(24)}${a.slice(2).toLowerCase()}` as `0x${string}`;
+
+  it("shows a premium sweep as a cross-chain top-up in the borrower's history, counted once", async () => {
+    const indexer = createTestIndexer();
+    const borrower = Addresses.mockAddresses[7]!;
+    const forwarder = Addresses.mockAddresses[8]!;
+    await indexer.process({
+      chains: {
+        143: {
+          simulate: [
+            { contract: "PositionRegistry", event: "OptedIn", params: { borrower, collateral: WETH, trigger: 10_500n, maxDiscountBps: 100n } },
+            // The borrower's own top-up, in another transaction, stays a TopUp.
+            { contract: "Repricer", event: "ToppedUp", params: { borrower, amount: 1_000_000n } },
+            // sweepPremium: the forwarder is deployed, Repricer.topUpFor emits ToppedUp, then the factory PremiumSwept.
+            { contract: "ShieldForwarderFactory", event: "ForwarderDeployed", ...inTx, params: { salt: saltOf(borrower), forwarder } },
+            { contract: "Repricer", event: "ToppedUp", ...inTx, params: { borrower, amount: 25_000_000n } },
+            { contract: "ShieldForwarderFactory", event: "PremiumSwept", ...inTx, params: { borrower, forwarder, amount: 25_000_000n } },
+          ],
+        },
+      },
+    });
+    const flows = await indexer.PrepaidFlow.getAll();
+    expect(flows.map((f) => [f.kind, f.amount]).sort()).toEqual([
+      ["CrossChainTopUp", 25_000_000n],
+      ["TopUp", 1_000_000n],
+    ]);
+    expect(flows.find((f) => f.kind === "CrossChainTopUp")!.txHash).toBe(TX);
+    const p = await indexer.Position.getOrThrow(borrower.toLowerCase());
+    expect(p.prepaid).toBe(26_000_000n * 10n ** 12n);
+    expect(p.status).toBe("Protected");
+    const sweeps = await indexer.ForwarderSweep.getAll();
+    expect(sweeps).toHaveLength(1);
+    expect(sweeps[0]).toMatchObject({
+      kind: "Premium",
+      account: borrower.toLowerCase(),
+      forwarder: forwarder.toLowerCase(),
+      amount: 25_000_000n,
+      shares: 0n,
+      txHash: TX,
+    });
+    const f = await indexer.Forwarder.getOrThrow(forwarder.toLowerCase());
+    expect(f.kind).toBe("Premium");
+    expect(f.account).toBe(borrower.toLowerCase());
+  });
+
+  it("records a vault funding from the treasury's deposit address without counting the deposit twice", async () => {
+    const indexer = createTestIndexer();
+    const treasury = Addresses.mockAddresses[5]!;
+    const forwarder = Addresses.mockAddresses[9]!;
+    const factory = "0x0000000000000000000000000000000000000005" as const;
+    const treasurySalt = ("0x" + "ab".repeat(32)) as `0x${string}`;
+    await indexer.process({
+      chains: {
+        143: {
+          simulate: [
+            { contract: "ShieldForwarderFactory", event: "ForwarderDeployed", ...inTx, params: { salt: treasurySalt, forwarder } },
+            { contract: "ShieldVault", event: "Deposit", ...inTx, params: { sender: factory, owner: treasury, assets: 5_000_000n, shares: 4_900_000n } },
+            { contract: "ShieldForwarderFactory", event: "VaultFunded", ...inTx, params: { treasury, forwarder, assets: 5_000_000n, shares: 4_900_000n } },
+          ],
+        },
+      },
+    });
+    expect((await indexer.VaultStats.getOrThrow("vault")).deposited).toBe(5_000_000n);
+    expect((await indexer.EarningsBucket.getOrThrow("all")).deposited).toBe(5_000_000n);
+    const sweeps = await indexer.ForwarderSweep.getAll();
+    expect(sweeps).toHaveLength(1);
+    expect(sweeps[0]).toMatchObject({ kind: "Vault", account: treasury.toLowerCase(), amount: 5_000_000n, shares: 4_900_000n });
+    const f = await indexer.Forwarder.getOrThrow(forwarder.toLowerCase());
+    expect(f.kind).toBe("Vault");
+    expect(f.account).toBeUndefined();
+    expect(f.salt).toBe(treasurySalt);
+  });
+});

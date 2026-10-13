@@ -1,21 +1,24 @@
 import { getAddress, type Address, type PublicClient } from "viem";
 import { executorAbi } from "./abi/Executor.js";
 import { repricerAbi } from "./abi/Repricer.js";
+import { shieldForwarderFactoryAbi } from "./abi/ShieldForwarderFactory.js";
 import type { KeeperConfig } from "./config.js";
 
 /**
  * Refuses to start against a wrong or half-written deployment: each Shield address must hold code, and the
  * Executor and Repricer must both point at the configured registry (and the Executor at the configured Repricer).
+ * A configured forwarder factory must hold code and use the same Repricer and registry.
  */
 export async function verifyDeployment(
   client: Pick<PublicClient, "getCode" | "readContract">,
-  cfg: Pick<KeeperConfig, "registry" | "repricer" | "executor">,
+  cfg: Pick<KeeperConfig, "registry" | "repricer" | "executor" | "forwarders">,
 ): Promise<void> {
   const named: [string, Address][] = [
     ["PositionRegistry", cfg.registry],
     ["Repricer", cfg.repricer],
     ["Executor", cfg.executor],
   ];
+  if (cfg.forwarders) named.push(["ShieldForwarderFactory", cfg.forwarders]);
   for (const [name, address] of named) {
     const code = await client.getCode({ address, blockTag: "latest" });
     if (!code || code === "0x") throw new Error(`no contract code at the ${name} address ${address}: wrong deployment file or chain`);
@@ -33,5 +36,16 @@ export async function verifyDeployment(
   }
   if (getAddress(executorRepricer!) !== cfg.repricer) {
     throw new Error(`Executor ${cfg.executor} uses Repricer ${executorRepricer}, not ${cfg.repricer}`);
+  }
+  if (!cfg.forwarders) return;
+  const [factoryRepricer, factoryRegistry] = (await Promise.all([
+    client.readContract({ address: cfg.forwarders, abi: shieldForwarderFactoryAbi, functionName: "repricer" }),
+    client.readContract({ address: cfg.forwarders, abi: shieldForwarderFactoryAbi, functionName: "registry" }),
+  ])) as Address[];
+  if (getAddress(factoryRepricer!) !== cfg.repricer) {
+    throw new Error(`ShieldForwarderFactory ${cfg.forwarders} uses Repricer ${factoryRepricer}, not ${cfg.repricer}`);
+  }
+  if (getAddress(factoryRegistry!) !== cfg.registry) {
+    throw new Error(`ShieldForwarderFactory ${cfg.forwarders} uses registry ${factoryRegistry}, not ${cfg.registry}`);
   }
 }

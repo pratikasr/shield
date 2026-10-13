@@ -12,6 +12,7 @@ import { monad } from "viem/chains";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { executorAbi } from "../src/abi/Executor.js";
 import { repricerAbi } from "../src/abi/Repricer.js";
+import { shieldForwarderFactoryAbi } from "../src/abi/ShieldForwarderFactory.js";
 import { coversPages } from "../src/accessList.js";
 import type { KeeperConfig } from "../src/config.js";
 import type { Head } from "../src/heads.js";
@@ -25,6 +26,9 @@ const EXECUTOR = "0x3333333333333333333333333333333333333333" as Address;
 const PYTH = "0x5555555555555555555555555555555555555555" as Address;
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11" as Address;
 const KEEPER = "0x9999999999999999999999999999999999999999" as Address;
+const FACTORY = "0x6666666666666666666666666666666666666666" as Address;
+const USDC = "0x7777777777777777777777777777777777777777" as Address;
+const TREASURY_FWD = "0x8888888888888888888888888888888888888888" as Address;
 const ALICE = "0x000000000000000000000000000000000000A11c" as Address;
 const BOB = "0x000000000000000000000000000000000000B0B0" as Address;
 const CAROL = "0x000000000000000000000000000000000000ca01" as Address;
@@ -50,6 +54,9 @@ const cfg: KeeperConfig = {
   maxGasExit: 3_000_000n,
   maxGasReprice: 6_000_000n,
   repriceGasHeadroom: 25_000n,
+  sweepEveryNBlocks: 20,
+  sweepMinUnits: 1n,
+  maxGasSweep: 1_000_000n,
   pollIntervalMs: 150,
   syncTimeoutMs: 2_000,
   dryRun: false,
@@ -74,8 +81,13 @@ interface World {
   balance?: bigint;
   failReads?: number;
   failAssetAt?: Set<number>;
+  /** USDC waiting at each deposit address, keyed by the lower-case forwarder address. */
+  deposits?: Record<string, bigint>;
   calls: Record<string, number>;
 }
+
+/** The fake factory's deposit address for a borrower. */
+const fwd = (b: Address) => `0xf0${b.toLowerCase().slice(4)}`;
 
 const k = (a: string) => a.toLowerCase();
 
@@ -117,16 +129,33 @@ function fakeClient(w: World) {
           throw new Error(`unexpected read ${functionName}`);
       }
     },
-    async multicall({ contracts }: { contracts: { functionName: string; args: [Address] }[] }) {
+    async multicall({ contracts, allowFailure = true }: { contracts: { functionName: string; args?: unknown[] }[]; allowFailure?: boolean }) {
       count("multicall");
-      return contracts.map((c) => {
-        const b = k(c.args[0]);
-        if (c.functionName === "previewExit") {
-          if (w.previewFails?.has(b)) return { status: "failure", error: new Error("reverted") };
-          return { status: "success", result: [w.status?.[b] ?? 3, 1_000n, 2_000n, w.hf?.[b] ?? 1_038_000_000_000_000_000n] };
+      const out = contracts.map((c): { status: string; result?: unknown; error?: Error } => {
+        const b = c.args?.length ? k(String(c.args[0])) : "";
+        count(`mc.${c.functionName}`);
+        switch (c.functionName) {
+          case "previewExit":
+            if (w.previewFails?.has(b)) return { status: "failure", error: new Error("reverted") };
+            return { status: "success", result: [w.status?.[b] ?? 3, 1_000n, 2_000n, w.hf?.[b] ?? 1_038_000_000_000_000_000n] };
+          case "getEthBalance":
+            return { status: "success", result: w.balance ?? 10n ** 21n };
+          case "forwarderFor":
+            return { status: "success", result: fwd(b as Address) };
+          case "treasuryForwarder":
+            return { status: "success", result: TREASURY_FWD };
+          case "asset":
+            return { status: "success", result: USDC };
+          case "balanceOf":
+            return { status: "success", result: w.deposits?.[b] ?? 0n };
+          default:
+            return { status: "success", result: rec(b) };
         }
-        if (c.functionName === "getEthBalance") return { status: "success", result: w.balance ?? 10n ** 21n };
-        return { status: "success", result: rec(b) };
+      });
+      if (allowFailure) return out;
+      return out.map((r) => {
+        if (r.status !== "success") throw r.error;
+        return r.result;
       });
     },
     async createAccessList() {
@@ -528,5 +557,153 @@ describe("Keeper round trips (audit H5)", () => {
     await kp.onHead(head(23));
     expect(sub.measured).toBe(3);
     expect(w.calls.createAccessList).toBe(2);
+  });
+});
+
+/** The decoded factory call in a transaction's data, or undefined for any other call. */
+function sweepCall(data: Hex) {
+  try {
+    return decodeFunctionData({ abi: shieldForwarderFactoryAbi, data });
+  } catch {
+    return undefined;
+  }
+}
+
+describe("Keeper sweeps of deposit addresses (ADR-039)", () => {
+  it("sweeps a borrower's and the treasury's deposit addresses after the reprice, each with a measured limit", async () => {
+    const sent: Hex[] = [];
+    const sub = realSubmitter((data) => (sweepCall(data) ? 180_000n : 300_000n), sent);
+    const lines: string[] = [];
+    const w = world([ALICE, BOB], { deposits: { [fwd(BOB)]: 25_000_000n, [k(TREASURY_FWD)]: 5_000_000n } });
+    const kp = keeper(w, sub, lines, { forwarders: FACTORY });
+    await kp.onHead(head(1));
+    const txs = sent.map((raw) => parseTransaction(raw));
+    expect(txs.map((t) => sweepCall(t.data!)?.functionName ?? "repriceMany")).toEqual(["repriceMany", "sweepPremium", "sweepVault"]);
+    expect(k(String(sweepCall(txs[1]!.data!)!.args![0]))).toBe(k(BOB));
+    expect(k(txs[1]!.to!)).toBe(k(FACTORY));
+    expect(txs[1]!.gas).toBe(207_000n); // 180,000 measured on proposed state, plus the 15% buffer
+    expect(coversPages(txs[1]!.accessList!, REGISTRY, [RECORD_SLOT])).toBe(true);
+    const due = events(lines).find((l) => l.event === "sweep.due")!;
+    expect(due.checked).toBe(3);
+    expect((due.waiting as { kind: string; forwarder: string; amount: string }[]).map((t) => [t.kind, k(t.forwarder), t.amount])).toEqual([
+      ["premium", fwd(BOB), "25000000"],
+      ["vault", k(TREASURY_FWD), "5000000"],
+    ]);
+    expect(events(lines).filter((l) => l.event === "sweep.done").map((l) => l.status)).toEqual(["success", "success"]);
+
+    // The deposit addresses are read once; the balances every SWEEP_EVERY_N_BLOCKS (20) blocks, in one multicall.
+    for (let n = 2; n <= 20; n++) await kp.onHead(head(n));
+    expect(sent.filter((raw) => sweepCall(parseTransaction(raw).data!))).toHaveLength(2);
+    await kp.onHead(head(21));
+    expect(sent.filter((raw) => sweepCall(parseTransaction(raw).data!))).toHaveLength(4);
+    expect(w.calls["mc.forwarderFor"]).toBe(2);
+    expect(w.calls["mc.treasuryForwarder"]).toBe(1);
+    expect(w.calls["mc.balanceOf"]).toBe(6);
+  });
+
+  it("leaves a balance under SWEEP_MIN_UNITS where it is", async () => {
+    const sent: Sent[] = [];
+    const lines: string[] = [];
+    const w = world([ALICE], { deposits: { [fwd(ALICE)]: 999_999n } });
+    const kp = keeper(w, fakeSubmitter(sent), lines, { forwarders: FACTORY, sweepMinUnits: 1_000_000n, repriceEveryNBlocks: 0 });
+    await kp.onHead(head(1));
+    expect(sent).toEqual([]);
+    expect(events(lines).find((l) => l.event === "sweep.none")!.checked).toBe(2);
+    w.deposits = { [fwd(ALICE)]: 1_000_000n };
+    await kp.onHead(head(2)); // the next check is 20 blocks after the last one
+    expect(sent).toEqual([]);
+    await kp.onHead(head(21));
+    expect(sent.map((t) => t.label)).toEqual(["sweepPremium"]);
+  });
+
+  it("never sweeps in a pass with an exit to make; the sweep goes out from the next pass", async () => {
+    const sent: Sent[] = [];
+    const w = world([ALICE, BOB], { status: { [k(ALICE)]: 0 }, deposits: { [fwd(BOB)]: 25_000_000n } });
+    const kp = keeper(w, fakeSubmitter(sent), [], { forwarders: FACTORY });
+    await kp.onHead(head(1));
+    expect(sent.map((t) => t.label)).toEqual(["exit", "repriceMany"]);
+    expect(w.calls["mc.balanceOf"]).toBeUndefined(); // not even read while an exit is due
+    w.status = {};
+    await kp.onHead(head(2));
+    expect(sent.map((t) => t.label).slice(2)).toEqual(["repriceMany", "sweepPremium"]);
+  });
+
+  it("isolates a sweep that fails: the others still go out and it is left out for 100 blocks", async () => {
+    const sent: Sent[] = [];
+    const lines: string[] = [];
+    const sub = fakeSubmitter(sent, {
+      send: async (tx) => {
+        const call = sweepCall(tx.data);
+        if (call?.functionName === "sweepPremium" && k(String(call.args![0])) === k(ALICE)) {
+          throw Object.assign(new Error("execution reverted"), { code: 3 });
+        }
+      },
+    });
+    const w = world([ALICE, BOB], {
+      hf: { [k(BOB)]: 2n * WAD }, // Alice is the riskier one, so her sweep goes first
+      deposits: { [fwd(ALICE)]: 1_000_000n, [fwd(BOB)]: 2_000_000n, [k(TREASURY_FWD)]: 3_000_000n },
+    });
+    const kp = keeper(w, sub, lines, { forwarders: FACTORY, repriceEveryNBlocks: 0 });
+    await kp.onHead(head(1));
+    expect(sent.map((t) => t.label)).toEqual(["sweepPremium", "sweepVault"]);
+    expect(k(String(sweepCall(sent[0]!.data)!.args![0]))).toBe(k(BOB));
+    expect(events(lines).filter((l) => l.event === "sweep.skipped").map((l) => k(String(l.borrower)))).toEqual([k(ALICE)]);
+
+    sent.length = 0;
+    w.deposits = { [fwd(ALICE)]: 1_000_000n };
+    await kp.onHead(head(21));
+    await kp.onHead(head(41));
+    expect(events(lines).filter((l) => l.event === "tx.failed")).toHaveLength(1); // not tried while skipped
+    await kp.onHead(head(101));
+    expect(events(lines).filter((l) => l.event === "tx.failed")).toHaveLength(2);
+    expect(sent).toEqual([]);
+  });
+
+  it("sends no sweep while the keeper's balance is under MIN_BALANCE_FOR_EXIT_WEI", async () => {
+    const sent: Sent[] = [];
+    const w = world([ALICE], { balance: 150_000_000_000_000_000n, deposits: { [fwd(ALICE)]: 25_000_000n } });
+    const kp = keeper(w, fakeSubmitter(sent), [], { forwarders: FACTORY });
+    for (let n = 1; n <= 41; n++) await kp.onHead(head(n));
+    expect(sent).toEqual([]);
+    expect(w.calls["mc.balanceOf"]).toBeUndefined();
+    w.balance = 10n ** 21n;
+    await kp.onHead(head(42));
+    expect(sent.map((t) => t.label)).toEqual(["repriceMany", "sweepPremium"]);
+  });
+
+  it("holds back a newer head by at most one sweep; the rest go out from the next pass", async () => {
+    const sent: Sent[] = [];
+    const lines: string[] = [];
+    const w = world([ALICE, BOB], { hf: { [k(BOB)]: 2n * WAD }, deposits: { [fwd(ALICE)]: 1_000_000n, [fwd(BOB)]: 2_000_000n } });
+    let queued = false;
+    const sub = fakeSubmitter(sent, {
+      send: async (tx) => {
+        const call = sweepCall(tx.data);
+        if (call?.functionName !== "sweepPremium") return;
+        delete w.deposits![fwd(call.args![0] as Address)];
+        if (!queued) {
+          queued = true;
+          void kp.onHead(head(2)); // a block arrives while the first sweep is out
+        }
+      },
+    });
+    const kp = keeper(w, sub, lines, { forwarders: FACTORY, repriceEveryNBlocks: 0 });
+    await kp.onHead(head(1));
+    const order = events(lines)
+      .filter((l) => l.event === "sweep.done" || l.event === "block")
+      .map((l) => (l.event === "block" ? `block ${l.block}` : `sweep ${k(String(l.borrower))}`));
+    expect(order).toEqual(["block 1", `sweep ${k(ALICE)}`, "block 2", `sweep ${k(BOB)}`]);
+    expect(events(lines).find((l) => l.event === "sweep.deferred")!.left).toBe(1);
+  });
+
+  it("sweeps nothing without a forwarder factory or with SWEEP_EVERY_N_BLOCKS=0", async () => {
+    for (const overrides of [{}, { forwarders: FACTORY, sweepEveryNBlocks: 0 }]) {
+      const sent: Sent[] = [];
+      const w = world([ALICE], { deposits: { [fwd(ALICE)]: 25_000_000n } });
+      const kp = keeper(w, fakeSubmitter(sent), [], { repriceEveryNBlocks: 0, ...overrides });
+      for (let n = 1; n <= 30; n++) await kp.onHead(head(n));
+      expect(sent).toEqual([]);
+      expect(w.calls["mc.balanceOf"]).toBeUndefined();
+    }
   });
 });

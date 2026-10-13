@@ -9,6 +9,7 @@ import {
 import { executorAbi } from "./abi/Executor.js";
 import { positionRegistryAbi } from "./abi/PositionRegistry.js";
 import { repricerAbi } from "./abi/Repricer.js";
+import { shieldForwarderFactoryAbi } from "./abi/ShieldForwarderFactory.js";
 import { compressToPages, mergeAccessLists, shieldAccessList } from "./accessList.js";
 import type { KeeperConfig } from "./config.js";
 import {
@@ -47,6 +48,8 @@ const ACCESS_LIST_REFRESH_BLOCKS = 200n;
 const REPRICE_SKIP_BLOCKS = 100n;
 /** At most one "at trigger but not Ready" warning per borrower per this many blocks (status changes log at once). */
 const STUCK_WARN_EVERY_N_BLOCKS = 200n;
+/** A sweep that fails (its estimate reverts, or it reverts on chain) is left out for this many blocks. */
+const SWEEP_SKIP_BLOCKS = 100n;
 /** A PythStale or OracleDeviation exit is retried with a fresh Hermes update at most this often. */
 const HERMES_RETRY_EVERY_N_BLOCKS = 3n;
 const LOW_BALANCE_LOG_MS = 60_000;
@@ -59,6 +62,16 @@ const multicall3BalanceAbi = [
     name: "getEthBalance",
     stateMutability: "view",
     inputs: [{ name: "addr", type: "address" }],
+    outputs: [{ name: "balance", type: "uint256" }],
+  },
+] as const;
+
+const erc20BalanceAbi = [
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "balance", type: "uint256" }],
   },
 ] as const;
@@ -93,6 +106,15 @@ export interface Observed {
   balance?: bigint;
 }
 
+/** USDC waiting at a deposit address: a borrower's (premium) or the treasury's (vault). */
+interface SweepTarget {
+  kind: "premium" | "vault";
+  /** The borrower, for a premium sweep. */
+  borrower?: Address;
+  forwarder: Address;
+  amount: bigint;
+}
+
 type Outcome = "sent" | "stop" | "failed";
 type BatchOutcome = { kind: "sent" | "stop" | "failed" | "reverted" } | { kind: "too_big"; limit: bigint };
 
@@ -118,6 +140,11 @@ export class Keeper {
   private repriceSkip = new Map<Address, bigint>();
   private stuckWarned = new Map<Address, { status: string; at: bigint }>();
   private hermesTried = new Map<Address, bigint>();
+  /** Deposit addresses are fixed per factory (CREATE2), so each is read once. */
+  private forwarderOf = new Map<Address, Address>();
+  private treasuryForwarder?: Address;
+  private sweepAsset?: Address;
+  private sweepSkip = new Map<string, bigint>();
   private repriceChunkSize = Number.POSITIVE_INFINITY;
   private lastLowBalanceLog = Number.NEGATIVE_INFINITY;
   private pythAddress?: Address;
@@ -127,6 +154,7 @@ export class Keeper {
   private pendingHead?: Head;
   private startBlock?: bigint;
   private lastRepriceBlock?: bigint;
+  private lastSweepBlock?: bigint;
   readonly results: { block: bigint; label: string; hash: Hex; status: string }[] = [];
 
   constructor(
@@ -251,6 +279,15 @@ export class Keeper {
         } catch (err) {
           this.logger.warn("reprice.failed", { block: head.number, error: err });
         }
+      }
+    }
+
+    // Sweeps come last, never in a pass with an exit to make, and never on the balance kept for exits.
+    if (toExit.length === 0 && !lowBalance && !this.stopping && !this.submitter.pending && this.sweepDue(head)) {
+      try {
+        await this.sweep(head, observations);
+      } catch (err) {
+        this.logger.warn("sweep.read_failed", { block: head.number, error: err });
       }
     }
     this.prune(head, observations);
@@ -451,6 +488,115 @@ export class Keeper {
     return { kind: r.outcome };
   }
 
+  private sweepDue(head: Head): boolean {
+    if (!this.cfg.forwarders || this.cfg.sweepEveryNBlocks === 0) return false;
+    return this.lastSweepBlock === undefined || head.number - this.lastSweepBlock >= BigInt(this.cfg.sweepEveryNBlocks);
+  }
+
+  /**
+   * Moves USDC waiting at deposit addresses into Shield (ADR-039): a borrower's into their prepaid premium with
+   * `sweepPremium`, the treasury's into the vault with `sweepVault`. One multicall reads every balance (a second one
+   * first, only for deposit addresses not read before). Riskiest borrowers go first and the vault last. Each sweep
+   * is isolated like an exit, and one that fails is left out for SWEEP_SKIP_BLOCKS. After each sweep the pass ends
+   * when a newer head is waiting, so a sweep holds back the next exit check by at most one send; the next pass
+   * sweeps the rest.
+   */
+  private async sweep(head: Head, observations: Observation[]): Promise<void> {
+    const factory = this.cfg.forwarders!;
+    this.lastSweepBlock = head.number;
+    const borrowers = [...observations].sort(byRisk).map((o) => o.borrower);
+    await this.readDepositAddresses(factory, borrowers);
+    const targets: Omit<SweepTarget, "amount">[] = [
+      ...borrowers.map((b) => ({ kind: "premium" as const, borrower: b, forwarder: this.forwarderOf.get(b)! })),
+      { kind: "vault" as const, forwarder: this.treasuryForwarder! },
+    ].filter((t) => !this.sweepSkipped(head, sweepKey(t)));
+    const res = (await this.client.multicall({
+      contracts: targets.map((t) => ({
+        address: this.sweepAsset!,
+        abi: erc20BalanceAbi,
+        functionName: "balanceOf",
+        args: [t.forwarder],
+      })),
+      allowFailure: true,
+      blockTag: "latest",
+    })) as { status: "success" | "failure"; result?: unknown }[];
+    const waiting: SweepTarget[] = [];
+    targets.forEach((t, i) => {
+      const r = res[i];
+      if (r?.status === "success" && (r.result as bigint) >= this.cfg.sweepMinUnits) waiting.push({ ...t, amount: r.result as bigint });
+    });
+    if (waiting.length === 0) {
+      this.logger.debug("sweep.none", { block: head.number, checked: targets.length });
+      return;
+    }
+    this.logger.info("sweep.due", { block: head.number, checked: targets.length, waiting });
+    for (const [i, t] of waiting.entries()) {
+      if (this.stopping) return;
+      if (i > 0 && this.pendingHead) {
+        this.lastSweepBlock = undefined; // due again on the next pass
+        this.logger.info("sweep.deferred", { block: head.number, left: waiting.length - i });
+        return;
+      }
+      let outcome: Outcome;
+      try {
+        outcome = await this.sweepOne(head, factory, t);
+      } catch (err) {
+        this.logger.warn("sweep.failed", { block: head.number, kind: t.kind, borrower: t.borrower, error: err });
+        outcome = "failed";
+      }
+      if (outcome === "stop") return;
+      if (outcome === "failed") {
+        this.sweepSkip.set(sweepKey(t), head.number + SWEEP_SKIP_BLOCKS);
+        this.logger.warn("sweep.skipped", { block: head.number, kind: t.kind, borrower: t.borrower, untilBlock: head.number + SWEEP_SKIP_BLOCKS });
+      }
+    }
+  }
+
+  private async sweepOne(head: Head, factory: Address, t: SweepTarget): Promise<Outcome> {
+    const data =
+      t.kind === "premium"
+        ? encodeFunctionData({ abi: shieldForwarderFactoryAbi, functionName: "sweepPremium", args: [t.borrower!] })
+        : encodeFunctionData({ abi: shieldForwarderFactoryAbi, functionName: "sweepVault" });
+    const accessList = await this.accessListFor(factory, data, t.borrower ? [t.borrower] : [], []);
+    const tx: TxRequest = {
+      label: t.kind === "premium" ? "sweepPremium" : "sweepVault",
+      to: factory,
+      data,
+      accessList,
+      maxGas: this.cfg.maxGasSweep,
+      maxFeePerGasCap: this.cfg.maxFeePerGasRepriceWei,
+    };
+    const fields = { kind: t.kind, borrower: t.borrower, forwarder: t.forwarder, amount: t.amount };
+    const r = await this.submit(head, tx, fields);
+    if (r.result) {
+      this.logger.info("sweep.done", { block: head.number, ...fields, hash: r.result.hash, status: r.result.receipt.status });
+      if (r.result.receipt.status !== "success") return "failed";
+    }
+    return r.outcome;
+  }
+
+  /** Reads the deposit addresses not read before, the treasury's and the swept token, in one multicall. */
+  private async readDepositAddresses(factory: Address, borrowers: Address[]): Promise<void> {
+    const missing = borrowers.filter((b) => !this.forwarderOf.has(b));
+    const calls: { address: Address; abi: typeof shieldForwarderFactoryAbi; functionName: string; args: readonly unknown[] }[] =
+      missing.map((b) => ({ address: factory, abi: shieldForwarderFactoryAbi, functionName: "forwarderFor", args: [b] }));
+    const readTreasury = this.treasuryForwarder === undefined;
+    const readAsset = this.sweepAsset === undefined;
+    if (readTreasury) calls.push({ address: factory, abi: shieldForwarderFactoryAbi, functionName: "treasuryForwarder", args: [] });
+    if (readAsset) calls.push({ address: factory, abi: shieldForwarderFactoryAbi, functionName: "asset", args: [] });
+    if (calls.length === 0) return;
+    const res = (await this.client.multicall({ contracts: calls as never, allowFailure: false, blockTag: "latest" })) as Address[];
+    missing.forEach((b, i) => this.forwarderOf.set(b, getAddress(res[i]!)));
+    let next = missing.length;
+    if (readTreasury) this.treasuryForwarder = getAddress(res[next++]!);
+    if (readAsset) this.sweepAsset = getAddress(res[next]!);
+  }
+
+  private sweepSkipped(head: Head, key: string): boolean {
+    const until = this.sweepSkip.get(key);
+    return until !== undefined && head.number < until;
+  }
+
   private async submit(
     head: Head,
     tx: TxRequest,
@@ -642,10 +788,15 @@ export class Keeper {
     for (const [k, v] of this.accessLists) if (head.number - v.at >= ACCESS_LIST_REFRESH_BLOCKS) this.accessLists.delete(k);
     for (const [k, v] of this.gasLimits) if (head.number - v.at >= REMEASURE_EVERY_N_BLOCKS) this.gasLimits.delete(k);
     for (const [b, until] of this.repriceSkip) if (head.number >= until) this.repriceSkip.delete(b);
-    for (const m of [this.stuckWarned, this.hermesTried, this.recordSlots] as Map<Address, unknown>[]) {
+    for (const [key, until] of this.sweepSkip) if (head.number >= until) this.sweepSkip.delete(key);
+    for (const m of [this.stuckWarned, this.hermesTried, this.recordSlots, this.forwarderOf] as Map<Address, unknown>[]) {
       for (const b of m.keys()) if (!active.has(b)) m.delete(b);
     }
   }
+}
+
+function sweepKey(t: Pick<SweepTarget, "kind" | "borrower">): string {
+  return t.kind === "premium" ? t.borrower! : "vault";
 }
 
 export function formatHf(hf: bigint): number | "inf" {

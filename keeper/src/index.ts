@@ -1,6 +1,7 @@
 /**
  * Shield keeper. Watches proposed blocks on Monad, reads every covered borrower's Aave health factor and exit
- * status, submits exits that are due and reprices covers on the configured cadence (docs/SPEC.md, Keeper).
+ * status, submits exits that are due, reprices covers on the configured cadence (docs/SPEC.md, Keeper) and sweeps
+ * USDC waiting at deposit addresses into Shield (ADR-039).
  *
  *   pnpm --filter keeper dev      (reads keeper/.env; see keeper/.env.example)
  */
@@ -80,6 +81,9 @@ export async function main(): Promise<void> {
     registry: cfg.registry,
     repricer: cfg.repricer,
     executor: cfg.executor,
+    forwarders: cfg.forwarders ?? "none (no sweeps)",
+    sweepEveryNBlocks: cfg.forwarders ? cfg.sweepEveryNBlocks : 0,
+    sweepMinUnits: cfg.sweepMinUnits,
     heads: cfg.wsUrl ? "monadNewHeads" : "poll",
     readFallbacks: cfg.fallbackRpcUrls?.length ?? 0,
     hermes: cfg.hermesApiKey ? "on" : "off (push feeds)",

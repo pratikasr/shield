@@ -5,6 +5,11 @@ enum PositionStatus {
   Exited
 }
 
+enum ForwarderSweepKind {
+  Premium
+  Vault
+}
+
 enum VaultFlowKind {
   Deposit
   Withdraw
@@ -77,7 +82,11 @@ type Exit {
   txHash: String!
 }
 
-"""A top-up or withdrawal of prepaid premium, in USDC units."""
+"""
+A top-up or withdrawal of prepaid premium, in USDC units. kind is "TopUp" (the borrower's own topUp), "CrossChainTopUp"
+(USDC swept from the borrower's deposit address by ShieldForwarderFactory.sweepPremium: delivered by Aurora Intents
+from another chain, or sent there on Monad) or "Withdraw".
+"""
 type PrepaidFlow {
   id: ID!
   position: Position!
@@ -86,7 +95,7 @@ type PrepaidFlow {
   amount: BigInt!
   blockNumber: BigInt!
   timestamp: BigInt!
-  txHash: String!
+  txHash: String! @index
 }
 
 """Money moving in or out of the vault, in USDC units (collateral flows: aToken units in collateralAmount)."""
@@ -165,6 +174,37 @@ type EarningsBucket {
   optIns: Int!
   deposited: BigInt!
   withdrawn: BigInt!
+}
+
+"""
+USDC swept from a deposit address (ADR-039), in USDC units. Premium: into the borrower's prepaid premium (the same
+transaction's PrepaidFlow has kind "CrossChainTopUp"). Vault: deposited into the vault for the treasury, with the
+shares minted; the vault's own Deposit event counts it in VaultStats and the earnings buckets.
+"""
+type ForwarderSweep {
+  id: ID!
+  kind: ForwarderSweepKind! @index
+  """The borrower (Premium) or the treasury (Vault)."""
+  account: String! @index
+  forwarder: String!
+  amount: BigInt!
+  shares: BigInt!
+  blockNumber: BigInt! @index
+  timestamp: BigInt!
+  txHash: String!
+}
+
+"""
+A deposit address deployed by ShieldForwarderFactory, id the forwarder address. account is the borrower whose address
+is the salt, or null for the treasury's deposit address (kind Vault).
+"""
+type Forwarder {
+  id: ID!
+  kind: ForwarderSweepKind!
+  account: String @index
+  salt: String!
+  blockNumber: BigInt!
+  txHash: String!
 }
 
 """The protocol share of premiums paid to the treasury by a sweep, in USDC units."""

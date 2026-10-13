@@ -14,13 +14,19 @@ const base = {
 const REGISTRY = "0x499AA73A1D27e54B33E7DB05ffd22854EC70257E";
 const REPRICER = "0xF93b0549cD50c849D792f0eAE94A598fA77C7718";
 const EXECUTOR = "0x8CEa85eC7f3D314c4d144e34F2206C8Ac0bbAdA1";
+const FORWARDERS = "0xBe6Eb4ACB499f992ba2DaC7CAD59d56DA9e0D823";
 
-function deploymentFile(): string {
+function deploymentFile(extra: Record<string, string> = {}): string {
   const dir = mkdtempSync(join(tmpdir(), "shield-"));
   const file = join(dir, "143.json");
   writeFileSync(
     file,
-    JSON.stringify({ PositionRegistry: REGISTRY.toLowerCase(), Repricer: REPRICER.toLowerCase(), Executor: EXECUTOR.toLowerCase() }),
+    JSON.stringify({
+      PositionRegistry: REGISTRY.toLowerCase(),
+      Repricer: REPRICER.toLowerCase(),
+      Executor: EXECUTOR.toLowerCase(),
+      ...extra,
+    }),
   );
   return file;
 }
@@ -115,5 +121,31 @@ describe("config", () => {
     );
     expect(loadConfig({ ...base, RPC_FALLBACK_URLS: "off", SHIELD_DEPLOYMENT_FILE: file }).fallbackRpcUrls).toEqual([]);
     expect(loadConfig({ ...base, CHAIN_ID: "10143", SHIELD_DEPLOYMENT_FILE: file }).fallbackRpcUrls).toEqual([]);
+  });
+
+  it("takes the forwarder factory from the deployment file or SHIELD_FORWARDERS, with the same conflict rule", () => {
+    const withFactory = deploymentFile({ ShieldForwarderFactory: FORWARDERS.toLowerCase() });
+    expect(loadConfig({ ...base, SHIELD_DEPLOYMENT_FILE: withFactory }).forwarders).toBe(FORWARDERS);
+    expect(loadConfig({ ...base, SHIELD_DEPLOYMENT_FILE: deploymentFile(), SHIELD_FORWARDERS: FORWARDERS.toLowerCase() }).forwarders).toBe(
+      FORWARDERS,
+    );
+    expect(() =>
+      loadConfig({ ...base, SHIELD_DEPLOYMENT_FILE: withFactory, SHIELD_FORWARDERS: "0x91A1EeE63f300B8f41AE6AF67eDEa2e2ed8c3f79" }),
+    ).toThrow(/SHIELD_FORWARDERS .* does not match ShieldForwarderFactory/);
+    // A deployment from before the forwarders runs without sweeps.
+    expect(loadConfig({ ...base, SHIELD_DEPLOYMENT_FILE: deploymentFile() }).forwarders).toBeUndefined();
+  });
+
+  it("sweeps every 20 blocks from 1 USDC unit up by default; empty means default and a zero minimum is refused", () => {
+    const file = deploymentFile({ ShieldForwarderFactory: FORWARDERS });
+    for (const env of [{}, { SHIELD_FORWARDERS: "", SWEEP_EVERY_N_BLOCKS: "", SWEEP_MIN_UNITS: "", MAX_GAS_SWEEP: "" }]) {
+      const c = loadConfig({ ...base, SHIELD_DEPLOYMENT_FILE: file, ...env });
+      expect(c.forwarders).toBe(FORWARDERS);
+      expect(c.sweepEveryNBlocks).toBe(20);
+      expect(c.sweepMinUnits).toBe(1n);
+      expect(c.maxGasSweep).toBe(1_000_000n);
+    }
+    expect(loadConfig({ ...base, SHIELD_DEPLOYMENT_FILE: file, SWEEP_EVERY_N_BLOCKS: "0" }).sweepEveryNBlocks).toBe(0);
+    expect(() => loadConfig({ ...base, SHIELD_DEPLOYMENT_FILE: file, SWEEP_MIN_UNITS: "0" })).toThrow();
   });
 });
