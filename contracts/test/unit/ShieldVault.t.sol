@@ -6,6 +6,7 @@ import {ShieldVault} from "../../src/ShieldVault.sol";
 import {IShieldVault} from "../../src/interfaces/IShieldVault.sol";
 import {MockAaveOracle, MockAavePool, MockRepricer} from "../mocks/MockAave.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IAaveOracle} from "aave-v3-origin/contracts/interfaces/IAaveOracle.sol";
 import {IPool} from "aave-v3-origin/contracts/interfaces/IPool.sol";
@@ -39,6 +40,9 @@ contract ShieldVaultTest is Test {
             address(this), IERC20(address(usdc)), IPool(address(pool)), IAaveOracle(address(oracle)), reg
         );
         vault.setModules(executor, repricer);
+        // The depositor allowlist (ADR-039) is tested on its own below; these tests deposit as allowed accounts.
+        vault.setDepositor(lp, true);
+        vault.setDepositor(attacker, true);
     }
 
     function _deposit(address who, uint256 amount) internal returns (uint256 shares) {
@@ -122,6 +126,44 @@ contract ShieldVaultTest is Test {
         vm.prank(lp);
         uint256 back = vault.redeem(victimShares, lp, lp);
         assertGe(back, 999e6, "victim keeps at least 99.9% of the deposit");
+    }
+
+    /// @notice Only allowlisted receivers get shares; withdrawals stay open; the owner manages the list (ADR-039).
+    function test_depositorAllowlist() public {
+        address outsider = makeAddr("outsider");
+        usdc.mint(outsider, 100e6);
+        vm.startPrank(outsider);
+        usdc.approve(address(vault), type(uint256).max);
+        assertEq(vault.maxDeposit(outsider), 0);
+        assertEq(vault.maxMint(outsider), 0);
+        vm.expectRevert(
+            abi.encodeWithSignature("ERC4626ExceededMaxDeposit(address,uint256,uint256)", outsider, 10e6, 0)
+        );
+        vault.deposit(10e6, outsider);
+        vm.expectRevert(
+            abi.encodeWithSignature("ERC4626ExceededMaxMint(address,uint256,uint256)", outsider, 1e12, 0)
+        );
+        vault.mint(1e12, outsider);
+        // Paying in for an allowed receiver works: the shares go to the receiver, as a forwarder sweep does for the treasury.
+        uint256 shares = vault.deposit(10e6, lp);
+        vm.stopPrank();
+        assertEq(vault.balanceOf(lp), shares);
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, outsider));
+        vm.prank(outsider);
+        vault.setDepositor(outsider, true);
+        vm.expectRevert(IShieldVault.InvalidParameter.selector);
+        vault.setDepositor(address(0), true);
+        vm.expectEmit(true, false, false, true, address(vault));
+        emit IShieldVault.DepositorSet(outsider, true);
+        vault.setDepositor(outsider, true);
+        assertGt(vault.maxDeposit(outsider), 0);
+
+        // Removing an account stops new deposits but never traps its shares.
+        vault.setDepositor(lp, false);
+        assertEq(vault.maxDeposit(lp), 0);
+        vm.prank(lp);
+        assertEq(vault.redeem(shares, lp, lp), 10e6);
     }
 
     function test_setModules_once_andOwnerOnly() public {

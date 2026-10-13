@@ -32,6 +32,7 @@ ENVIO_REGISTRY_ADDRESS=$(j PositionRegistry)
 ENVIO_REPRICER_ADDRESS=$(j Repricer)
 ENVIO_EXECUTOR_ADDRESS=$(j Executor)
 ENVIO_VAULT_ADDRESS=$(j ShieldVault)
+ENVIO_FORWARDERS_ADDRESS=$(j ShieldForwarderFactory)
 ENVIO_RPC_URL=https://rpc.monad.xyz
 ENVIO_RPC_FOR=fallback
 ENV

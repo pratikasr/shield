@@ -234,6 +234,25 @@ export const shieldVaultAbi = [
   },
   {
     "type": "function",
+    "name": "depositorAllowed",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "discountBaseRepaid",
     "inputs": [],
     "outputs": [
@@ -328,7 +347,7 @@ export const shieldVaultAbi = [
     "name": "maxDeposit",
     "inputs": [
       {
-        "name": "",
+        "name": "receiver",
         "type": "address",
         "internalType": "address"
       }
@@ -347,7 +366,7 @@ export const shieldVaultAbi = [
     "name": "maxMint",
     "inputs": [
       {
-        "name": "",
+        "name": "receiver",
         "type": "address",
         "internalType": "address"
       }
@@ -697,6 +716,24 @@ export const shieldVaultAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "setDepositor",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1058,6 +1095,25 @@ export const shieldVaultAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DepositorSet",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false

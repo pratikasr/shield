@@ -13,6 +13,7 @@ interface IShieldVault {
     event ModulesSet(address executor, address repricer);
     event UnwinderSet(address unwinder);
     event SwapperSet(address swapper, uint16 maxSwapSlippageBps);
+    event DepositorSet(address indexed account, bool allowed);
 
     error NotExecutor();
     error NotRepricer();

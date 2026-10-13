@@ -77,6 +77,10 @@ abstract contract ForkBase is Test {
         vm.label(address(d.executor), "Executor");
         vm.label(address(d.vault), "ShieldVault");
         vm.label(address(d.swapper), "UniswapV3Swapper");
+        vm.label(address(d.forwarders), "ShieldForwarderFactory");
+        // The vault is protocol-funded (ADR-039): the treasury (this contract) is its only depositor at deploy. The
+        // fork tests seed it from an LP account, so that account is allowed too.
+        d.vault.setDepositor(lp, true);
     }
 
     // ------------------------------------------------------------ positions

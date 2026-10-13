@@ -92,7 +92,7 @@ async function optInTx() {
 
 (async () => {
   console.log("Deployments");
-  for (const name of ["PositionRegistry", "Repricer", "Executor", "ShieldVault", "UniswapV3Swapper"]) {
+  for (const name of ["PositionRegistry", "Repricer", "Executor", "ShieldVault", "UniswapV3Swapper", "ShieldForwarderFactory"]) {
     const code = await rpc("eth_getCode", [d[name], "latest"]);
     const ok = code && code !== "0x";
     console.log(`| ${name} | ${ok ? addrLink(d[name]) : `${d[name]}: no code at this address`} |`);

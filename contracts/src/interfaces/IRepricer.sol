@@ -20,6 +20,7 @@ interface IRepricer {
     event PremiumForwarded(uint256 amount);
     event ProtocolPremiumPaid(address indexed treasury, uint256 amount);
     event BlockTimeSet(uint32 blockTimeMs);
+    event TopUpAgentSet(address agent);
 
     error NotExecutor();
     error NotRegistry();
@@ -28,12 +29,14 @@ interface IRepricer {
     error ZeroAmount();
     error RefundFailed();
     error InvalidParameter();
+    error NotTopUpAgent();
 
     function reprice(address borrower, bytes[] calldata pythUpdate) external payable;
     function repriceMany(address[] calldata borrowers, bytes[] calldata pythUpdate) external payable;
     function settleForExit(address borrower) external;
     function settleForOptOut(address borrower) external;
     function topUp(uint256 amount) external;
+    function topUpFor(address borrower, uint256 amount) external;
     function withdrawUnused(uint256 amount) external;
     function sweep() external returns (uint256 amount);
     function sweepProtocol() external returns (uint256 amount);

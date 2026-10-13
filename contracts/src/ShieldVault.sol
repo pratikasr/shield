@@ -56,6 +56,11 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
     uint256 public discountBaseRepaid;
     uint256 public discountBaseValue;
 
+    /// @notice Accounts that may receive vault shares from a deposit or mint (ADR-039). At launch only the protocol
+    /// treasury: the vault is protocol-funded and keeps 100% of its income. Outside liquidity providers are enabled
+    /// later by adding them, with no redeploy. Withdrawals are never restricted.
+    mapping(address account => bool) public depositorAllowed;
+
     modifier onlyExecutor() {
         if (msg.sender != executor) revert NotExecutor();
         _;
@@ -105,6 +110,16 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
             uint256 valueBase = Math.mulDiv(bal, oracle.getAssetPrice(collaterals[i]), unit);
             total += Math.mulDiv(valueBase, assetUnit, assetPrice);
         }
+    }
+
+    /// @notice Zero for a receiver not on the depositor allowlist, so ERC-4626 `deposit` reverts for it.
+    function maxDeposit(address receiver) public view override returns (uint256) {
+        return depositorAllowed[receiver] ? super.maxDeposit(receiver) : 0;
+    }
+
+    /// @notice Zero for a receiver not on the depositor allowlist, so ERC-4626 `mint` reverts for it.
+    function maxMint(address receiver) public view override returns (uint256) {
+        return depositorAllowed[receiver] ? super.maxMint(receiver) : 0;
     }
 
     /// @notice Withdrawals are capped by idle USDC.
@@ -232,6 +247,13 @@ contract ShieldVault is IShieldVault, ERC4626, Ownable2Step, ReentrancyGuardTran
         executor = executor_;
         repricer = repricer_;
         emit ModulesSet(executor_, repricer_);
+    }
+
+    /// @notice Adds or removes an account that may receive shares from a deposit (ADR-039).
+    function setDepositor(address account, bool allowed) external onlyOwner {
+        if (account == address(0)) revert InvalidParameter();
+        depositorAllowed[account] = allowed;
+        emit DepositorSet(account, allowed);
     }
 
     function setUnwinder(address unwinder_) external onlyOwner {

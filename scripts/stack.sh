@@ -7,7 +7,8 @@
 #   bash scripts/stack.sh down    stop everything this script started, and nothing else
 #
 # Env: FORK_BLOCK (default latest), STACK_WEB_PORT (3200), STACK_HASURA_PORT (8088), STACK_WEB_MODE (start|dev),
-#      STACK_KEEPER (1 to run the keeper, default 1), STACK_MIN_COVER_SECONDS (the fork deployment's waiting period,
+#      STACK_KEEPER (1 to run the keeper, default 1), STACK_INDEXER (1 to run Envio, default 1; 0 when Docker is
+#      unavailable), STACK_MIN_COVER_SECONDS (the fork deployment's waiting period,
 #      default 20), REPRICE_WINDOW_BLOCKS (default 0: the keeper reprices every block for as long as it runs).
 # Logs go to .fork/stack-*.log; accounts to .fork/accounts.env. Each process started here has a PID file in .fork/
 # (anvil.pid, stack-envio.pid, stack-keeper.pid, stack-web.pid); `down` stops exactly those PIDs and their
@@ -97,9 +98,10 @@ up() {
   # timeout. Fetching that state once here, in parallel, lets the first page load finish in seconds.
   node scripts/warm-fork.mjs "$FORK_RPC_URL" "$DEPLOYMENT" "$DEMO_ADDRESS" "$LP_ADDRESS"
 
-  echo "== indexer"
-  backup_unless_ours "$ROOT/indexer/.env"
-  cat > "$ROOT/indexer/.env" <<ENV
+  if [ "${STACK_INDEXER:-1}" = "1" ]; then
+    echo "== indexer"
+    backup_unless_ours "$ROOT/indexer/.env"
+    cat > "$ROOT/indexer/.env" <<ENV
 ${FORK_HEADER}stack.sh; a previous file not written by a fork run, if any, is in indexer/.env.bak
 ENVIO_API_TOKEN=not-set
 ENVIO_START_BLOCK=$(j block)
@@ -107,30 +109,34 @@ ENVIO_REGISTRY_ADDRESS=$(j PositionRegistry)
 ENVIO_REPRICER_ADDRESS=$(j Repricer)
 ENVIO_EXECUTOR_ADDRESS=$(j Executor)
 ENVIO_VAULT_ADDRESS=$(j ShieldVault)
+ENVIO_FORWARDERS_ADDRESS=$(j ShieldForwarderFactory)
 ENVIO_RPC_URL=$FORK_RPC_URL
 ENVIO_RPC_FOR=sync
 ENVIO_TUI=false
 HASURA_EXTERNAL_PORT=$HASURA_PORT
 HASURA_GRAPHQL_ENDPOINT=http://localhost:$HASURA_PORT/v1/metadata
 ENV
-  # `envio dev` stalls without a terminal, so bring up Postgres and Hasura, reset the schema, then `envio start`.
-  : > "$DOCKER_MARK"
-  (cd indexer && set -a && . ./.env && set +a && pnpm exec envio local docker up > "$DIR/stack-envio.log" 2>&1)
-  wait_for "http://localhost:$HASURA_PORT/healthz" "hasura" 180
-  (
-    cd indexer
-    set -a && . ./.env && set +a
-    export ENVIO_PG_PORT=5433 ENVIO_PG_PASSWORD=testing ENVIO_PG_USER=postgres ENVIO_PG_DATABASE=envio-dev ENVIO_TUI=false
-    pnpm exec envio local db-migrate setup < /dev/null >> "$DIR/stack-envio.log" 2>&1
-  )
-  # Each server is started so that $! is its own PID (exec replaces the subshell), never through `( ... & )`.
-  (
-    cd indexer
-    set -a && . ./.env && set +a
-    export ENVIO_PG_PORT=5433 ENVIO_PG_PASSWORD=testing ENVIO_PG_USER=postgres ENVIO_PG_DATABASE=envio-dev ENVIO_TUI=false
-    exec nohup pnpm exec envio start < /dev/null >> "$DIR/stack-envio.log" 2>&1
-  ) &
-  pid_record $! "$DIR/stack-envio.pid"
+    # `envio dev` stalls without a terminal, so bring up Postgres and Hasura, reset the schema, then `envio start`.
+    : > "$DOCKER_MARK"
+    (cd indexer && set -a && . ./.env && set +a && pnpm exec envio local docker up > "$DIR/stack-envio.log" 2>&1)
+    wait_for "http://localhost:$HASURA_PORT/healthz" "hasura" 180
+    (
+      cd indexer
+      set -a && . ./.env && set +a
+      export ENVIO_PG_PORT=5433 ENVIO_PG_PASSWORD=testing ENVIO_PG_USER=postgres ENVIO_PG_DATABASE=envio-dev ENVIO_TUI=false
+      pnpm exec envio local db-migrate setup < /dev/null >> "$DIR/stack-envio.log" 2>&1
+    )
+    # Each server is started so that $! is its own PID (exec replaces the subshell), never through `( ... & )`.
+    (
+      cd indexer
+      set -a && . ./.env && set +a
+      export ENVIO_PG_PORT=5433 ENVIO_PG_PASSWORD=testing ENVIO_PG_USER=postgres ENVIO_PG_DATABASE=envio-dev ENVIO_TUI=false
+      exec nohup pnpm exec envio start < /dev/null >> "$DIR/stack-envio.log" 2>&1
+    ) &
+    pid_record $! "$DIR/stack-envio.pid"
+  else
+    echo "== indexer skipped (STACK_INDEXER=0): history panels show the indexer as not configured"
+  fi
 
   if [ "${STACK_KEEPER:-1}" = "1" ]; then
     echo "== keeper"
@@ -148,7 +154,9 @@ ENV
   fi
 
   echo "== web"
-  NEXT_PUBLIC_ENVIO_GRAPHQL_URL="http://localhost:$HASURA_PORT/v1/graphql" bash scripts/web-env.sh --fork
+  ENVIO_URL=""
+  if [ "${STACK_INDEXER:-1}" = "1" ]; then ENVIO_URL="http://localhost:$HASURA_PORT/v1/graphql"; fi
+  NEXT_PUBLIC_ENVIO_GRAPHQL_URL="$ENVIO_URL" bash scripts/web-env.sh --fork
   if [ "${STACK_WEB_MODE:-start}" = "dev" ]; then
     (cd web && exec nohup pnpm exec next dev --port "$WEB_PORT" < /dev/null > "$DIR/stack-web.log" 2>&1) &
   else

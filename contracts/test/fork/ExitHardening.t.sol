@@ -104,6 +104,9 @@ contract ExitHardeningTest is ForkBase {
         uint256 lpBefore = d.vault.previewRedeem(d.vault.balanceOf(lp));
 
         address jit = makeAddr("jit");
+        // The depositor allowlist (ADR-039) refuses an outsider today; the unlock is what protects the vault once
+        // outside depositors are allowed, so this test allows the attacker.
+        d.vault.setDepositor(jit, true);
         uint256 amount = 500_000e6;
         deal(M.USDC, jit, amount);
         vm.startPrank(jit);

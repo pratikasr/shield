@@ -405,6 +405,19 @@ export const repricerAbi = [
   },
   {
     "type": "function",
+    "name": "setTopUpAgent",
+    "inputs": [
+      {
+        "name": "agent",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "settleForExit",
     "inputs": [
       {
@@ -483,6 +496,37 @@ export const repricerAbi = [
     "type": "function",
     "name": "topUp",
     "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "topUpAgent",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "topUpFor",
+    "inputs": [
+      {
+        "name": "borrower",
+        "type": "address",
+        "internalType": "address"
+      },
       {
         "name": "amount",
         "type": "uint256",
@@ -754,6 +798,19 @@ export const repricerAbi = [
   },
   {
     "type": "event",
+    "name": "TopUpAgentSet",
+    "inputs": [
+      {
+        "name": "agent",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ToppedUp",
     "inputs": [
       {
@@ -846,6 +903,11 @@ export const repricerAbi = [
   {
     "type": "error",
     "name": "NotRegistry",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotTopUpAgent",
     "inputs": []
   },
   {

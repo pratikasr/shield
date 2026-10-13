@@ -52,6 +52,10 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     /// cold store.
     uint128 public pendingToVault;
     uint128 public pendingToTreasury;
+    /// @notice The one contract that may top up a borrower's prepaid balance on their behalf: the forwarder
+    /// factory, which turns USDC delivered to a borrower's deposit address (by Aurora Intents or a plain transfer)
+    /// into premium (ADR-039).
+    address public topUpAgent;
 
     struct Ctx {
         uint256 assetPrice;
@@ -83,10 +87,22 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
 
     /// @notice Add `amount` of the vault asset to the caller's prepaid premium balance.
     function topUp(uint256 amount) external nonReentrant {
+        _topUp(msg.sender, amount);
+    }
+
+    /// @notice Tops up `borrower`'s prepaid balance with `amount` paid by the caller. Only `topUpAgent` (the
+    /// forwarder factory) may call it; the effect is the same as the borrower's own `topUp`.
+    function topUpFor(address borrower, uint256 amount) external nonReentrant {
+        if (msg.sender != topUpAgent) revert NotTopUpAgent();
+        if (borrower == address(0)) revert InvalidParameter();
+        _topUp(borrower, amount);
+    }
+
+    function _topUp(address borrower, uint256 amount) private {
         if (amount == 0) revert ZeroAmount();
         asset.safeTransferFrom(msg.sender, address(this), amount);
-        registry.creditPrepaid(msg.sender, SafeCast.toUint128(amount * scale));
-        emit ToppedUp(msg.sender, amount);
+        registry.creditPrepaid(borrower, SafeCast.toUint128(amount * scale));
+        emit ToppedUp(borrower, amount);
     }
 
     /// @notice Withdraw `amount` of the caller's unused prepaid balance. Premium already due is settled first.
@@ -194,6 +210,11 @@ contract Repricer is IRepricer, Ownable2Step, ReentrancyGuardTransient {
     }
 
     // ---------------------------------------------------------------- owner
+
+    function setTopUpAgent(address agent) external onlyOwner {
+        topUpAgent = agent;
+        emit TopUpAgentSet(agent);
+    }
 
     function setBlockTimeMs(uint32 blockTimeMs_) external onlyOwner {
         if (blockTimeMs_ < 100 || blockTimeMs_ > 2000) revert InvalidParameter();

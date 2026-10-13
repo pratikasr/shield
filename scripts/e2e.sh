@@ -23,7 +23,7 @@ source "$ROOT/.fork/accounts.env"
 echo "== playwright"
 E2E_BASE_URL="http://localhost:$STACK_WEB_PORT" E2E_RPC_URL="$FORK_RPC_URL" \
   E2E_DEPLOYMENT="$ROOT/contracts/deployments/fork-143.json" E2E_BORROWER="$DEMO_ADDRESS" \
-  E2E_ADMIN_KEY="$DEPLOYER_PRIVATE_KEY" E2E_RESULT="$ROOT/.fork/e2e-result.json" \
+  E2E_ADMIN_KEY="$DEPLOYER_PRIVATE_KEY" E2E_RESULT="$ROOT/.fork/e2e-result.json" E2E_INDEXER="${STACK_INDEXER:-1}" \
   pnpm --filter web exec playwright test video-script
 # Attach the keeper's own record of each reprice in the captured run: wall-clock receipt time and latency.
 node -e '

@@ -125,4 +125,38 @@ contract RepricerForkTest is ForkBase {
             "every unit charged is with the vault, the treasury, or pending"
         );
     }
+
+    /// @notice A cross-chain top-up as it lands on Monad (ADR-039): Aurora delivers real USDC to the borrower's
+    /// deposit address, anyone sweeps it, and the borrower's prepaid premium rises; the treasury's deposit address
+    /// funds the vault the same way.
+    function test_forwarders_topUpAndFundTheVault_realUsdc() public {
+        address forwarder = d.forwarders.forwarderFor(borrower);
+        uint256 prepaidBefore = d.registry.record(borrower).prepaid;
+        deal(M.USDC, forwarder, 25e6);
+        vm.prank(makeAddr("keeper or anyone"));
+        assertEq(d.forwarders.sweepPremium(borrower), 25e6);
+        assertEq(d.registry.record(borrower).prepaid - prepaidBefore, 25e18);
+        assertEq(usdc.balanceOf(forwarder), 0);
+
+        address treasuryForwarder = d.forwarders.treasuryForwarder();
+        deal(M.USDC, treasuryForwarder, 1000e6);
+        uint256 navBefore = d.vault.totalAssets();
+        (uint256 assets, uint256 shares) = d.forwarders.sweepVault();
+        assertEq(assets, 1000e6);
+        assertEq(d.vault.balanceOf(d.registry.treasury()), shares, "shares to the treasury");
+        assertEq(d.vault.totalAssets() - navBefore, 1000e6);
+    }
+
+    /// @notice An outsider cannot deposit into the protocol-funded vault (ADR-039).
+    function test_vault_refusesOutsideDepositors() public {
+        address outsider = makeAddr("outsider");
+        deal(M.USDC, outsider, 100e6);
+        vm.startPrank(outsider);
+        usdc.approve(address(d.vault), 100e6);
+        vm.expectRevert(
+            abi.encodeWithSignature("ERC4626ExceededMaxDeposit(address,uint256,uint256)", outsider, 100e6, 0)
+        );
+        d.vault.deposit(100e6, outsider);
+        vm.stopPrank();
+    }
 }

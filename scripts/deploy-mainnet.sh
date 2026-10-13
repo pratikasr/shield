@@ -19,7 +19,8 @@
 #   KEEPER_ADDRESS            required: becomes the vault's unwinder. Checked against KEEPER_ACCOUNT,
 #                             KEEPER_PRIVATE_KEY_FILE or KEEPER_PRIVATE_KEY when one of them is set
 #   SHIELD_MIN_COVER_SECONDS  optional waiting period before new cover can exit; the contract default is 900
-#   SHIELD_TREASURY           optional address that receives the protocol share of premiums; default the deployer
+#   SHIELD_TREASURY           optional address that receives the protocol share of premiums and is the vault's only
+#                             depositor at launch (ADR-039); default LP_ADDRESS when set, else the deployer
 #   SHIELD_PROTOCOL_SHARE_BPS optional protocol share of premiums in bps, at most 2000; default 1000 (ADR-037)
 # Fork env: STACK_MIN_COVER_SECONDS (the fork deployment's waiting period, default 20 seconds).
 # No key is ever printed or needed on the command line.
@@ -61,6 +62,8 @@ if [ "$FORK" = 1 ]; then
   source "$ROOT/.fork/accounts.env"
   unset ETH_PASSWORD  # a keystore password file makes forge reject --private-key
   # A short waiting period so scripted rehearsals and the Playwright run reach an exit within about 90 seconds.
+  # The LP account is the protocol treasury, the vault's only depositor at launch (ADR-039), as on mainnet.
+  export SHIELD_TREASURY="${SHIELD_TREASURY:-$LP_ADDRESS}"
   export DEPLOYMENT_NAME=fork-143 KEEPER_ADDRESS SHIELD_MIN_COVER_SECONDS="${STACK_MIN_COVER_SECONDS:-20}"
   echo "fork deployment, waiting period $SHIELD_MIN_COVER_SECONDS seconds"
   forge script script/Deploy.s.sol:Deploy --rpc-url "$FORK_RPC_URL" --private-key "$DEPLOYER_PRIVATE_KEY" --broadcast --slow
@@ -122,6 +125,8 @@ if [ -n "${SHIELD_PROTOCOL_SHARE_BPS:-}" ]; then
   case "$SHIELD_PROTOCOL_SHARE_BPS" in '' | *[!0-9]*) echo "SHIELD_PROTOCOL_SHARE_BPS must be a whole number of bps" >&2; exit 1 ;; esac
   if [ "$SHIELD_PROTOCOL_SHARE_BPS" -gt 2000 ]; then echo "SHIELD_PROTOCOL_SHARE_BPS is above the 2000 bps cap" >&2; exit 1; fi
 fi
+# The LP account funds the vault for the protocol, so it is the treasury unless one is named.
+if [ -z "${SHIELD_TREASURY:-}" ] && [ -n "${LP_ADDRESS:-}" ]; then export SHIELD_TREASURY="$LP_ADDRESS"; fi
 if [ -n "${SHIELD_TREASURY:-}" ] && ! [[ "$SHIELD_TREASURY" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
   echo "SHIELD_TREASURY must be a 0x address" >&2; exit 1
 fi

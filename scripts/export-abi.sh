@@ -7,7 +7,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/contracts/out"
-CONTRACTS=(PositionRegistry Repricer Executor ShieldVault)
+CONTRACTS=(PositionRegistry Repricer Executor ShieldVault ShieldForwarderFactory)
 
 if [ ! -d "$OUT" ]; then
   echo "contracts/out not found; run 'cd contracts && forge build' first" >&2

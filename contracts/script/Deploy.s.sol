@@ -33,6 +33,7 @@ contract Deploy is Script {
         vm.serializeAddress(key, "ShieldVault", address(d.vault));
         vm.serializeAddress(key, "Repricer", address(d.repricer));
         vm.serializeAddress(key, "Executor", address(d.executor));
+        vm.serializeAddress(key, "ShieldForwarderFactory", address(d.forwarders));
         string memory json = vm.serializeAddress(key, "UniswapV3Swapper", address(d.swapper));
         string memory name = vm.envOr("DEPLOYMENT_NAME", vm.toString(block.chainid));
         string memory path = string.concat(vm.projectRoot(), "/deployments/", name, ".json");
@@ -43,6 +44,7 @@ contract Deploy is Script {
         console2.log("Repricer", address(d.repricer));
         console2.log("Executor", address(d.executor));
         console2.log("UniswapV3Swapper", address(d.swapper));
+        console2.log("ShieldForwarderFactory", address(d.forwarders));
         console2.log("treasury", c.treasury);
         console2.log("protocol share of premiums, bps", c.protocolShareBps);
     }

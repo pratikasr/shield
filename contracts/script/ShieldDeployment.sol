@@ -4,9 +4,11 @@ pragma solidity 0.8.37;
 import {Executor} from "../src/Executor.sol";
 import {PositionRegistry} from "../src/PositionRegistry.sol";
 import {Repricer} from "../src/Repricer.sol";
+import {ShieldForwarderFactory} from "../src/ShieldForwarderFactory.sol";
 import {ShieldVault} from "../src/ShieldVault.sol";
 import {ISwapper} from "../src/interfaces/ISwapper.sol";
 import {IV3SwapRouter, UniswapV3Swapper} from "../src/swappers/UniswapV3Swapper.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {IAaveOracle} from "aave-v3-origin/contracts/interfaces/IAaveOracle.sol";
@@ -34,7 +36,8 @@ library ShieldDeployment {
         uint32 minCoverSeconds;
         /// @notice cbBTC stays listed but disabled until a cbBTC/USDC swap route exists (audit M-5).
         bool cbbtcEnabled;
-        /// @notice Receives the protocol share of premiums; defaults to the owner (ADR-037).
+        /// @notice Receives the protocol share of premiums and is the vault's only depositor at launch; defaults to
+        /// the owner (ADR-037, ADR-039).
         address treasury;
         /// @notice Protocol share of premiums, in bps; at most PositionRegistry.MAX_PROTOCOL_SHARE_BPS.
         uint16 protocolShareBps;
@@ -46,6 +49,7 @@ library ShieldDeployment {
         Repricer repricer;
         Executor executor;
         UniswapV3Swapper swapper;
+        ShieldForwarderFactory forwarders;
     }
 
     /// @notice Calibrated k (ADR-022): 2% a year of covered debt at d = 0.05 and 80% volatility.
@@ -82,6 +86,7 @@ library ShieldDeployment {
         d.executor =
             new Executor(c.owner, d.registry, d.repricer, d.vault, c.addressesProvider, c.pyth, c.usdc);
         d.swapper = new UniswapV3Swapper(c.owner, c.swapRouter);
+        d.forwarders = new ShieldForwarderFactory(c.usdc, d.repricer, IERC4626(address(d.vault)), d.registry);
 
         d.registry.setModules(address(d.repricer), address(d.executor));
         d.vault.setModules(address(d.executor), address(d.repricer));
@@ -92,6 +97,9 @@ library ShieldDeployment {
             d.executor.setMinCoverSeconds(c.minCoverSeconds);
         }
         if (c.protocolShareBps != 0) d.registry.setProtocolShare(c.treasury, c.protocolShareBps);
+        // Protocol-funded vault: only the treasury receives shares at launch (ADR-039).
+        d.vault.setDepositor(c.treasury, true);
+        d.repricer.setTopUpAgent(address(d.forwarders));
         d.registry.setAsset(c.weth, c.wethFeed, c.k, c.sigmaFallback, true);
         if (c.cbbtc != address(0)) {
             d.registry.setAsset(c.cbbtc, c.cbbtcFeed, c.k, c.sigmaFallback, c.cbbtcEnabled);
