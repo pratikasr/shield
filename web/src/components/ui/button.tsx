@@ -1,65 +1,102 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
-import { Slot } from "radix-ui"
+import { cn } from "@/lib/utils"
 
-const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/85 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100",
-        outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-        ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
-        destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default:
-          "h-10 gap-2 px-4 text-[0.9375rem] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1 rounded-[min(var(--radius-md),12px)] px-3 text-[0.8125rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-11 gap-2 px-5 text-base has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4",
-        icon: "size-10",
-        "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
-      },
+/**
+ * The cartoon button: an Ink outline on a ledge that presses down 5 px. Variants: primary (Grape, white text),
+ * secondary (white), quiet (a text button), green, yellow, lava. Version 2 names still work: default is primary,
+ * outline and secondary are white, ghost and link are quiet, destructive is lava.
+ */
+const buttonVariants = cva("c-btn", {
+  variants: {
+    variant: {
+      default: "",
+      primary: "",
+      secondary: "c-btn-white",
+      outline: "c-btn-white",
+      white: "c-btn-white",
+      quiet: "c-btn-quiet",
+      ghost: "c-btn-quiet",
+      link: "c-btn-quiet",
+      green: "c-btn-green",
+      yellow: "c-btn-yellow",
+      destructive: "c-btn-lava",
+      lava: "c-btn-lava",
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
+    size: {
+      default: "",
+      md: "",
+      lg: "",
+      big: "c-btn-big",
+      sm: "c-btn-small",
+      small: "c-btn-small",
+      xs: "c-btn-small",
+      icon: "c-btn-icon",
+      "icon-xs": "c-btn-icon",
+      "icon-sm": "c-btn-icon",
+      "icon-lg": "c-btn-icon",
     },
-  }
-)
+  },
+  defaultVariants: {
+    variant: "default",
+    size: "default",
+  },
+})
+
+/**
+ * Renders the single child element with the button's props merged in (for `asChild` links). A small stand-in for
+ * Radix's Slot, so pages that only need a button do not load Radix.
+ */
+function Slot({ children, className, ...props }: React.ComponentProps<"button">) {
+  const child = React.Children.only(children) as React.ReactElement<Record<string, unknown> & { className?: string }>
+  return React.cloneElement(child, { ...props, ...child.props, className: cn(className, child.props.className) })
+}
+
+/** Three bouncing dots and the words, for a button waiting on a wallet. */
+function Waiting({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="c-waiting">
+      {children}
+      <span className="inline-flex gap-1.5" aria-hidden>
+        <i />
+        <i />
+        <i />
+      </span>
+    </span>
+  )
+}
 
 function Button({
   className,
   variant = "default",
   size = "default",
   asChild = false,
+  loading = false,
+  loadingText,
+  disabled,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /** Pressed down with bouncing dots; the button is disabled while loading. */
+    loading?: boolean
+    /** What the button says while loading, for example "Waiting for your wallet". */
+    loadingText?: React.ReactNode
   }) {
-  const Comp = asChild ? Slot.Root : "button"
-
+  const Comp = asChild ? Slot : "button"
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, size }), className)}
+      disabled={asChild ? undefined : disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
-    />
+    >
+      {loading && !asChild ? <Waiting>{loadingText ?? children}</Waiting> : children}
+    </Comp>
   )
 }
 

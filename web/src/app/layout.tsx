@@ -1,39 +1,33 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Sans } from "next/font/google";
-import { Theme } from "@/components/shell/theme";
+import { Lilita_One, Rubik } from "next/font/google";
 import "./globals.css";
 
-const instrument = Instrument_Sans({
-  variable: "--font-instrument",
-  subsets: ["latin"],
-  display: "swap",
-});
+/** Headlines, status words and preset names. Words only: it has no tabular figures. */
+const lilita = Lilita_One({ weight: "400", variable: "--font-lilita", subsets: ["latin"], display: "swap" });
+/** Body text and every number, with tabular figures. */
+const rubik = Rubik({ variable: "--font-rubik", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: { default: "Shield: an early exit for Aave borrowers on Monad", template: "%s | Shield" },
+  title: { default: "Shield: the floor is lava, Shield steps in first", template: "%s | Shield" },
   description:
-    "Set a health-factor trigger above Aave's liquidation line. At the trigger a vault repays part of your debt for a 1% discount plus a per-block premium, instead of a 5.5% liquidation penalty, repriced every 300 ms block on Monad.",
+    "Shield pays back part of your Aave loan on Monad before you get liquidated, and takes a slice of your ETH worth the repaid amount plus 1% instead of Aave's 5.5%.",
   applicationName: "Shield",
   openGraph: {
-    title: "Shield: leave before liquidation",
-    description: "An opt-in early exit for Aave V3 borrowers on Monad. 1% at your trigger plus a per-block premium, instead of a 5.5% liquidation penalty.",
+    title: "Shield: the floor is lava, Shield steps in first",
+    description: "An opt-in early exit for Aave V3 borrowers on Monad. 1% at your line instead of Aave's 5.5% liquidation bonus.",
     type: "website",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0b0d12" },
-    { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
-  ],
+  themeColor: "#cbe7ff",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${instrument.variable} light`} suppressHydrationWarning>
-      <body>
-        <Theme>{children}</Theme>
-      </body>
+    <html lang="en" className={`${lilita.variable} ${rubik.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,18 +1,65 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../components/cartoon/cartoon.css";
 
-/* Shield design tokens (docs/DESIGN.md). Light is the default; `.dark` on <html> switches. Neutral surfaces, one
-   brand blue for links, focus and the mark, and three colours that only ever carry meaning: green is protected or
-   saved, amber is the trigger, red is Aave's liquidation line. */
-@custom-variant dark (&:is(.dark *));
-@custom-variant light (&:is(.light *));
+/* Shield's cartoon "floor is lava" system (design/prototype/README.md). One light theme on a sky page: white cards,
+   2.5 px Ink outlines, hard offset shadows, Grape for action and the Shield line, and three status colours that are
+   always fills behind Ink text (Chill, Heads-up, Lava), never coloured text on white.
 
+   Tailwind classes: bg-sky, bg-sky-2, bg-cloud, text-ink, text-ink-soft, bg-grape, text-grape-ink, bg-grape-tint,
+   bg-chill, bg-heads, bg-lava, shadow-sticker, shadow-sticker-sm, shadow-ledge, rounded-card, rounded-btn,
+   rounded-level, rounded-sticker, font-display, ink-line (2.5 px Ink border), ease-spring. */
+
+@theme {
+  --color-sky: #cbe7ff;
+  --color-sky-2: #e2f2ff;
+  --color-sky-deep: #9fcff5;
+  --color-cloud: #ffffff;
+  --color-ink: #1b1430;
+  --color-ink-soft: #4a4363;
+  --color-grape: #6a4cf5;
+  --color-grape-ink: #4630c2;
+  --color-grape-light: #8f79ff;
+  --color-grape-tint: #e7e1ff;
+  --color-chill: #2fd47f;
+  --color-chill-tint: #d3f6e3;
+  --color-heads: #ffc93c;
+  --color-heads-tint: #fff0c4;
+  --color-lava: #ff5a4e;
+  --color-lava-deep: #e2402f;
+  --color-lava-glow: #ff9a3c;
+  --color-lava-tint: #ffdad6;
+  --color-cheek: #ff9bd8;
+  --color-grey: #b9b3cc;
+  --color-grey-tint: #ece9f3;
+
+  --shadow-sticker: 4px 4px 0 #1b1430;
+  --shadow-sticker-sm: 3px 3px 0 #1b1430;
+  --shadow-sticker-xs: 2px 2px 0 #1b1430;
+  --shadow-ledge: 0 5px 0 #1b1430;
+  --shadow-ledge-sm: 0 4px 0 #1b1430;
+
+  --radius-card: 18px;
+  --radius-btn: 14px;
+  --radius-level: 24px;
+  --radius-sticker: 12px;
+  --radius-comic: 8px;
+
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --font-display: var(--font-lilita), "Rubik", system-ui, sans-serif;
+  --font-sans: var(--font-rubik), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: var(--font-lilita), "Rubik", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+/* Version 2 names, kept as aliases onto the cartoon palette so shadcn primitives and any file not yet moved to the
+   new tokens still render in the new look. New code uses the names above. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -40,81 +87,53 @@
   --color-caution-soft: var(--caution-soft);
   --color-danger-soft: var(--danger-soft);
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
   --radius-xl: 14px;
   --radius-2xl: 18px;
   --text-2xs: 0.75rem;
   --text-2xs--line-height: 1rem;
-  --shadow-panel: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.03);
-  --shadow-float: 0 24px 48px -12px rgb(16 24 40 / 0.14), 0 4px 12px rgb(16 24 40 / 0.05);
+  --shadow-panel: 4px 4px 0 #1b1430;
+  --shadow-float: 4px 4px 0 #1b1430;
 }
 
-:root,
-.light {
-  --background: #f6f7f9;
-  --foreground: #0b1220;
+:root {
+  --background: #cbe7ff;
+  --foreground: #1b1430;
   --card: #ffffff;
-  --card-foreground: #0b1220;
-  --raised: #f2f4f7;
+  --card-foreground: #1b1430;
+  --raised: #e2f2ff;
   --popover: #ffffff;
-  --popover-foreground: #0b1220;
-  --primary: #0b1220;
+  --popover-foreground: #1b1430;
+  --primary: #6a4cf5;
   --primary-foreground: #ffffff;
-  --secondary: #eef0f4;
-  --secondary-foreground: #0b1220;
-  --muted: #f2f4f7;
-  --muted-foreground: #586378;
-  --accent: #eef0f4;
-  --accent-foreground: #0b1220;
+  --secondary: #e2f2ff;
+  --secondary-foreground: #1b1430;
+  --muted: #e2f2ff;
+  --muted-foreground: #4a4363;
+  --accent: #e7e1ff;
+  --accent-foreground: #1b1430;
   --destructive: #b42318;
-  --border: #e3e6eb;
-  --input: #d0d5dd;
-  --ring: #2347e8;
-  --brand: #2347e8;
-  --brand-soft: rgb(35 71 232 / 0.08);
-  --safe: #067647;
-  --caution: #b54708;
-  --danger: #c4320a;
-  --monad: #6e54ff;
-  --safe-soft: rgb(6 118 71 / 0.08);
-  --caution-soft: rgb(181 71 8 / 0.09);
-  --danger-soft: rgb(196 50 10 / 0.08);
-  --radius: 0.625rem;
-  color-scheme: light;
-}
+  --border: rgb(27 20 48 / 0.18);
+  --input: #1b1430;
+  --ring: #1b1430;
+  --brand: #4630c2;
+  --brand-soft: #e7e1ff;
+  /* Text-safe darker shades for the legacy status text classes; status fills use chill, heads and lava. */
+  --safe: #0b7a43;
+  --caution: #8a5300;
+  --danger: #c42b1c;
+  --monad: #6a4cf5;
+  --safe-soft: #d3f6e3;
+  --caution-soft: #fff0c4;
+  --danger-soft: #ffdad6;
+  --radius: 0.875rem;
 
-.dark {
-  --background: #0b0d12;
-  --foreground: #f2f4f7;
-  --card: #12151b;
-  --card-foreground: #f2f4f7;
-  --raised: #181c24;
-  --popover: #181c24;
-  --popover-foreground: #f2f4f7;
-  --primary: #f2f4f7;
-  --primary-foreground: #0b0d12;
-  --secondary: #1d222b;
-  --secondary-foreground: #f2f4f7;
-  --muted: #181c24;
-  --muted-foreground: #9aa3b2;
-  --accent: #1d222b;
-  --accent-foreground: #f2f4f7;
-  --destructive: #f97066;
-  --border: #242a34;
-  --input: #303744;
-  --ring: #7b93ff;
-  --brand: #7b93ff;
-  --brand-soft: rgb(123 147 255 / 0.12);
-  --safe: #47cd89;
-  --caution: #fdb022;
-  --danger: #f97066;
-  --monad: #9d8cff;
-  --safe-soft: rgb(71 205 137 / 0.1);
-  --caution-soft: rgb(253 176 34 / 0.1);
-  --danger-soft: rgb(249 112 102 / 0.1);
-  --shadow-panel: none;
-  color-scheme: dark;
+  /* Shape and motion tokens for plain CSS. */
+  --line: 2.5px;
+  --shadow: 4px 4px 0 var(--color-ink);
+  --shadow-sm: 3px 3px 0 var(--color-ink);
+  color-scheme: light;
 }
 
 @layer base {
@@ -124,53 +143,74 @@
   html {
     @apply font-sans;
     -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
   }
   body {
-    @apply bg-background text-foreground antialiased;
-    font-size: 0.9375rem;
+    background: var(--color-sky);
+    color: var(--color-ink);
+    font-size: 17px;
     line-height: 1.55;
-    font-feature-settings: "ss01" 1;
+    /* Every number is Rubik with tabular figures, so per-block values do not jitter. Lilita has none and carries no
+       numbers. */
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
   :focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-    border-radius: 4px;
+    outline: 3px solid var(--color-ink);
+    outline-offset: 3px;
+    border-radius: 6px;
   }
   h1,
   h2,
-  h3 {
-    letter-spacing: -0.015em;
-    line-height: 1.15;
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.005em;
+    line-height: 1.05;
   }
   ::selection {
-    background: var(--brand-soft);
+    background: var(--color-grape-tint);
+  }
+  main:focus {
+    outline: none;
   }
 }
 
 @layer utilities {
-  /* Every figure lines up: tabular numerals for readings, tables and amounts. */
-  .num {
+  .num,
+  .tnum {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
   }
   .reading {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
-    letter-spacing: -0.02em;
+    font-weight: 700;
   }
   .display {
-    letter-spacing: -0.03em;
+    font-family: var(--font-display);
+    font-weight: 400;
     line-height: 1.02;
   }
+  /* The 2.5 px Ink outline every container wears. */
+  .ink-line {
+    border: var(--line) solid var(--color-ink);
+  }
+  .ink-line-2 {
+    border: 2px solid var(--color-ink);
+  }
+  /* A version 2 surface, restyled as a cartoon card. */
   .panel {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-panel);
+    background: var(--color-cloud);
+    border: var(--line) solid var(--color-ink);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow);
   }
   /* A tap target of at least 44 px around a smaller control, without changing how it looks. The element must already
      be positioned (relative or absolute). */
@@ -186,11 +226,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
   }
 }

@@ -10,20 +10,21 @@ export function useWrongNetwork() {
   return isConnected && chainId !== monadMainnet.id;
 }
 
+/** A Lava strip under the header while the wallet is on another chain, with one "Switch to Monad" button. */
 export function NetworkGuard() {
   const wrong = useWrongNetwork();
   const { chain } = useAccount();
   const { switchChain, isPending, error } = useSwitchChain();
   if (!wrong) return null;
   return (
-    <div role="alert" className="border-b border-danger/40 bg-danger-soft">
-      <div className="mx-auto flex max-w-[76rem] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <p className="text-sm">
-          Your wallet is on {chain?.name ?? "another network"}. Shield runs on Monad; switch to see your position and act on it.
-          {error && <span className="block text-danger">{error.message.split("\n")[0]}</span>}
+    <div role="alert" className="border-b-[2.5px] border-ink bg-lava-tint">
+      <div className="c-wrap flex flex-wrap items-center justify-between gap-3 py-3">
+        <p className="m-0 font-semibold">
+          Your wallet is on {chain?.name ?? "another network"}. Shield runs on Monad: switch to act on your loan. Live numbers keep showing.
+          {error && <span className="mt-1 block font-normal text-danger">{error.message.split("\n")[0]}</span>}
         </p>
-        <Button size="sm" onClick={() => switchChain({ chainId: monadMainnet.id })} disabled={isPending}>
-          {isPending ? "Switching" : "Switch to Monad"}
+        <Button size="small" onClick={() => switchChain({ chainId: monadMainnet.id })} loading={isPending} loadingText="Switching">
+          Switch to Monad
         </Button>
       </div>
     </div>
@@ -31,11 +32,11 @@ export function NetworkGuard() {
 }
 
 /** The one-click fix as a primary action: "Switch to Monad to <action>". */
-export function SwitchButton({ action, className, size = "lg" }: { action: string; className?: string; size?: "default" | "lg" }) {
+export function SwitchButton({ action, className, size = "lg" }: { action: string; className?: string; size?: "default" | "lg" | "big" }) {
   const { switchChain, isPending } = useSwitchChain();
   return (
-    <Button size={size} className={className} onClick={() => switchChain({ chainId: monadMainnet.id })} disabled={isPending}>
-      {isPending ? "Switching to Monad" : `Switch to Monad to ${action}`}
+    <Button size={size === "big" ? "big" : "default"} className={className} onClick={() => switchChain({ chainId: monadMainnet.id })} loading={isPending} loadingText="Switching to Monad">
+      {`Switch to Monad to ${action}`}
     </Button>
   );
 }

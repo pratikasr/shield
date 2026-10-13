@@ -14,7 +14,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AppHeader />
         <NetworkGuard />
         <StaleBanner />
-        <main id="main" className="mx-auto w-full max-w-[76rem] flex-1 px-4 py-8 sm:px-6 sm:py-10">
+        <main id="main" tabIndex={-1} className="c-wrap w-full flex-1 pb-18 pt-6">
           {children}
         </main>
         <AppFooter />

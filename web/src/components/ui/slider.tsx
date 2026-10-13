@@ -42,11 +42,11 @@ function Slider({
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
-        className="relative grow overflow-hidden rounded-full bg-muted data-horizontal:h-1.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-1.5"
+        className="relative grow overflow-hidden rounded-full border-2 border-ink bg-cloud data-horizontal:h-3 data-horizontal:w-full data-vertical:h-full data-vertical:w-1.5"
       >
         <SliderPrimitive.Range
           data-slot="slider-range"
-          className="absolute bg-foreground select-none data-horizontal:h-full data-vertical:w-full"
+          className="absolute bg-grape select-none data-horizontal:h-full data-vertical:w-full"
         />
       </SliderPrimitive.Track>
       {Array.from({ length: _values.length }, (_, index) => (
@@ -55,7 +55,7 @@ function Slider({
           key={index}
           aria-label={ariaLabel}
           aria-valuetext={valueText}
-          className="relative block size-5 shrink-0 rounded-full border-2 border-foreground bg-white shadow-sm ring-ring/40 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden active:ring-4 disabled:pointer-events-none disabled:opacity-50"
+          className="relative block size-6 shrink-0 rounded-full border-[2.5px] border-ink bg-grape shadow-sticker-xs ring-ring/40 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden active:ring-4 disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>

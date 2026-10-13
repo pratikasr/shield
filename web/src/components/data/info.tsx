@@ -24,7 +24,7 @@ export function Info({ children, label = "How this is computed" }: { children: R
       <PopoverPrimitive.Trigger asChild>
         <button
           type="button"
-          className="hit relative inline-flex size-6 items-center justify-center rounded-sm align-middle text-muted-foreground hover:text-foreground"
+          className="hit relative inline-flex size-6 items-center justify-center rounded-full align-middle text-ink-soft hover:text-ink"
           aria-label={label}
           onPointerEnter={hover(true)}
           onPointerLeave={hover(false)}
@@ -47,10 +47,10 @@ export function Info({ children, label = "How this is computed" }: { children: R
           onOpenAutoFocus={(e) => e.preventDefault()}
           onPointerEnter={hover(true)}
           onPointerLeave={hover(false)}
-          className="z-50 max-w-72 rounded-md bg-foreground px-3 py-2 text-[0.8125rem] font-normal leading-snug text-background shadow-md"
+          className="z-50 max-w-72 rounded-[10px] border-2 border-ink bg-cloud px-3 py-2 text-[14px] font-medium leading-snug text-ink shadow-sticker-xs"
         >
           {children}
-          <PopoverPrimitive.Arrow className="fill-foreground" width={10} height={5} />
+          <PopoverPrimitive.Arrow className="fill-ink" width={10} height={5} />
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>

@@ -1,34 +1,23 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BlockChip } from "@/components/cartoon/block-ticker";
 import { AddressAvatar } from "@/components/data/avatar";
-import { TokenIcon } from "@/components/data/token";
-import { Button } from "@/components/ui/button";
 import { useChainFreshness } from "@/hooks/useLiveBlock";
 import { isFork } from "@/lib/env";
 import { truncateHex } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import { ThemeToggle } from "./theme";
-import { Wordmark } from "./wordmark";
+import { HeaderBar, navFor } from "./header-bar";
 
-const NAV = [
-  { href: "/app/borrow", label: "Protect" },
-  { href: "/app/vault", label: "Vault" },
-  { href: "/app/analytics", label: "Analytics" },
-];
-
-/** The network the app reads, with the latest proposed block: proof the page is live, not a mock. */
+/** The latest proposed block on the chain the app reads: proof the page is live, not a mock. */
 function NetworkChip() {
   const { block, stale } = useChainFreshness();
-  const live = block !== undefined && !stale;
   return (
-    <span
-      className={cn(
-        "hidden h-9 items-center gap-2 rounded-full border bg-card px-3 text-[0.8125rem] md:inline-flex num",
-        (isFork || stale) && "border-caution/50 bg-caution-soft",
-      )}
+    <BlockChip
+      block={block}
+      tone={block === undefined ? "off" : stale || isFork ? "warn" : "live"}
+      name={isFork ? "Local fork, block" : stale ? "Reconnecting, block" : "Monad block"}
+      short={isFork ? "Fork" : stale ? "Reconnecting" : "Block"}
       title={
         stale
           ? "No new block for over two seconds: reconnecting to the Monad RPC"
@@ -36,94 +25,55 @@ function NetworkChip() {
             ? "Reading a local fork of Monad mainnet (test rehearsal)"
             : "Latest proposed block on Monad mainnet"
       }
-    >
-      <TokenIcon symbol="MON" size={16} />
-      <span className={cn("font-medium", (isFork || stale) && "text-caution")}>{isFork ? "Local fork" : "Monad"}</span>
-      <span className="relative flex size-1.5" aria-hidden>
-        {/* The dot pings only while blocks arrive; a frozen block never pulses green. */}
-        {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-safe opacity-50" />}
-        <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-safe" : stale ? "bg-caution" : "bg-muted-foreground")} />
-      </span>
-      <span className="text-muted-foreground">{block !== undefined ? `${stale ? "Reconnecting, " : ""}${block.toLocaleString("en-US")}` : "connecting"}</span>
-    </span>
+    />
   );
 }
 
-function WalletButton() {
+/** The wallet as a cartoon pill: connect, wrong network (one tap to switch), or the connected address. */
+export function WalletButton() {
   return (
     <ConnectButton.Custom>
       {({ account, chain, openAccountModal, openConnectModal, openChainModal, mounted }) => {
-        if (!mounted) return <Button disabled aria-hidden className="w-32 opacity-0" />;
-        if (!account) return <Button onClick={openConnectModal}>Connect wallet</Button>;
-        if (chain?.unsupported) {
+        if (!mounted)
           return (
-            <Button variant="destructive" onClick={openChainModal}>
-              Wrong network
-            </Button>
+            <span className="c-wallet invisible" aria-hidden>
+              Connect wallet
+            </span>
           );
-        }
+        if (!account)
+          return (
+            <button type="button" className="c-wallet" data-tone="connect" onClick={openConnectModal}>
+              Connect wallet
+            </button>
+          );
+        if (chain?.unsupported)
+          return (
+            <button type="button" className="c-wallet" data-tone="wrong" onClick={openChainModal}>
+              {chain.name ? `On ${chain.name}: switch to Monad` : "Switch to Monad"}
+            </button>
+          );
         return (
-          <Button variant="outline" onClick={openAccountModal} className="gap-2 rounded-full bg-card pl-1.5 pr-3.5 num">
-            <AddressAvatar address={account.address} size={26} />
-            <span className="sm:hidden">{truncateHex(account.address, 4, 2)}</span>
-            <span className="hidden sm:inline">{truncateHex(account.address, 4, 4)}</span>
-          </Button>
+          <button type="button" className="c-wallet" onClick={openAccountModal} aria-label={`Wallet ${account.address}, open account`}>
+            <AddressAvatar address={account.address} size={22} className="c-wallet-face" />
+            {truncateHex(account.address, 4, 4)}
+          </button>
         );
       }}
     </ConnectButton.Custom>
   );
 }
 
-/** The page links. Inline beside the mark from 640 px; on phones, a row of their own under the header bar. */
-function AppNav({ pathname, row }: { pathname: string | null; row?: boolean }) {
-  return (
-    <nav aria-label="App" className={row ? "mx-auto flex h-11 max-w-[76rem] items-stretch px-4 sm:hidden" : "hidden items-center gap-1 sm:flex"}>
-      {NAV.map((n) => {
-        const active = pathname?.startsWith(n.href);
-        return (
-          <Link
-            key={n.href}
-            href={n.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "hit relative rounded-md text-sm font-medium transition-colors",
-              row ? "flex flex-1 items-center justify-center" : "px-3 py-2",
-              active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {n.label}
-            {active && <span className={cn("absolute h-0.5 rounded-full bg-foreground", row ? "inset-x-4 bottom-0" : "inset-x-3 -bottom-[13px]")} aria-hidden />}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
 export function AppHeader() {
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
-      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2">
-        Skip to content
-      </a>
-      <div className="mx-auto flex h-16 max-w-[76rem] items-center justify-between gap-3 px-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-8">
-          <Link href="/" className="rounded-md" aria-label="Shield home">
-            {/* From 768 px the network chip joins the bar; until 1024 px the name gives it room. */}
-            <Wordmark textClassName="md:max-lg:hidden" />
-          </Link>
-          <AppNav pathname={pathname} />
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+    <HeaderBar
+      active={navFor(pathname)}
+      end={
+        <>
           <NetworkChip />
-          <ThemeToggle />
           <WalletButton />
-        </div>
-      </div>
-      <div className="border-t sm:hidden">
-        <AppNav pathname={pathname} row />
-      </div>
-    </header>
+        </>
+      }
+    />
   );
 }

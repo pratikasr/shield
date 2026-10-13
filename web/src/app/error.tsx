@@ -1,8 +1,8 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
+import { Mascot } from "@/components/cartoon/mascot";
 import { Button } from "@/components/ui/button";
 
 /** Last line of defence for the landing page: what happened, that funds are unaffected, and a way back. */
@@ -11,20 +11,20 @@ export default function RootError({ error, reset }: { error: Error & { digest?: 
     console.error(error);
   }, [error]);
   return (
-    <main id="main" className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center px-4 py-16 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-caution-soft text-caution">
-        <TriangleAlert className="size-5" aria-hidden />
-      </span>
-      <h1 className="mt-5 text-[1.5rem] font-semibold tracking-[-0.01em]">This page hit an error</h1>
-      <p className="mt-3 text-muted-foreground">
-        Something failed while showing the page. Nothing on chain changed: your position, your cover and any transaction you already sent are as they
-        were. Try again, or go back to the start.
-      </p>
-      <div className="mt-7 flex flex-wrap justify-center gap-3">
-        <Button onClick={() => reset()}>Try again</Button>
-        <Button asChild variant="outline" className="bg-card">
-          <Link href="/">Back to the start</Link>
-        </Button>
+    <main id="main" className="c-wrap flex min-h-dvh items-center justify-center py-16">
+      <div className="c-card max-w-xl text-center" role="alert">
+        <Mascot mood="confused" size={110} className="mx-auto" />
+        <h1 className="c-h1-app mt-4">This page tripped.</h1>
+        <p className="mt-3">
+          Something failed while showing the page. Nothing on chain changed: your loan, your Shield line and any transaction you already sent are as they
+          were.
+        </p>
+        <div className="c-row mt-6 justify-center">
+          <Button onClick={() => reset()}>Try again</Button>
+          <Button asChild variant="secondary">
+            <Link href="/">Back to the start</Link>
+          </Button>
+        </div>
       </div>
     </main>
   );

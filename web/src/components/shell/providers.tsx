@@ -1,11 +1,10 @@
 "use client";
 
 import "@rainbow-me/rainbowkit/styles.css";
-import { RainbowKitProvider, connectorsForWallets, darkTheme, lightTheme } from "@rainbow-me/rainbowkit";
-import type { Wallet } from "@rainbow-me/rainbowkit";
+import { RainbowKitProvider, connectorsForWallets, lightTheme } from "@rainbow-me/rainbowkit";
+import type { Theme, Wallet } from "@rainbow-me/rainbowkit";
 import { injectedWallet, metaMaskWallet, rabbyWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useTheme } from "next-themes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { monadTestnet } from "viem/chains";
@@ -87,19 +86,44 @@ export const wagmiConfig = createConfig({
   ssr: true,
 });
 
+/** RainbowKit's modal in the cartoon style: Grape accent, Ink text and outlines, hard shadows, Rubik. */
+function cartoonTheme(): Theme {
+  const base = lightTheme({ accentColor: "#6a4cf5", accentColorForeground: "#ffffff", borderRadius: "large", overlayBlur: "small" });
+  return {
+    ...base,
+    colors: {
+      ...base.colors,
+      modalBackground: "#ffffff",
+      modalBorder: "#1b1430",
+      modalText: "#1b1430",
+      modalTextSecondary: "#4a4363",
+      modalTextDim: "#4a4363",
+      modalBackdrop: "rgba(27, 20, 48, 0.45)",
+      actionButtonBorder: "#1b1430",
+      actionButtonSecondaryBackground: "#e2f2ff",
+      closeButton: "#1b1430",
+      closeButtonBackground: "#e2f2ff",
+      generalBorder: "#1b1430",
+      generalBorderDim: "rgba(27, 20, 48, 0.18)",
+      menuItemBackground: "#e7e1ff",
+      profileForeground: "#e2f2ff",
+      profileAction: "#ffffff",
+      profileActionHover: "#e7e1ff",
+      selectedOptionBorder: "#4630c2",
+      connectButtonBackground: "#ffffff",
+      connectButtonText: "#1b1430",
+      error: "#c42b1c",
+    },
+    fonts: { body: 'var(--font-rubik), system-ui, -apple-system, "Segoe UI", sans-serif' },
+    radii: { ...base.radii, modal: "18px", modalMobile: "18px", actionButton: "14px", connectButton: "14px", menuButton: "14px" },
+    shadows: { ...base.shadows, dialog: "4px 4px 0 #1b1430", connectButton: "2px 2px 0 #1b1430", profileDetailsAction: "2px 2px 0 #1b1430", selectedOption: "2px 2px 0 #4630c2", selectedWallet: "2px 2px 0 #4630c2", walletLogo: "none" },
+  };
+}
+const CARTOON_THEME = cartoonTheme();
+
 function Rainbow({ children }: { children: ReactNode }) {
-  const { resolvedTheme } = useTheme();
-  // The server renders light; switching RainbowKit's theme before hydration would make its style tags mismatch.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const dark = mounted && resolvedTheme === "dark";
-  const accent = { accentColor: dark ? "#f2f4f7" : "#0b1220", accentColorForeground: dark ? "#0b0d12" : "#ffffff", borderRadius: "medium" as const, fontStack: "system" as const };
   return (
-    <RainbowKitProvider
-      theme={dark ? darkTheme(accent) : lightTheme(accent)}
-      initialChain={e2eWrongChain ? monadTestnet : monadMainnet}
-      modalSize="compact"
-    >
+    <RainbowKitProvider theme={CARTOON_THEME} initialChain={e2eWrongChain ? monadTestnet : monadMainnet} modalSize="compact">
       {children}
     </RainbowKitProvider>
   );

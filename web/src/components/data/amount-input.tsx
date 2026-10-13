@@ -50,7 +50,7 @@ export function AmountInput({
         aria-label={label}
         aria-invalid={invalid || undefined}
         aria-describedby={hintId}
-        className={cn("num", size === "lg" ? "h-14 pl-12 text-lg" : "h-12 pl-11 text-base", onMax ? "pr-16" : "pr-3")}
+        className={cn("c-field h-auto", size === "lg" ? "min-h-14 pl-12 text-[20px]" : "pl-11", onMax ? "pr-18" : "pr-3")}
         placeholder={placeholder}
         value={value}
         disabled={disabled}
@@ -59,7 +59,7 @@ export function AmountInput({
       {onMax && (
         <button
           type="button"
-          className="hit absolute right-2 top-1/2 h-8 -translate-y-1/2 rounded-md px-2.5 text-[0.8125rem] font-medium text-brand hover:bg-brand-soft disabled:opacity-50"
+          className="hit absolute right-2.5 top-1/2 h-8 -translate-y-1/2 rounded-full border-2 border-ink bg-grape-tint px-3 text-[14px] font-bold text-ink hover:bg-grape hover:text-white disabled:opacity-50"
           onClick={onMax}
           disabled={disabled || maxDisabled}
         >
@@ -74,7 +74,7 @@ export function AmountInput({
 export function AmountHint({ id, check, children, className }: { id: string; check?: AmountCheck; children?: React.ReactNode; className?: string }) {
   const danger = check?.tone === "danger" && check.message;
   return (
-    <p id={id} className={cn("text-[0.8125rem]", danger ? "text-danger" : "text-muted-foreground", className)} aria-live="polite">
+    <p id={id} className={cn("text-[14.5px] leading-snug", danger ? "font-semibold text-danger" : "text-ink-soft", className)} aria-live="polite">
       {danger ? check!.message : children}
     </p>
   );

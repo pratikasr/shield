@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** A preset choice (trigger, prepay duration, loan size). Pressed is ink; the tap area is 44 px tall. */
+/** A small preset pill. Pressed is Ink; the tap area is 44 px tall. For big preset cards use ChoiceCards. */
 export function Chip({
   active,
   onClick,
@@ -22,8 +22,8 @@ export function Chip({
       aria-pressed={Boolean(active)}
       aria-label={label}
       className={cn(
-        "hit relative h-8 rounded-full border px-3 text-[0.8125rem] font-medium transition-colors num disabled:opacity-50",
-        active ? "border-foreground bg-foreground text-background" : "bg-card text-muted-foreground hover:border-input hover:text-foreground",
+        "hit relative min-h-9 rounded-full border-2 border-ink px-3.5 text-[15px] font-bold transition-colors disabled:opacity-50",
+        active ? "bg-ink text-white" : "bg-cloud text-ink hover:bg-grape-tint",
       )}
     >
       {children}

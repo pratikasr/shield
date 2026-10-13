@@ -20,14 +20,14 @@ export function Stat({
   return (
     <div className={cn("min-w-0", className)}>
       {/* A fixed label height keeps values on one line across a row, with or without an info button. */}
-      <dt className="flex min-h-6 items-center gap-1 text-[0.8125rem] text-muted-foreground">{label}</dt>
+      <dt className="flex min-h-6 items-center gap-1 text-[15px] font-semibold text-ink-soft">{label}</dt>
       <dd
         className={cn(
-          "reading mt-1 font-semibold",
-          size === "xl" && "text-[2.5rem] leading-none",
-          size === "lg" && "text-[1.75rem] leading-tight",
-          size === "md" && "text-[1.25rem] leading-snug",
-          size === "sm" && "text-base",
+          "reading mt-1 font-extrabold",
+          size === "xl" && "text-[clamp(36px,3.8vw,50px)] leading-none",
+          size === "lg" && "text-[1.875rem] leading-tight",
+          size === "md" && "text-[1.375rem] leading-snug",
+          size === "sm" && "text-[17px]",
           tone === "safe" && "text-safe",
           tone === "caution" && "text-caution",
           tone === "danger" && "text-danger",
@@ -35,12 +35,12 @@ export function Stat({
       >
         {value}
       </dd>
-      {hint && <dd className="mt-1 text-[0.8125rem] text-muted-foreground">{hint}</dd>}
+      {hint && <dd className="mt-1 text-[14.5px] text-ink-soft">{hint}</dd>}
     </div>
   );
 }
 
-/** A surface with an optional header row. Every app section is one of these; nothing nests inside another. */
+/** A white cartoon card with an optional header row (Lilita title). Kept for version 2 imports; new code can use Card. */
 export function Panel({
   title,
   description,
@@ -66,11 +66,11 @@ export function Panel({
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pt-5 sm:px-6">
           <div className="min-w-0">
             {title && (
-              <h2 id={labelledBy} className="text-base font-semibold">
+              <h2 id={labelledBy} className="text-[22px]">
                 {title}
               </h2>
             )}
-            {description && <p className="mt-0.5 text-[0.8125rem] text-muted-foreground">{description}</p>}
+            {description && <p className="mt-1 text-[15px] text-ink-soft">{description}</p>}
           </div>
           {action}
         </div>

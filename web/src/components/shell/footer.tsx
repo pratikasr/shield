@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { explorerUrl, shield } from "@/lib/env";
 import { truncateHex } from "@/lib/format";
-import { Wordmark } from "./wordmark";
+import { Logo } from "./header-bar";
 
 export const REPO = "https://github.com/pratikasr/shield";
 export const DOCS = {
@@ -12,7 +12,7 @@ export const DOCS = {
   license: `${REPO}/blob/main/LICENSE`,
 };
 
-const DISCLAIMER =
+export const DISCLAIMER =
   "Shield is experimental, open-source software built for Monad Metropolis 2026. Its contracts have not been audited, and using them can lose money. Nothing on this site is financial advice. Shield is independent and not affiliated with Aave, Pyth or Monad.";
 
 const CONTRACTS = [
@@ -20,100 +20,72 @@ const CONTRACTS = [
   ["Repricer", shield.repricer],
   ["Executor", shield.executor],
   ["ShieldVault", shield.vault],
+  ["ShieldForwarderFactory", shield.forwarders],
 ] as const;
-/** Listed when the build has it; a deployment from before ADR-039 has none. */
-const OPTIONAL_CONTRACTS = [["ShieldForwarderFactory", shield.forwarders]] as const;
 
-function Column({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h2 className="text-[0.8125rem] font-semibold">{title}</h2>
-      <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">{children}</ul>
-    </div>
-  );
-}
+const linkCls = "inline-flex min-h-11 items-center font-semibold";
 
-function Item({ href, children, external }: { href: string; children: React.ReactNode; external?: boolean }) {
+/**
+ * The ground under every page: Ink, with the honest disclaimer, where to check the work (Security, Tests, GitHub),
+ * and on the landing page the contract addresses when the build has them.
+ */
+function Ground({ contracts }: { contracts: boolean }) {
+  const deployed = CONTRACTS.filter(([, a]) => a);
   return (
-    <li>
-      {external ? (
-        <a href={href} target="_blank" rel="noreferrer" className="hit relative rounded-sm transition-colors hover:text-foreground">
-          {children}
-        </a>
-      ) : (
-        <Link href={href} prefetch={false} className="hit relative rounded-sm transition-colors hover:text-foreground">
-          {children}
-        </Link>
-      )}
-    </li>
-  );
-}
-
-/** The marketing footer: product, contracts, sources, documents, and what Shield is and is not. */
-export function SiteFooter() {
-  const deployed = CONTRACTS.every(([, a]) => a);
-  return (
-    <footer className="border-t bg-card">
-      <div className="mx-auto max-w-[76rem] px-4 py-14 sm:px-6">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-          <div className="max-w-xs">
-            <Wordmark />
-            <p className="mt-4 text-sm text-muted-foreground">An opt-in early exit for Aave V3 borrowers on Monad, priced every block.</p>
-          </div>
-          <Column title="Product">
-            <Item href="/app/borrow">Protect a position</Item>
-            <Item href="/app/vault">The vault</Item>
-            <Item href="/app/analytics">Analytics</Item>
-            <Item href="/#how">How an exit works</Item>
-            <Item href="/#faq">Questions</Item>
-          </Column>
-          <Column title="Transparency">
-            <Item href={DOCS.security} external>Security and trust model</Item>
-            <Item href={DOCS.tests} external>Test report</Item>
-            <Item href={REPO} external>Source code (MIT)</Item>
-            {deployed ? (
-              [...CONTRACTS, ...OPTIONAL_CONTRACTS.filter(([, a]) => a)].map(([name, a]) => (
-                <Item key={name} href={`${explorerUrl}/address/${a}`} external>
-                  {name} <span className="num">{truncateHex(a!, 6, 4)}</span>
-                </Item>
-              ))
-            ) : (
-              <Item href={DOCS.readme} external>Contract addresses</Item>
-            )}
-          </Column>
-          <Column title="Built on">
-            <Item href="https://app.aave.com/?marketName=proto_monad_v3" external>Aave V3 on Monad</Item>
-            <Item href="https://www.pyth.network" external>Pyth price feeds</Item>
-            <Item href="https://envio.dev" external>Envio indexer</Item>
-            <Item href="https://www.monad.xyz" external>Monad</Item>
-          </Column>
+    <footer className="c-ground">
+      <div className="c-wrap grid gap-8 pb-11 pt-10 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div>
+          <Logo className="mb-3" />
+          <p className="max-w-[44em] text-[15px] leading-relaxed">{DISCLAIMER}</p>
+          {contracts && deployed.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-[20px] text-white">Contracts on Monad</h2>
+              <ul className="mt-1 grid gap-x-6 sm:grid-cols-2">
+                {deployed.map(([name, a]) => (
+                  <li key={name}>
+                    <a className={`${linkCls} gap-2 text-[14.5px]`} href={`${explorerUrl}/address/${a}`} target="_blank" rel="noreferrer">
+                      {name} <span className="c-mono font-normal">{truncateHex(a!, 6, 4)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-        <div className="mt-12 flex flex-col gap-4 border-t pt-6 text-[0.8125rem] text-muted-foreground md:flex-row md:items-start md:justify-between">
-          <p className="max-w-3xl">{DISCLAIMER}</p>
-          <p className="shrink-0">
-            <a href={DOCS.license} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">
-              MIT License
-            </a>
-          </p>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-/** The app's footer: the same disclaimer, and where to check the work. */
-export function AppFooter() {
-  return (
-    <footer className="mt-16 border-t">
-      <div className="mx-auto flex max-w-[76rem] flex-col gap-3 px-4 py-6 text-[0.8125rem] text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between">
-        <p className="max-w-3xl">{DISCLAIMER}</p>
-        <nav aria-label="Resources" className="flex shrink-0 flex-wrap gap-x-5 gap-y-1">
-          <Link href="/app/analytics" prefetch={false} className="hit relative hover:text-foreground">Analytics</Link>
-          <a href={DOCS.security} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">Security</a>
-          <a href={DOCS.tests} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">Tests</a>
-          <a href={REPO} target="_blank" rel="noreferrer" className="hit relative hover:text-foreground">GitHub</a>
+        <nav aria-label="Footer" className="flex flex-wrap content-start gap-x-6 md:justify-end">
+          <Link className={linkCls} href="/app/borrow" prefetch={false}>
+            Protect
+          </Link>
+          <Link className={linkCls} href="/app/vault" prefetch={false}>
+            Vault
+          </Link>
+          <Link className={linkCls} href="/app/stats" prefetch={false}>
+            Stats
+          </Link>
+          <a className={linkCls} href={DOCS.security} target="_blank" rel="noreferrer">
+            Security
+          </a>
+          <a className={linkCls} href={DOCS.tests} target="_blank" rel="noreferrer">
+            Tests
+          </a>
+          <a className={linkCls} href={REPO} target="_blank" rel="noreferrer">
+            GitHub
+          </a>
+          <a className={linkCls} href={DOCS.license} target="_blank" rel="noreferrer">
+            MIT License
+          </a>
         </nav>
       </div>
     </footer>
   );
+}
+
+/** The landing page's footer, with the contract addresses. */
+export function SiteFooter() {
+  return <Ground contracts />;
+}
+
+/** The app's footer. */
+export function AppFooter() {
+  return <Ground contracts={false} />;
 }
