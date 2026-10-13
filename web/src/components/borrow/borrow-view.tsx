@@ -119,10 +119,12 @@ export function BorrowView({ initialWatch = "", walletHint = false }: { initialW
     if (coverActive) setMoveOn(false);
   }, [coverActive]);
 
+  // A build without contract addresses (scripts/web-env.sh or scripts/deploy-web-aws.sh writes them from a deployment
+  // file): visitors see that Shield is not live yet, never the variable names.
   if (!isDeployed) {
     return (
-      <NoticeCard title="Shield is not configured">
-        This build has no contract addresses. Set NEXT_PUBLIC_SHIELD_REGISTRY, _REPRICER, _EXECUTOR and _VAULT, or run scripts/web-env.sh with a deployment file.
+      <NoticeCard title="Shield isn’t live yet">
+        Shield&rsquo;s contracts are not on Monad mainnet yet, so cover can&rsquo;t be switched on. Check back soon.
       </NoticeCard>
     );
   }

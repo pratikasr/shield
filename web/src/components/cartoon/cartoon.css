@@ -345,12 +345,15 @@
   .c-nerds > summary::-webkit-details-marker { display: none; }
   .c-nerds > summary::after { content: ""; position: absolute; right: 18px; top: 50%; width: 10px; height: 10px; border-right: 3px solid var(--color-ink); border-bottom: 3px solid var(--color-ink); transform: translateY(-70%) rotate(45deg); transition: transform 200ms var(--ease-soft); }
   .c-nerds[open] > summary::after { transform: translateY(-30%) rotate(225deg); }
-  .c-nerd-body { padding: 0 16px 16px; }
-  .c-nerd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 0; }
-  .c-nerd-grid > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1.5px dashed rgb(27 20 48 / 0.2); font-size: 15px; min-width: 0; }
+  /* Two columns only when the drawer itself is wide enough for a label beside an address with its two buttons; the
+     page layout decides the drawer's width, so this follows the container, not the window. A value that still does not
+     fit beside its label drops to its own line, right-aligned. */
+  .c-nerd-body { padding: 0 16px 16px; container-type: inline-size; }
+  .c-nerd-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 24px; margin: 0; }
+  @container (min-width: 720px) { .c-nerd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .c-nerd-grid > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; padding: 8px 0; border-bottom: 1.5px dashed rgb(27 20 48 / 0.2); font-size: 15px; min-width: 0; }
   .c-nerd-grid dt { color: var(--color-ink-soft); }
-  .c-nerd-grid dd { margin: 0; font-weight: 700; text-align: right; min-width: 0; overflow-wrap: anywhere; }
-  @media (max-width: 600px) { .c-nerd-grid { grid-template-columns: minmax(0, 1fr); } }
+  .c-nerd-grid dd { margin: 0 0 0 auto; font-weight: 700; text-align: right; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
   .c-faq { display: grid; gap: 12px; max-width: 820px; }
   .c-faq details { background: var(--color-cloud); border: var(--line) solid var(--color-ink); border-radius: 14px; box-shadow: var(--shadow-sm); }
   .c-faq summary { cursor: pointer; list-style: none; padding: 16px 52px 16px 18px; font-weight: 700; font-size: 18px; position: relative; border-radius: 12px; }

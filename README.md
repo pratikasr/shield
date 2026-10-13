@@ -118,7 +118,7 @@ The exit is permissionless: anyone may call `Executor.exit` when the conditions 
 | M0 Verify external facts | done |
 | M1 Scaffold contracts, keeper, web, indexer | done |
 | M2 Contracts and Foundry tests | done |
-| M3 Keeper | done: on Monad testnet the keeper repriced and exited a real position on an Aave V3 market deployed from Aave's code (ADR-040, below); also on a mainnet fork |
+| M3 Keeper | done, on a mainnet fork; the live run on Monad mainnet is part of M6 |
 | M4 Web | done, rehearsed end to end on a mainnet fork |
 | M5 Envio indexer | done locally; the hosted deployment needs the owner's Envio login (`scripts/deploy-indexer.sh`) |
 | M6 Mainnet deployment and proof | scripted and rehearsed; waiting for mainnet funds and keys |
@@ -150,30 +150,6 @@ Filled during M6 with Monad mainnet transactions only, from `bash scripts/proof.
 | Gas with the keeper's access list (mainnet fork, measured before the audit fixes with `pnpm --filter keeper measure`) | steady-state `repriceMany` for one borrower 192,094 (523,194 without); `exit` 682,349 (1,203,849 without) |
 | Envio indexer endpoint | not yet (needs the owner's Envio login) |
 | Demo video | not yet (M6) |
-
-## Staging run on Monad testnet (chain id 10143)
-
-Aave V3 is not deployed on Monad testnet, so for this run we deployed a full Aave V3 market there ourselves from Aave's own code ([aave-v3-origin](https://github.com/aave-dao/aave-v3-origin) v3.7, its batched deployment), with two mintable test tokens named WETH and USDC, priced by Pyth's testnet contract and listed with Aave Monad's mainnet parameters (WETH 80.5% LTV, 84% liquidation threshold, 5.5% bonus). The market, the tokens and their admin are ours ([ADR-040](docs/TECH-DECISIONS.md)). Shield's contracts are the same code as on mainnet. This is a staging run on a live Monad network, not the mainnet proof above.
-
-| Item | Value |
-| --- | --- |
-| Aave V3 Pool (ours, Aave's code) | [`0x123BceeC0B4f6799EC40da83467aeDb07716D83D`](https://testnet.monadvision.com/address/0x123BceeC0B4f6799EC40da83467aeDb07716D83D) |
-| Test WETH, test USDC | [`0x6092562e8898B959228f4277FBa2bDdfe76FA782`](https://testnet.monadvision.com/address/0x6092562e8898B959228f4277FBa2bDdfe76FA782), [`0x2c0C140b3c98CA12BaC20045d8C791ecF75002dA`](https://testnet.monadvision.com/address/0x2c0C140b3c98CA12BaC20045d8C791ecF75002dA) |
-| PositionRegistry | [`0x8B4bbd772Cc6f2DC4BeF803aca313E7A5D7DA87a`](https://testnet.monadvision.com/address/0x8B4bbd772Cc6f2DC4BeF803aca313E7A5D7DA87a) |
-| Repricer | [`0x266D8bEE03E2458C569566D181558b085b0F0e66`](https://testnet.monadvision.com/address/0x266D8bEE03E2458C569566D181558b085b0F0e66) |
-| Executor | [`0x68F8ad1c7AED579FCE8Fe28Af68747173D41b554`](https://testnet.monadvision.com/address/0x68F8ad1c7AED579FCE8Fe28Af68747173D41b554) |
-| ShieldVault | [`0x7F4A17f4b780Cc597BeCFb7773Aa60943ceBE485`](https://testnet.monadvision.com/address/0x7F4A17f4b780Cc597BeCFb7773Aa60943ceBE485) |
-| ShieldForwarderFactory | [`0x5FA29aC7D3e406A2a1dF5354478640314B83B9e4`](https://testnet.monadvision.com/address/0x5FA29aC7D3e406A2a1dF5354478640314B83B9e4) |
-| Opt-in (1 WETH supplied, $1,972.84 borrowed, health factor 1.07, trigger 1.06) | [`0x6fd50129...9880`](https://testnet.monadvision.com/tx/0x6fd501291785723e6f4b713362c483ec2d5f6d8ba39aef885dfbdbe90f619880) |
-| Reprices from the keeper (blocks 70,734,521, 526 and 530; ten in all) | [`0x1e54e97f...7d95`](https://testnet.monadvision.com/tx/0x1e54e97fb37976f3487d1884d982af022e7512db42e85e53dc4e323af09f7d95), [`0x7f07c147...e006`](https://testnet.monadvision.com/tx/0x7f07c1476a089959dfc9f0c87023787140717e626389f0939fc5a2be810de006), [`0x0b3d6f7d...afc7`](https://testnet.monadvision.com/tx/0x0b3d6f7d8a784b489d1b73e841a6b334643a73c88a2df782a038cb877e04afc7) |
-| The borrower borrows more, health factor 1.05 | [`0x9f185df2...5f94`](https://testnet.monadvision.com/tx/0x9f185df2114834cba740a136a04054cdc14f1696e0f21af9e590ee6a17c85f94) (block 70,734,821) |
-| Exit (`Exited`: repaid 518.22 USDC, took 0.2082 WETH, health factor 1.05 to 1.12, $23.32 less than Aave's bonus, no flash loan) | [`0xb420db74...42ee`](https://testnet.monadvision.com/tx/0xb420db749132b14f55562070971fedbabdbcd3d6b7bdb53e5a18767d465242ee) (block 70,734,827, 761,236 gas) |
-
-The same flow through the web app, signed by a test wallet in the browser: Shield turned on with the Early line (health factor 1.08) in four wallet transactions, armed after 60 s, the borrower borrowed down to 1.05 with the testnet Test loan card, and the keeper stepped in 3 s later ([`0xf7eb9429...090e`](https://testnet.monadvision.com/tx/0xf7eb94292f221dcbaf150a4055be42e4f5fb10bc6480bbf12f22e9511c03090e), block 70,747,526); the page showed $27.82 avoided.
-
-From this machine the keeper's `eth_sendRawTransactionSync` receipts took 0.49 to 0.79 s (median 0.65 s), longer than a 300 ms block, so its reprices landed every three to five blocks rather than every block. The commands are in [docs/DEMO.md](docs/DEMO.md), Staging on Monad testnet.
-
-The hosted app, https://shieldexit.xyz, runs on this testnet market until the mainnet deployment and says so on every page; the read-only view of the rescued borrower is [/app/borrow?address=0x2F50...962d](https://shieldexit.xyz/app/borrow?address=0x2F5068762ee626Ae91f3745cED7F021e2710962d).
 
 ## Quick start
 

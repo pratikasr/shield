@@ -78,8 +78,9 @@ export function VaultView() {
   if (!isDeployed)
     return (
       <Card className="mx-auto max-w-xl text-center">
-        <h1 className="c-h3">Shield isn&rsquo;t set up in this build</h1>
-        <p className="m-0 mt-3 text-ink-soft">It has no contract addresses. Set the NEXT_PUBLIC_SHIELD_* variables or run scripts/web-env.sh.</p>
+        {/* A build without contract addresses: scripts/web-env.sh or scripts/deploy-web-aws.sh writes them. */}
+        <h1 className="c-h3">Shield&rsquo;s vault isn&rsquo;t live yet</h1>
+        <p className="m-0 mt-3 text-ink-soft">Its contracts are not on Monad mainnet yet. Check back soon.</p>
       </Card>
     );
 
