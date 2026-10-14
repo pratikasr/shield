@@ -150,7 +150,7 @@ Filled during M6 with Monad mainnet transactions only, from `bash scripts/proof.
 | Gas (forge snapshot at block 113,031,739, Monad execution, cold state) | `exit` funded by the vault 1,178,122; `exit` through the flash-loan fallback 1,852,575; `reprice` of one borrower 526,248; `repriceMany` of three 704,199; vault `unwind` 831,017. The protocol share added about 2,100 gas to a reprice (0.4%) and 2,400 to an exit. Source: [contracts/snapshots/](contracts/snapshots/), [contracts/.gas-snapshot](contracts/.gas-snapshot) |
 | Gas with the keeper's access list (mainnet fork, measured before the audit fixes with `pnpm --filter keeper measure`) | steady-state `repriceMany` for one borrower 192,094 (523,194 without); `exit` 682,349 (1,203,849 without) |
 | Envio indexer endpoint | not yet (needs the owner's Envio login) |
-| Demo video | not yet (M6) |
+| Demo video | Technical demo on Monad mainnet: https://youtu.be/uB2crTEvOS4; pitch: https://youtu.be/Ay71hJ0Gb4A |
 
 ## Quick start
 
@@ -216,7 +216,7 @@ The full runbook, account funding, the video steps and the fork rehearsals are i
 | Static analysis | Slither 0.11.6, Aderyn 0.6.8 | every high and medium fixed or justified in [docs/SECURITY.md](docs/SECURITY.md) |
 | Keeper | `pnpm --filter keeper test` | 91 tests pass; 2 live smoke tests run with `LIVE_SMOKE=1` |
 | Indexer | `pnpm --filter shield-indexer test` | 8 tests pass |
-| Web: amounts, formatting, line and fuel presets, block stamps, analytics, Aurora requests and statuses | `pnpm --filter web test` | 64 tests pass |
+| Web: amounts, formatting, line and fuel presets, block stamps, analytics, Aurora requests and statuses | `pnpm --filter web test` | 67 tests pass |
 | End to end, the video script on a fork | `bash scripts/e2e.sh` | passes |
 | Demo rehearsal | two clean-fork runs of `scripts/e2e.sh` and one run of the scripted mainnet flow | pass; blocks and hashes in [docs/DEMO.md](docs/DEMO.md) |
 | Lighthouse (mobile, devtools throttling) | landing, Protect, Vault, Stats | performance 97, 92, 99, 99; accessibility and best practices 100 on all; CLS 0.008 or less |

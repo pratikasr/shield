@@ -4,6 +4,8 @@ Newest entry first. One entry per session: what moved, commit hashes, what is ne
 
 ## 13 Oct 2026 (14 Oct IST), Shield on Monad mainnet
 
+- **Submission assets (14 Oct IST).** Pitch deck (16 slides, claude.ai artifact) and a 4K pitch video with an ElevenLabs voiceover, every slide change placed in a measured silence (https://youtu.be/Ay71hJ0Gb4A, 2:51). The owner's screen recording of the mainnet demo with a voiceover synced block by block to the on-screen actions (https://youtu.be/uB2crTEvOS4, 3:33). Both run past the form's limits (pitch 2 minutes, demo 3 minutes); the owner chose to submit them as they are. YouTube titles, descriptions and thumbnails made. The repo was made public on 14 Oct after a scan found none of the project's keys, keystore passwords or the Aurora key anywhere in the git history.
+
 - **Deployed and verified.** The owner funded the deployer with 150 MON. `bash scripts/deploy-mainnet.sh` deployed the six contracts at block 113,117,335 for about 2.3 MON; all six are verified on MonadVision (Sourcify), ShieldForwarderFactory after adding it to the verify and code-check lists. Addresses in the README Deployments table and `contracts/deployments/143.json`.
 - **Keeper.** Funded with 110 MON (tx 0xe2d346fa82445d71b6f260d61acb5b22ede6fdbc01fad70cd7ca5aea54fa5a53) and running on mainnet through `scripts/demo-position.sh keeper` (log in `keeper.log`, which `scripts/proof.sh` reads).
 - **Vault.** Not seeded: the owner keeps the USDC for the demo position. Exits then take the flash-loan path, which sells the seized WETH on Uniswap's 0.3% WETH/USDC pool (checked live: 0.02 WETH quotes 49.81 USDC; the 0.05%, 0.01% and 1% pools have no liquidity).

@@ -37,7 +37,7 @@ Why Monad
 - 300 ms blocks. The keeper subscribes to monadNewHeads, reads health factors on the proposed block, and sends exits with eth_sendRawTransactionSync, which returns the receipt in the same call. On a mainnet fork the exit's receipt came back about 290 ms after sending.
 - Cheap execution makes risk-based repricing affordable: the premium accrues every block, and the keeper reprices every block it can for its first 600 blocks (about 3 minutes), then every 200 blocks to save gas. It sends one transaction at a time and waits for the receipt: on a mainnet fork its reprices landed in consecutive blocks; on mainnet, from our keeper in India (0.5 to 0.75 s per round trip to the RPC), they landed every 3 to 4 blocks, about 1 s apart. Its EIP-2930 access list cut a steady reprice from 523k to 192k gas and an exit from 1.2M to 682k on a mainnet fork, mostly by warming Aave's and the tokens' storage; Shield's own records are packed one per MIP-8 storage page.
 - Gas is billed on the limit on Monad, so every keeper transaction carries a measured limit.
-- The public Analytics page streams Monad's commit states (Proposed, Voted, Finalized, Verified) with Shield's reprices landing in them.
+- The public Stats page shows Monad's blocks as they land, every 0.3 seconds, with Shield's own transactions stamped in them.
 
 What is built
 - Five contracts (PositionRegistry, Repricer, Executor, ShieldVault, ShieldForwarderFactory) on Aave V3 Monad and Pyth, with a Uniswap V3 adapter to sell seized collateral.
@@ -45,8 +45,11 @@ What is built
 - An Envio HyperIndex indexer: positions, every reprice and exit, vault flows, and platform earnings by hour, day and since launch.
 - A Next.js app in a cartoon, game-like design: your loan is a level where ETH stands above Aave's lava and Shield's line sits in between, and a mascot's face shows the status. Protect a position in plain words ("ETH can fall 6.5% before Aave liquidates you"), pick Early, Balanced or Last call with its price and cost, and turn Shield on with one button; top up from any chain; see the protocol's vault and a Stats scoreboard with a live Monad block ticker. The health factor and details sit in a "Stats for nerds" drawer.
 
+Live on Monad mainnet
+Six contracts deployed at block 113,117,335 and verified on MonadVision: PositionRegistry 0xd8C53Ef3Fd551a79d1cae98273Fd164b489B3970, Repricer 0x191009AACee0E88480bbe3657063383875b41689, Executor 0x02088E09ae36D793F6d7f404C98A41cA6766Ae1D, ShieldVault 0x6523E6d4CA232fe5c839438C9286cEB9b04C553A, ShieldForwarderFactory 0x190E10425E37c7dE1D0Df453103abE9d186E748D, UniswapV3Swapper 0xD6058cF99a507E975Fccc72Cc6c94b1c506dDAB5. A real Aave V3 loan is covered (0.032 WETH supplied, 55.50 USDC borrowed), the keeper runs on mainnet, and the app is at https://shieldexit.xyz.
+
 How it is checked
-143 contract tests (100 unit, fuzz and invariant; 43 against real Aave on a Monad mainnet fork), 91 keeper, 8 indexer and 65 web tests, and a Playwright run of the whole demo flow on a mainnet fork. An internal review before mainnet found 1 critical, 15 high and 36 medium issues; all are fixed, with regression tests for the contracts and keeper. The contracts have not had an external audit. Contract addresses, transaction hashes and gas figures are in the README.
+143 contract tests (100 unit, fuzz and invariant; 43 against real Aave on a Monad mainnet fork), 91 keeper, 8 indexer and 67 web tests, and a Playwright run of the whole demo flow on a mainnet fork. An internal review before mainnet found 1 critical, 15 high and 36 medium issues; all are fixed, with regression tests for the contracts and keeper. The contracts have not had an external audit. Contract addresses, transaction hashes and gas figures are in the README.
 ```
 
 ## Go-to-market and user acquisition
@@ -57,7 +60,7 @@ Aave V3 borrowers on Monad with WETH collateral and USDC debt, starting with lar
 
 How we reach them
 1. Go straight to at-risk positions. Shield shows any address read only: its liquidation price, its exit price, and what Aave's bonus would cost against a Shield exit. We will share those links with borrowers whose health factor is under 1.3, through Monad community channels and on X when markets move.
-2. Lead with proof. The public Analytics page shows every exit, the penalty it avoided, and the platform's earnings block by block. The opening example is Aave Monad's one liquidation so far: the borrower paid $87.98 above the debt, and a Shield exit would have cost $16.71.
+2. Lead with proof. The public Stats page shows every rescue, the penalty it avoided and the loans protected, live from Monad. The opening example is Aave Monad's one liquidation so far: the borrower paid $87.98 above the debt, and a Shield exit would have cost $16.71.
 3. Integrate where borrowers already are. A "protect this position" link fits into Monad wallets, portfolio dashboards and lending front ends. The exit is permissionless, so integrators and other keepers can run it too.
 4. Remove the funding friction. Many borrowers keep stablecoins on other chains. Through Aurora Intents they top up cover from Ethereum, Base, Arbitrum, Solana and the other chains Aurora supports, without bridging or holding MON, so cover is never left to lapse for want of USDC on Monad.
 5. Fund the vault ourselves first. The protocol seeds the vault and keeps all income while exits prove out; outside liquidity providers (Monad ecosystem funds and DeFi treasuries first) are added to the allowlist later, with 90% of income going to them.
@@ -67,7 +70,7 @@ Business model
 At launch the protocol keeps all income: 10% of premiums directly and the rest of the premiums plus the exit discounts through the vault it funds. Once outside liquidity providers join, they keep 90% and the protocol 10%, capped at 20% in the contract. The borrower's cost does not change with the split.
 
 What we will report publicly
-Debt protected, penalty avoided, premiums, the vault's return, cross-chain top-ups and keeper cost, all on the Analytics page from the Envio indexer.
+Debt protected, penalty avoided, premiums, the vault's return, cross-chain top-ups and keeper cost, on the public Stats page.
 
 Trust
 Open source under MIT, with test reports, an internal audit and every owner power listed in the repository. Before growing past a small vault we will get an external audit.
@@ -77,8 +80,9 @@ Open source under MIT, with test reports, an internal audit and every owner powe
 
 | Field | Value |
 | --- | --- |
-| GitHub repository | https://github.com/pratikasr/shield (public, or shared with metropolis@hackathon.monad.xyz) |
+| GitHub repository | https://github.com/pratikasr/shield (public since 14 Oct 2026) |
 | Project logo | docs/brand/shield-logo-512.png (1024 px: docs/brand/shield-logo-1024.png) |
 | Live product | https://shieldexit.xyz, on Monad mainnet |
-| Technical demo video | Up to 3 minutes of the working product on mainnet, after M6 (script in docs/SPEC.md) |
+| Technical demo video | https://youtu.be/uB2crTEvOS4 (3:33, on Monad mainnet) |
+| Pitch video | https://youtu.be/Ay71hJ0Gb4A (2:51) |
 | Primary track | Track 01, Onchain Finance and Trading; bounties: Envio, and Aurora Intents only if the real cross-chain top-up in the demo succeeds |
